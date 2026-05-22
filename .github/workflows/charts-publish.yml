@@ -3,10 +3,10 @@ name: charts-publish
 # Package Helm charts and push them to GHCR as OCI artifacts.
 #
 # Published as:
-#   oci://ghcr.io/<owner>/ankra-charts/<chart-name>:<chart-version>
+#   oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>
 #
-# Example install:
-#   helm install upcloud-ccm oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm --version 0.1.0
+# Each chart is published independently; pushing the same chart+version twice
+# is treated as a no-op (the step checks GHCR before packaging).
 
 on:
   push:
@@ -18,11 +18,10 @@ on:
       - ".github/workflows/charts-publish.yml"
   workflow_dispatch:
     inputs:
-      charts:
-        description: "Which charts to publish"
-        type: choice
-        options: [all, upcloud-ccm, upcloud-csi, cloudflare-operator]
-        default: all
+      force:
+        description: "Re-push even if the version already exists in GHCR"
+        type: boolean
+        default: false
 
 concurrency:
   group: charts-publish-${{ github.ref }}
@@ -36,57 +35,32 @@ env:
   OCI_REGISTRY: ghcr.io/${{ github.repository_owner }}/ankra-charts
 
 jobs:
-  detect:
-    runs-on: ubuntu-latest
-    outputs:
-      upcloud-ccm: ${{ steps.filter.outputs.upcloud-ccm }}
-      upcloud-csi: ${{ steps.filter.outputs.upcloud-csi }}
-      cloudflare-operator: ${{ steps.filter.outputs.cloudflare-operator }}
-      publish-all: ${{ steps.filter.outputs.publish-all }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            upcloud-ccm:
-              - 'upcloud-ccm/**'
-            upcloud-csi:
-              - 'upcloud-csi/**'
-            cloudflare-operator:
-              - 'cloudflare-operator/**'
-            publish-all:
-              - '.github/workflows/charts-publish.yml'
-
   publish:
     name: publish ${{ matrix.chart }}
     runs-on: ubuntu-latest
-    needs: detect
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         chart: [upcloud-ccm, upcloud-csi, cloudflare-operator]
-    if: >-
-      ${{
-        (github.event_name == 'workflow_dispatch' && (
-          github.event.inputs.charts == 'all' ||
-          github.event.inputs.charts == matrix.chart
-        )) ||
-        (github.event_name == 'push' && (
-          needs.detect.outputs.publish-all == 'true' ||
-          (matrix.chart == 'upcloud-ccm' && needs.detect.outputs.upcloud-ccm == 'true') ||
-          (matrix.chart == 'upcloud-csi' && needs.detect.outputs.upcloud-csi == 'true') ||
-          (matrix.chart == 'cloudflare-operator' && needs.detect.outputs.cloudflare-operator == 'true')
-        ))
-      }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: azure/setup-helm@v4
         with:
           version: v3.14.0
+
+      - name: Read chart metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          chart="${{ matrix.chart }}"
+          version="$(grep -E '^version:' "${chart}/Chart.yaml" | awk '{print $2}' | tr -d '"')"
+          name="$(grep -E '^name:' "${chart}/Chart.yaml" | awk '{print $2}' | tr -d '"')"
+          echo "chart_name=${name}" >> "$GITHUB_OUTPUT"
+          echo "chart_version=${version}" >> "$GITHUB_OUTPUT"
+          echo "oci_ref=oci://${OCI_REGISTRY}/${name}:${version}" >> "$GITHUB_OUTPUT"
+          echo "Resolved ${chart} -> ${name}:${version}"
 
       - name: Log in to GHCR
         run: |
@@ -95,7 +69,30 @@ jobs:
             --username "${{ github.actor }}" \
             --password-stdin
 
+      - name: Check if version already exists
+        id: exists
+        run: |
+          set -euo pipefail
+          name="${{ steps.meta.outputs.chart_name }}"
+          version="${{ steps.meta.outputs.chart_version }}"
+          force="${{ github.event.inputs.force || 'false' }}"
+          if [[ "${force}" == "true" ]]; then
+            echo "force=true; will push regardless"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Try to pull the OCI ref headers; succeeds only if the tag exists.
+          if helm show chart "oci://${OCI_REGISTRY}/${name}" --version "${version}" \
+               > /dev/null 2>&1; then
+            echo "::notice::${name}:${version} already published; skipping. Bump version: in Chart.yaml to publish a new release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "${name}:${version} not yet published; proceeding"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: helm lint
+        if: steps.exists.outputs.skip == 'false'
         run: |
           set -euo pipefail
           if [[ "${{ matrix.chart }}" == "upcloud-ccm" ]]; then
@@ -108,33 +105,30 @@ jobs:
           fi
 
       - name: Package and push to GHCR (OCI)
-        id: push
+        if: steps.exists.outputs.skip == 'false'
         run: |
           set -euo pipefail
-          chart="${{ matrix.chart }}"
-          version="$(grep -E '^version:' "${chart}/Chart.yaml" | awk '{print $2}' | tr -d '"')"
-          name="$(grep -E '^name:' "${chart}/Chart.yaml" | awk '{print $2}' | tr -d '"')"
           mkdir -p /tmp/packages
-          pkg="$(helm package "${chart}" --destination /tmp/packages | awk '{print $NF}')"
-          echo "Packaged ${pkg} (chart ${name} version ${version})"
+          pkg="$(helm package "${{ matrix.chart }}" --destination /tmp/packages \
+                  | awk '{print $NF}')"
+          echo "Packaged ${pkg}"
           helm push "${pkg}" "oci://${OCI_REGISTRY}"
-          echo "chart_name=${name}" >> "$GITHUB_OUTPUT"
-          echo "chart_version=${version}" >> "$GITHUB_OUTPUT"
-          echo "oci_ref=oci://${OCI_REGISTRY}/${name}:${version}" >> "$GITHUB_OUTPUT"
 
       - name: Summary
+        if: always()
         run: |
           {
-            echo "### Published \`${{ steps.push.outputs.chart_name }}\`"
+            echo "### \`${{ steps.meta.outputs.chart_name }}\` @ \`${{ steps.meta.outputs.chart_version }}\`"
             echo
-            echo "| Field | Value |"
-            echo "|---|---|"
-            echo "| OCI ref | \`${{ steps.push.outputs.oci_ref }}\` |"
-            echo "| Chart version | \`${{ steps.push.outputs.chart_version }}\` |"
-            echo
-            echo '```bash'
-            echo "helm install ${{ steps.push.outputs.chart_name }} \\"
-            echo "  oci://${OCI_REGISTRY}/${{ steps.push.outputs.chart_name }} \\"
-            echo "  --version ${{ steps.push.outputs.chart_version }}"
-            echo '```'
+            if [[ "${{ steps.exists.outputs.skip }}" == "true" ]]; then
+              echo "Already published — skipped."
+            else
+              echo "Published \`${{ steps.meta.outputs.oci_ref }}\`."
+              echo
+              echo '```bash'
+              echo "helm install ${{ steps.meta.outputs.chart_name }} \\"
+              echo "  ${{ steps.meta.outputs.oci_ref }} \\"
+              echo "  --version ${{ steps.meta.outputs.chart_version }}"
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
