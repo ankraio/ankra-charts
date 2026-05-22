@@ -6,9 +6,9 @@ version: 0.1.0
 appVersion: "v1.4.0"
 kubeVersion: ">=1.27.0-0"
 
-home: https://github.com/ankra-io/platform/tree/main/charts/upcloud-csi
+home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
 sources:
-  - https://github.com/ankra-io/platform/tree/main/charts/upcloud-csi
+  - https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
   - https://github.com/UpCloudLtd/upcloud-csi
 
 keywords:
@@ -33,6 +33,8 @@ annotations:
       url: https://github.com/UpCloudLtd/upcloud-csi
     - name: Upstream image (GHCR)
       url: https://ghcr.io/upcloudltd/upcloud-csi
+    - name: Chart (OCI)
+      url: oci://ghcr.io/ankraio/ankra-charts/upcloud-csi
   artifacthub.io/operator: "false"
   artifacthub.io/changes: |
     - kind: added

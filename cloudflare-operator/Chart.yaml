@@ -11,9 +11,9 @@ version: 0.1.0
 appVersion: "0.13.1"
 kubeVersion: ">=1.27.0-0"
 
-home: https://github.com/ankra-io/platform/tree/main/charts/cloudflare-operator
+home: https://github.com/ankraio/ankra-charts/tree/main/cloudflare-operator
 sources:
-  - https://github.com/ankra-io/platform/tree/main/charts/cloudflare-operator
+  - https://github.com/ankraio/ankra-charts/tree/main/cloudflare-operator
   - https://github.com/adyanth/cloudflare-operator
 
 keywords:
@@ -66,6 +66,8 @@ annotations:
       url: https://adyanth.github.io/cloudflare-operator/
     - name: Cloudflare Origin CA Issuer (cert-manager external issuer)
       url: https://github.com/cloudflare/origin-ca-issuer
+    - name: Chart (OCI)
+      url: oci://ghcr.io/ankraio/ankra-charts/cloudflare-operator
   artifacthub.io/changes: |
     - kind: added
       description: Initial release of the cloudflare-operator Helm chart, packaging adyanth/cloudflare-operator v0.13.1 with cert-manager-backed webhook serving certs, full RBAC, ClusterOriginIssuer + sample ClusterTunnel toggles, ServiceMonitor and NetworkPolicy support.

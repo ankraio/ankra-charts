@@ -6,9 +6,9 @@ version: 0.1.0
 appVersion: "latest"
 kubeVersion: ">=1.27.0-0"
 
-home: https://github.com/ankra-io/platform/tree/main/charts/upcloud-ccm
+home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm
 sources:
-  - https://github.com/ankra-io/platform/tree/main/charts/upcloud-ccm
+  - https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm
   - https://upcloud.com/community/tutorials/getting-started-upcloud-kubernetes-services
 
 keywords:
@@ -31,6 +31,8 @@ annotations:
   artifacthub.io/links: |
     - name: Upstream image (GHCR)
       url: https://ghcr.io/upcloudltd/cloud-controller-manager
+    - name: Chart (OCI)
+      url: oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm
   artifacthub.io/changes: |
     - kind: added
       description: Initial release of the UpCloud CCM Helm chart.

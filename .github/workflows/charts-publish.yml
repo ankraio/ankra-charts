@@ -1,0 +1,140 @@
+name: charts-publish
+
+# Package Helm charts and push them to GHCR as OCI artifacts.
+#
+# Published as:
+#   oci://ghcr.io/<owner>/ankra-charts/<chart-name>:<chart-version>
+#
+# Example install:
+#   helm install upcloud-ccm oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm --version 0.1.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "upcloud-ccm/**"
+      - "upcloud-csi/**"
+      - "cloudflare-operator/**"
+      - ".github/workflows/charts-publish.yml"
+  workflow_dispatch:
+    inputs:
+      charts:
+        description: "Which charts to publish"
+        type: choice
+        options: [all, upcloud-ccm, upcloud-csi, cloudflare-operator]
+        default: all
+
+concurrency:
+  group: charts-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  OCI_REGISTRY: ghcr.io/${{ github.repository_owner }}/ankra-charts
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      upcloud-ccm: ${{ steps.filter.outputs.upcloud-ccm }}
+      upcloud-csi: ${{ steps.filter.outputs.upcloud-csi }}
+      cloudflare-operator: ${{ steps.filter.outputs.cloudflare-operator }}
+      publish-all: ${{ steps.filter.outputs.publish-all }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            upcloud-ccm:
+              - 'upcloud-ccm/**'
+            upcloud-csi:
+              - 'upcloud-csi/**'
+            cloudflare-operator:
+              - 'cloudflare-operator/**'
+            publish-all:
+              - '.github/workflows/charts-publish.yml'
+
+  publish:
+    name: publish ${{ matrix.chart }}
+    runs-on: ubuntu-latest
+    needs: detect
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: [upcloud-ccm, upcloud-csi, cloudflare-operator]
+    if: >-
+      ${{
+        (github.event_name == 'workflow_dispatch' && (
+          github.event.inputs.charts == 'all' ||
+          github.event.inputs.charts == matrix.chart
+        )) ||
+        (github.event_name == 'push' && (
+          needs.detect.outputs.publish-all == 'true' ||
+          (matrix.chart == 'upcloud-ccm' && needs.detect.outputs.upcloud-ccm == 'true') ||
+          (matrix.chart == 'upcloud-csi' && needs.detect.outputs.upcloud-csi == 'true') ||
+          (matrix.chart == 'cloudflare-operator' && needs.detect.outputs.cloudflare-operator == 'true')
+        ))
+      }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Log in to GHCR
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      - name: helm lint
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.chart }}" == "upcloud-ccm" ]]; then
+            helm lint "${{ matrix.chart }}" \
+              --set ccmConfig.clusterID=ci-test \
+              --set credentials.username=ci \
+              --set credentials.password=ci
+          else
+            helm lint "${{ matrix.chart }}"
+          fi
+
+      - name: Package and push to GHCR (OCI)
+        id: push
+        run: |
+          set -euo pipefail
+          chart="${{ matrix.chart }}"
+          version="$(grep -E '^version:' "${chart}/Chart.yaml" | awk '{print $2}' | tr -d '"')"
+          name="$(grep -E '^name:' "${chart}/Chart.yaml" | awk '{print $2}' | tr -d '"')"
+          mkdir -p /tmp/packages
+          pkg="$(helm package "${chart}" --destination /tmp/packages | awk '{print $NF}')"
+          echo "Packaged ${pkg} (chart ${name} version ${version})"
+          helm push "${pkg}" "oci://${OCI_REGISTRY}"
+          echo "chart_name=${name}" >> "$GITHUB_OUTPUT"
+          echo "chart_version=${version}" >> "$GITHUB_OUTPUT"
+          echo "oci_ref=oci://${OCI_REGISTRY}/${name}:${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published \`${{ steps.push.outputs.chart_name }}\`"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| OCI ref | \`${{ steps.push.outputs.oci_ref }}\` |"
+            echo "| Chart version | \`${{ steps.push.outputs.chart_version }}\` |"
+            echo
+            echo '```bash'
+            echo "helm install ${{ steps.push.outputs.chart_name }} \\"
+            echo "  oci://${OCI_REGISTRY}/${{ steps.push.outputs.chart_name }} \\"
+            echo "  --version ${{ steps.push.outputs.chart_version }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
