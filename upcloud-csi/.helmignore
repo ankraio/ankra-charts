@@ -1,0 +1,26 @@
+# Patterns to ignore when building Helm packages.
+.DS_Store
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.hgignore
+.svn/
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+.project
+.idea/
+*.tmproj
+.vscode/
+
+# Vendored upstream YAML kept for diffing; not part of the rendered chart.
+vendor/
+
+# CI/dev helpers.
+tests/
+values-examples/
+CHANGELOG.md

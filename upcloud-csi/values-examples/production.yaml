@@ -1,0 +1,45 @@
+# Production overlay: controller HA, snapshot-controller HA, NetworkPolicy on,
+# doubled limits.
+
+credentials:
+  create: false
+  existingSecret: "upcloud-api-credentials"
+
+storageClasses:
+  defaultClass: maxiops
+  disableLocalPathDefault: true
+
+controller:
+  replicaCount: 2
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  resources:
+    csiDriver:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 400m, memory: 512Mi }
+    sidecar:
+      requests: { cpu: 25m, memory: 32Mi }
+      limits:   { cpu: 200m, memory: 128Mi }
+
+snapshotController:
+  enabled: true
+  replicaCount: 2
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits:   { cpu: 200m, memory: 256Mi }
+
+node:
+  resources:
+    csiDriver:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits:   { cpu: 200m, memory: 256Mi }
+    sidecar:
+      requests: { cpu: 25m, memory: 32Mi }
+      limits:   { cpu: 200m, memory: 128Mi }
+
+networkPolicy:
+  enabled: true

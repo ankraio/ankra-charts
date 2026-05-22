@@ -1,0 +1,49 @@
+suite: default-sc hook job
+templates:
+  - templates/default-sc-job.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: no hook by default (no documents)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders SA + ClusterRole + ClusterRoleBinding + Job when defaultClass set
+    set:
+      storageClasses.defaultClass: standard
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: Job runs the right target SC in env
+    set:
+      storageClasses.defaultClass: standard
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: TARGET_SC
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: upcloud-block-storage-standard
+      - matchRegex:
+          path: metadata.annotations["helm.sh/hook"]
+          pattern: "post-install,post-upgrade"
+
+  - it: validates defaultClass enum (schema-level)
+    set:
+      storageClasses.defaultClass: garbage
+    asserts:
+      - failedTemplate: {}
+
+  - it: chart-level helper rejects defaultClass for a disabled tier
+    set:
+      storageClasses.defaultClass: maxiops
+      storageClasses.maxiops.enabled: false
+    asserts:
+      - failedTemplate: {}

@@ -1,0 +1,53 @@
+suite: storageclasses
+templates:
+  - templates/storageclass-maxiops.yaml
+  - templates/storageclass-standard.yaml
+  - templates/storageclass-hdd.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: renders all three SCs by default, none marked default
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/storageclass-maxiops.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/storageclass-standard.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/storageclass-hdd.yaml
+      - equal:
+          path: metadata.annotations["storageclass.kubernetes.io/is-default-class"]
+          value: "false"
+        template: templates/storageclass-maxiops.yaml
+
+  - it: marks maxiops as default when storageClasses.defaultClass=maxiops
+    set:
+      storageClasses.defaultClass: maxiops
+    asserts:
+      - equal:
+          path: metadata.annotations["storageclass.kubernetes.io/is-default-class"]
+          value: "true"
+        template: templates/storageclass-maxiops.yaml
+      - equal:
+          path: metadata.annotations["storageclass.kubernetes.io/is-default-class"]
+          value: "false"
+        template: templates/storageclass-standard.yaml
+      - equal:
+          path: metadata.annotations["storageclass.kubernetes.io/is-default-class"]
+          value: "false"
+        template: templates/storageclass-hdd.yaml
+
+  - it: skips disabled tiers
+    set:
+      storageClasses.hdd.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/storageclass-hdd.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/storageclass-maxiops.yaml

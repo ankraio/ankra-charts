@@ -1,0 +1,273 @@
+# -- Global values, applied across every workload in this chart and
+# composable with sibling Bitnami-style charts (e.g. `global.imageRegistry`).
+global:
+  # -- Override every `images.*.registry` (useful for air-gapped installs that
+  # mirror images into a private registry such as Harbor).
+  imageRegistry: ""
+  # -- Appended to chart-level `imagePullSecrets`.
+  imagePullSecrets: []
+
+# -- Override the release namespace for every rendered resource.
+# Defaults to `.Release.Namespace`; production clusters usually install
+# into `kube-system`.
+namespaceOverride: ""
+
+# -- Common labels stamped onto every resource.
+commonLabels: {}
+# -- Common annotations stamped onto every resource.
+commonAnnotations: {}
+
+# -- Number of CCM controller replicas. The default of 2 + leader election
+# tolerates a single control-plane failure without a re-sync gap.
+replicaCount: 2
+
+# -- Image-pull secrets for all containers (combined with `global.imagePullSecrets`).
+imagePullSecrets: []
+
+images:
+  ccm:
+    # -- Registry the CCM image is pulled from (overridden by `global.imageRegistry`).
+    registry: ghcr.io
+    # -- Repository within the registry.
+    repository: upcloudltd/cloud-controller-manager
+    # -- Tag. Empty string falls back to `.Chart.AppVersion`.
+    tag: ""
+    # -- Image digest (sha256:...). When set, takes precedence over `tag`
+    # and yields `registry/repository@sha256:...`. Recommended for production.
+    digest: ""
+    # -- `IfNotPresent`, `Always`, or `Never`.
+    pullPolicy: IfNotPresent
+
+credentials:
+  # -- Render a Secret with the supplied `username` / `password`.
+  # Mutually exclusive with `existingSecret`.
+  create: true
+  # -- Reference an externally-managed Secret (e.g. one created by
+  # External Secrets Operator or shared with the upcloud-csi chart).
+  existingSecret: ""
+  # -- Secret key holding the UpCloud API username.
+  usernameKey: username
+  # -- Secret key holding the UpCloud API password.
+  passwordKey: password
+  # -- UpCloud API username. Required when `create: true`.
+  username: ""
+  # -- UpCloud API password. Required when `create: true`.
+  password: ""
+
+ccmConfig:
+  # -- Cluster identifier surfaced in UpCloud Hub (LoadBalancer names, tags).
+  clusterName: "my-k3s-cluster"
+  # -- Cluster ID, must be globally unique within your UpCloud account. REQUIRED.
+  # Generate once with `uuidgen` and pin it in your values file.
+  clusterID: ""
+  # -- Default plan for LoadBalancers provisioned by the CCM.
+  # Allowed: `development`, `production-small`, `production-medium`, `production-large`.
+  loadBalancerPlan: "development"
+  # -- Maximum backend members attached to a managed LoadBalancer.
+  loadBalancerMaxBackendMembers: 100
+
+serviceAccount:
+  # -- Create a ServiceAccount. Off by default because K3s ships
+  # `cloud-controller-manager` SA in `kube-system` out of the box.
+  create: false
+  # -- Name of the SA to use (either created here or referenced).
+  name: "cloud-controller-manager"
+  # -- Extra annotations on the SA.
+  annotations: {}
+  # -- Mount the SA token automatically into pods. Required for CCM to talk
+  # to the apiserver.
+  automountServiceAccountToken: true
+
+rbac:
+  # -- Render a ClusterRoleBinding that binds the SA above to the upstream
+  # `system:cloud-controller-manager` ClusterRole. Off by default — K3s
+  # provides the binding automatically. Set true on vanilla Kubernetes.
+  create: false
+
+# -- PriorityClass for the CCM pods. `system-cluster-critical` ensures they
+# evict last under pressure.
+priorityClassName: system-cluster-critical
+
+# -- Tolerations so the pod schedules on control-plane nodes and survives
+# the `uninitialized` cloud-provider taint during cluster bootstrap.
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+  - key: node.cloudprovider.kubernetes.io/uninitialized
+    value: "true"
+    effect: NoSchedule
+
+# -- Pin the pod to control-plane nodes by default.
+nodeSelector:
+  node-role.kubernetes.io/control-plane: ""
+
+# -- Soft anti-affinity to spread replicas across nodes when possible.
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: upcloud-ccm
+
+# -- Topology spread constraints (Kubernetes >= 1.27 supports `whenUnsatisfiable: ScheduleAnyway`).
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: upcloud-ccm
+
+# -- Grace period before SIGKILL.
+terminationGracePeriodSeconds: 60
+
+# -- Restrict revision history to keep etcd lean.
+revisionHistoryLimit: 3
+
+# -- Rolling update strategy. `maxUnavailable: 0` keeps at least one CCM
+# replica running during upgrades; combined with leader election this means
+# no provisioning gap.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# -- Pod-level security context. The CCM binary runs fine as nonroot.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  capabilities:
+    drop:
+      - ALL
+
+# -- Resource requests & limits. Conservative defaults; bump for clusters
+# managing many LoadBalancers / nodes.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# -- Extra environment variables for the CCM container.
+extraEnv: []
+
+# -- Extra volume mounts for the CCM container.
+extraVolumeMounts: []
+
+# -- Extra volumes for the pod.
+extraVolumes: []
+
+# -- Extra command-line flags appended after the chart-managed flags
+# (chart flags win on conflicts because they appear first).
+extraArgs: []
+
+# -- Pod annotations.
+podAnnotations: {}
+
+# -- Pod labels (in addition to chart-managed labels).
+podLabels: {}
+
+# -- Pod Disruption Budget. Active when `replicaCount > 1`.
+podDisruptionBudget:
+  enabled: true
+  # -- One of `minAvailable` / `maxUnavailable` must be set.
+  minAvailable: 1
+  maxUnavailable: ""
+
+metrics:
+  # -- Enable the CCM secure metrics endpoint. Required for `serviceMonitor`.
+  enabled: true
+  # -- CCM secure port. Metrics + healthz served here.
+  port: 10258
+  # -- Bind address. `127.0.0.1` is safest; switched to `0.0.0.0` automatically
+  # when `serviceMonitor.enabled` is true so Prometheus can scrape.
+  bindAddress: "127.0.0.1"
+  service:
+    # -- Render a headless Service so Prometheus can discover the pods.
+    # Auto-enabled when `serviceMonitor.enabled` is true.
+    enabled: false
+    annotations: {}
+  serviceMonitor:
+    # -- Opt-in: requires the Prometheus Operator CRDs to be installed.
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    namespace: ""
+    labels: {}
+    relabelings: []
+    metricRelabelings: []
+    # -- The CCM uses a self-signed cert on its secure port.
+    tlsConfig:
+      insecureSkipVerify: true
+
+# -- Logging verbosity (`--v=<n>` flag). 2 is upstream default.
+logVerbosity: 2
+
+# -- Disable Go pprof endpoints by default.
+profiling: false
+
+# -- Opt-in NetworkPolicy. Off by default because policies vary by CNI;
+# turn on for compliance-heavy environments.
+networkPolicy:
+  enabled: false
+  # -- Extra ingress rules merged with the default (allow Prometheus to scrape metrics).
+  extraIngress: []
+  # -- Extra egress rules merged with the default (allow DNS + UpCloud API + kube-apiserver).
+  extraEgress: []
+
+# -- Liveness probe — hits the CCM `/healthz` over HTTPS on the secure port.
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /healthz
+    port: metrics
+    scheme: HTTPS
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# -- Readiness probe — same endpoint, shorter initial delay.
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /healthz
+    port: metrics
+    scheme: HTTPS
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# -- Startup probe (off by default; CCM starts fast).
+startupProbe:
+  enabled: false
+  httpGet:
+    path: /healthz
+    port: metrics
+    scheme: HTTPS
+  periodSeconds: 5
+  failureThreshold: 12

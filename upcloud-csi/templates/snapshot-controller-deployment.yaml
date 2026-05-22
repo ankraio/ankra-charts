@@ -1,0 +1,66 @@
+{{- if .Values.snapshotController.enabled -}}
+{{/*
+Snapshot Controller — vendored from UpCloud CSI v1.4.0 setup-upcloud-csi.yaml.
+External snapshot-controller that watches VolumeSnapshot resources and
+drives snapshot creation via the CSI driver.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-controller
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-controller
+spec:
+  replicas: {{ .Values.snapshotController.replicaCount }}
+  # The snapshot controller exits if the v1 CRDs are unavailable, so wait
+  # 15s before considering a new pod ready (matches upstream).
+  minReadySeconds: 15
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "upcloud-csi.snapshotControllerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.snapshotController.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "upcloud-csi.snapshotControllerSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "upcloud-csi.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ .Values.serviceAccount.controllerName }}
+      automountServiceAccountToken: true
+      priorityClassName: {{ .Values.snapshotController.priorityClassName }}
+      securityContext:
+        {{- toYaml .Values.snapshotController.podSecurityContext | nindent 8 }}
+      {{- with .Values.snapshotController.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.snapshotController.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.snapshotController.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: snapshot-controller
+          image: {{ include "upcloud-csi.image" (dict "image" .Values.images.snapshotController "context" .) }}
+          imagePullPolicy: {{ .Values.images.snapshotController.pullPolicy }}
+          args:
+            - "--v={{ .Values.snapshotController.logVerbosity }}"
+            - "--leader-election=true"
+          securityContext:
+            {{- toYaml .Values.snapshotController.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.snapshotController.resources | nindent 12 }}
+{{- end }}

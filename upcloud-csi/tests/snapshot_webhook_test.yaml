@@ -1,0 +1,43 @@
+suite: snapshot webhook gating
+templates:
+  - templates/snapshot-webhook.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: not rendered by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders ValidatingWebhookConfig + RBAC + Deployment + Service when enabled
+    set:
+      snapshotWebhook.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 5
+
+  - it: TLS secret name is overridable
+    set:
+      snapshotWebhook.enabled: true
+      snapshotWebhook.tlsSecretName: my-tls
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.volumes[0].secret.secretName
+          value: my-tls
+
+  - it: failurePolicy is overridable
+    set:
+      snapshotWebhook.enabled: true
+      snapshotWebhook.failurePolicy: Fail
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ValidatingWebhookConfiguration
+      - equal:
+          path: webhooks[0].failurePolicy
+          value: Fail

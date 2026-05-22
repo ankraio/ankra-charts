@@ -1,0 +1,23 @@
+{{- if .Values.storageClasses.maxiops.enabled -}}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storageClasses.maxiops.name }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+  annotations:
+    {{- if eq .Values.storageClasses.defaultClass "maxiops" }}
+    storageclass.kubernetes.io/is-default-class: "true"
+    {{- else }}
+    storageclass.kubernetes.io/is-default-class: "false"
+    {{- end }}
+provisioner: storage.csi.upcloud.com
+parameters:
+  tier: maxiops
+  {{- with .Values.storageClasses.maxiops.extraParameters }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+reclaimPolicy: {{ .Values.storageClasses.reclaimPolicy }}
+volumeBindingMode: {{ .Values.storageClasses.volumeBindingMode }}
+allowVolumeExpansion: {{ .Values.storageClasses.allowVolumeExpansion }}
+{{- end }}

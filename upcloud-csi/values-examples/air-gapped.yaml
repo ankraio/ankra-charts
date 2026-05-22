@@ -1,0 +1,49 @@
+# Air-gapped overlay: every image mirrored to a private registry and pinned
+# by digest. Generate digests with:
+#   crane digest registry.k8s.io/sig-storage/csi-provisioner:v3.1.0
+#   crane digest ghcr.io/upcloudltd/upcloud-csi:v1.4.0
+# (etc.) and mirror the images first.
+
+global:
+  imageRegistry: harbor.internal
+
+images:
+  csiDriver:
+    repository: mirror/upcloudltd/upcloud-csi
+    digest: "sha256:REPLACE-ME"
+  provisioner:
+    repository: mirror/sig-storage/csi-provisioner
+    digest: "sha256:REPLACE-ME"
+  attacher:
+    repository: mirror/sig-storage/csi-attacher
+    digest: "sha256:REPLACE-ME"
+  resizer:
+    repository: mirror/sig-storage/csi-resizer
+    digest: "sha256:REPLACE-ME"
+  snapshotter:
+    repository: mirror/sig-storage/csi-snapshotter
+    digest: "sha256:REPLACE-ME"
+  snapshotController:
+    repository: mirror/sig-storage/snapshot-controller
+    digest: "sha256:REPLACE-ME"
+  nodeDriverRegistrar:
+    repository: mirror/sig-storage/csi-node-driver-registrar
+    digest: "sha256:REPLACE-ME"
+  snapshotValidationWebhook:
+    repository: mirror/sig-storage/snapshot-validation-webhook
+    digest: "sha256:REPLACE-ME"
+  kubectl:
+    repository: mirror/kubectl
+    digest: "sha256:REPLACE-ME"
+
+imagePullSecrets:
+  - name: harbor-pull-secret
+
+credentials:
+  existingSecret: "upcloud-api-credentials"
+
+storageClasses:
+  defaultClass: maxiops
+
+networkPolicy:
+  enabled: true

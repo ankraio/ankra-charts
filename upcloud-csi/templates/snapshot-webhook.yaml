@@ -1,0 +1,129 @@
+{{- if .Values.snapshotWebhook.enabled -}}
+{{/*
+Snapshot validation webhook — vendored from UpCloud CSI v1.4.0
+snapshot-webhook-upcloud-csi.yaml. Enable only after you have a TLS cert
+populated in the Secret named by .Values.snapshotWebhook.tlsSecretName.
+
+cert-manager Certificate example:
+  spec:
+    secretName: snapshot-validation-secret
+    dnsNames:
+      - snapshot-validation-service.kube-system.svc
+      - snapshot-validation-service.kube-system.svc.cluster.local
+    issuerRef:
+      kind: ClusterIssuer
+      name: selfsigned
+*/}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-validation
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+webhooks:
+  - name: validation-webhook.snapshot.storage.k8s.io
+    rules:
+      - apiGroups: ["snapshot.storage.k8s.io"]
+        apiVersions: ["v1", "v1beta1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["volumesnapshots", "volumesnapshotcontents"]
+        scope: "*"
+    clientConfig:
+      service:
+        namespace: {{ include "upcloud-csi.namespace" . }}
+        name: {{ include "upcloud-csi.fullname" . }}-snapshot-validation
+        path: "/volumesnapshot"
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    failurePolicy: {{ .Values.snapshotWebhook.failurePolicy }}
+    timeoutSeconds: {{ .Values.snapshotWebhook.timeoutSeconds }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-webhook
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-webhook
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccount.nodeName }}
+    namespace: {{ include "upcloud-csi.namespace" . }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-webhook
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-validation
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-validation
+spec:
+  replicas: {{ .Values.snapshotWebhook.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "upcloud-csi.snapshotWebhookSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "upcloud-csi.snapshotWebhookSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "upcloud-csi.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ .Values.serviceAccount.controllerName }}
+      automountServiceAccountToken: true
+      securityContext:
+        {{- toYaml .Values.snapshotWebhook.podSecurityContext | nindent 8 }}
+      containers:
+        - name: snapshot-validation
+          image: {{ include "upcloud-csi.image" (dict "image" .Values.images.snapshotValidationWebhook "context" .) }}
+          imagePullPolicy: {{ .Values.images.snapshotValidationWebhook.pullPolicy }}
+          args:
+            - "-v5"
+            - "--tls-cert-file=/etc/snapshot-validation-webhook/certs/cert.pem"
+            - "--tls-private-key-file=/etc/snapshot-validation-webhook/certs/key.pem"
+          ports:
+            - containerPort: 443
+              protocol: TCP
+          securityContext:
+            {{- toYaml .Values.snapshotWebhook.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.snapshotWebhook.resources | nindent 12 }}
+          volumeMounts:
+            - name: certs
+              mountPath: /etc/snapshot-validation-webhook/certs
+              readOnly: true
+      volumes:
+        - name: certs
+          secret:
+            secretName: {{ .Values.snapshotWebhook.tlsSecretName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-validation
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-validation
+spec:
+  selector:
+    {{- include "upcloud-csi.snapshotWebhookSelectorLabels" . | nindent 4 }}
+  ports:
+    - protocol: TCP
+      port: 443
+      targetPort: 443
+{{- end }}

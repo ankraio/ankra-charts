@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ankra.io/schemas/upcloud-ccm/values.schema.json",
+  "title": "upcloud-ccm values",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "imageRegistry": { "type": "string" },
+        "imagePullSecrets": { "type": "array" }
+      }
+    },
+    "namespaceOverride": { "type": "string" },
+    "replicaCount": { "type": "integer", "minimum": 1 },
+    "images": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "ccm": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "registry": { "type": "string", "minLength": 1 },
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "digest": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["IfNotPresent", "Always", "Never"] }
+          },
+          "required": ["registry", "repository", "pullPolicy"]
+        }
+      },
+      "required": ["ccm"]
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "usernameKey": { "type": "string", "minLength": 1 },
+        "passwordKey": { "type": "string", "minLength": 1 },
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["create", "existingSecret", "usernameKey", "passwordKey"]
+    },
+    "ccmConfig": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "clusterName": { "type": "string", "minLength": 1 },
+        "clusterID": { "type": "string", "minLength": 1 },
+        "loadBalancerPlan": {
+          "type": "string",
+          "enum": ["development", "production-small", "production-medium", "production-large"]
+        },
+        "loadBalancerMaxBackendMembers": { "type": "integer", "minimum": 1, "maximum": 1000 }
+      },
+      "required": ["clusterName", "clusterID", "loadBalancerPlan", "loadBalancerMaxBackendMembers"]
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string", "minLength": 1 },
+        "annotations": { "type": "object" },
+        "automountServiceAccountToken": { "type": "boolean" }
+      },
+      "required": ["create", "name"]
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" }
+      },
+      "required": ["create"]
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": ["integer", "string"] },
+        "maxUnavailable": { "type": ["integer", "string"] }
+      },
+      "required": ["enabled"]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "bindAddress": { "type": "string", "minLength": 1 },
+        "service": { "type": "object" },
+        "serviceMonitor": { "type": "object" },
+        "podMonitor": { "type": "object" }
+      },
+      "required": ["enabled", "port"]
+    },
+    "logVerbosity": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "profiling": { "type": "boolean" },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["enabled"]
+    }
+  },
+  "required": ["replicaCount", "images", "credentials", "ccmConfig", "serviceAccount", "rbac", "metrics"]
+}

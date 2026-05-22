@@ -1,0 +1,141 @@
+{{- include "upcloud-ccm.validate" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "upcloud-ccm.fullname" . }}
+  namespace: {{ include "upcloud-ccm.namespace" . }}
+  labels:
+    {{- include "upcloud-ccm.labels" . | nindent 4 }}
+  {{- with (include "upcloud-ccm.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "upcloud-ccm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- /* Rotate pods when the ConfigMap or chart-managed Secret changes. */}}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.credentials.create }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "upcloud-ccm.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "upcloud-ccm.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "upcloud-ccm.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      hostNetwork: false
+      dnsPolicy: ClusterFirst
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cloud-controller-manager
+          image: {{ include "upcloud-ccm.image" (dict "image" .Values.images.ccm "context" .) }}
+          imagePullPolicy: {{ .Values.images.ccm.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command:
+            - /cloud-controller-manager
+          args:
+            - --cloud-provider=upcloud
+            - --cloud-config=/etc/config/ccm-config.yaml
+            - --configure-cloud-routes=false
+            - --leader-elect=true
+            - --leader-elect-resource-lock=leases
+            - --use-service-account-credentials=true
+            - --secure-port={{ .Values.metrics.port }}
+            {{- if .Values.metrics.serviceMonitor.enabled }}
+            - --bind-address=0.0.0.0
+            {{- else }}
+            - --bind-address={{ .Values.metrics.bindAddress }}
+            {{- end }}
+            - --profiling={{ .Values.profiling }}
+            - --contention-profiling={{ .Values.profiling }}
+            - --v={{ .Values.logVerbosity }}
+            {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            - name: UPCLOUD_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "upcloud-ccm.secretName" . }}
+                  key: {{ .Values.credentials.usernameKey }}
+            - name: UPCLOUD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "upcloud-ccm.secretName" . }}
+                  key: {{ .Values.credentials.passwordKey }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            {{- omit .Values.startupProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "upcloud-ccm.fullname" . }}-config
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

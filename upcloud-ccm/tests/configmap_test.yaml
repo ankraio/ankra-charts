@@ -1,0 +1,29 @@
+suite: configmap + validation
+templates:
+  - templates/configmap.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  # ccmConfig.clusterID requiredness is enforced by values.schema.json
+  # (minLength: 1) — Helm rejects the install before templating runs.
+
+  - it: renders config with clusterID + clusterName
+    set:
+      ccmConfig.clusterID: my-stable-uuid
+      ccmConfig.clusterName: production-1
+      credentials.username: u
+      credentials.password: p
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: ut-upcloud-ccm-config
+      - matchRegex:
+          path: data["ccm-config.yaml"]
+          pattern: 'clusterID: "my-stable-uuid"'
+      - matchRegex:
+          path: data["ccm-config.yaml"]
+          pattern: 'clusterName: "production-1"'

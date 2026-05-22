@@ -1,0 +1,36 @@
+apiVersion: v2
+name: upcloud-ccm
+description: UpCloud Cloud Controller Manager for Kubernetes
+type: application
+version: 0.1.0
+appVersion: "latest"
+kubeVersion: ">=1.27.0-0"
+
+home: https://github.com/ankra-io/platform/tree/main/upcloud-charts/upcloud-ccm
+sources:
+  - https://github.com/ankra-io/platform/tree/main/upcloud-charts/upcloud-ccm
+  - https://upcloud.com/community/tutorials/getting-started-upcloud-kubernetes-services
+
+keywords:
+  - upcloud
+  - ccm
+  - cloud-controller-manager
+  - cloud-provider
+  - load-balancer
+  - k3s
+
+maintainers:
+  - name: Ankra AB
+    email: admin@ankra.io
+
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/maintainers: |
+    - name: Ankra AB
+      email: admin@ankra.io
+  artifacthub.io/links: |
+    - name: Upstream image (GHCR)
+      url: https://ghcr.io/upcloudltd/cloud-controller-manager
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release of the UpCloud CCM Helm chart.

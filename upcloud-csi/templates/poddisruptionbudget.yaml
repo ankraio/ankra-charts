@@ -1,0 +1,52 @@
+{{- if and .Values.controller.podDisruptionBudget.enabled (gt (int .Values.controller.replicaCount) 1) -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-controller
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  {{- if .Values.controller.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.controller.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.controller.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.controller.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "upcloud-csi.controllerSelectorLabels" . | nindent 6 }}
+{{- end }}
+{{- if and .Values.snapshotController.enabled .Values.snapshotController.podDisruptionBudget.enabled (gt (int .Values.snapshotController.replicaCount) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-controller
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-controller
+spec:
+  minAvailable: {{ .Values.snapshotController.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "upcloud-csi.snapshotControllerSelectorLabels" . | nindent 6 }}
+{{- end }}
+{{- if and .Values.snapshotWebhook.enabled .Values.snapshotWebhook.podDisruptionBudget.enabled (gt (int .Values.snapshotWebhook.replicaCount) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-validation
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-validation
+spec:
+  minAvailable: {{ .Values.snapshotWebhook.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "upcloud-csi.snapshotWebhookSelectorLabels" . | nindent 6 }}
+{{- end }}

@@ -1,0 +1,126 @@
+{{- include "upcloud-csi.validate" . -}}
+{{- if .Values.storageClasses.defaultClass -}}
+{{- $hookName := printf "%s-default-sc" (include "upcloud-csi.fullname" .) -}}
+{{- $targetSC := (index .Values.storageClasses .Values.storageClasses.defaultClass).name -}}
+{{/*
+Post-install/post-upgrade Job that:
+  1. (optional) Removes the `is-default-class` annotation from K3s' local-path SC.
+  2. Marks the chosen UpCloud SC as the cluster default.
+
+The Job and its scoped RBAC are created as Helm hooks and deleted on success.
+Idempotent: re-running it produces no errors (`get … || true` for local-path).
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $hookName }}
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: default-sc-hook
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $hookName }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: default-sc-hook
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+rules:
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $hookName }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: default-sc-hook
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+subjects:
+  - kind: ServiceAccount
+    name: {{ $hookName }}
+    namespace: {{ include "upcloud-csi.namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $hookName }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $hookName }}
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: default-sc-hook
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  ttlSecondsAfterFinished: {{ .Values.defaultClassJob.ttlSecondsAfterFinished }}
+  activeDeadlineSeconds: {{ .Values.defaultClassJob.activeDeadlineSeconds }}
+  backoffLimit: {{ .Values.defaultClassJob.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "upcloud-csi.labels" . | nindent 8 }}
+        app.kubernetes.io/component: default-sc-hook
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ $hookName }}
+      automountServiceAccountToken: true
+      securityContext:
+        {{- toYaml .Values.defaultClassJob.podSecurityContext | nindent 8 }}
+      {{- with .Values.defaultClassJob.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.defaultClassJob.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: patch
+          image: {{ include "upcloud-csi.image" (dict "image" .Values.images.kubectl "context" .) }}
+          imagePullPolicy: {{ .Values.images.kubectl.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "Targeting UpCloud StorageClass: ${TARGET_SC}"
+              {{- if .Values.storageClasses.disableLocalPathDefault }}
+              if kubectl get sc local-path >/dev/null 2>&1; then
+                echo "Removing is-default-class annotation from local-path"
+                kubectl patch storageclass local-path \
+                  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+              else
+                echo "local-path SC not present; nothing to patch (non-K3s cluster)"
+              fi
+              {{- end }}
+              echo "Marking ${TARGET_SC} as cluster default"
+              kubectl patch storageclass "${TARGET_SC}" \
+                -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+              echo "Done."
+          env:
+            - name: TARGET_SC
+              value: {{ $targetSC | quote }}
+          securityContext:
+            {{- toYaml .Values.defaultClassJob.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.defaultClassJob.resources | nindent 12 }}
+{{- end }}

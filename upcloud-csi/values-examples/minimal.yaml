@@ -1,0 +1,6 @@
+# Minimal install: assumes the upcloud-ccm chart was installed first
+# and created a Secret called `upcloud-ccm-credentials`. Marks maxiops
+# as the cluster default.
+
+storageClasses:
+  defaultClass: maxiops

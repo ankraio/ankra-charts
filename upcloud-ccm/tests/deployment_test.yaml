@@ -1,0 +1,123 @@
+suite: deployment
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+  - templates/secret.yaml
+release:
+  name: ut
+  namespace: kube-system
+chart:
+  version: 0.1.0
+  appVersion: latest
+set:
+  ccmConfig.clusterID: test-cluster
+  credentials.username: u
+  credentials.password: p
+
+tests:
+  - it: renders a Deployment with the chart-managed name
+    template: templates/deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: ut-upcloud-ccm
+      - equal:
+          path: metadata.namespace
+          value: kube-system
+
+  - it: defaults to 2 replicas and includes --leader-elect
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect=true
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect-resource-lock=leases
+
+  - it: drops all caps + runs nonroot + readonly fs
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: tolerates control-plane and uninitialized-cloud-provider taints
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: node-role.kubernetes.io/control-plane
+            operator: Exists
+            effect: NoSchedule
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: node.cloudprovider.kubernetes.io/uninitialized
+            value: "true"
+            effect: NoSchedule
+
+  - it: uses the chart-managed Secret name by default
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: UPCLOUD_USERNAME
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: ut-upcloud-ccm-credentials
+
+  - it: respects credentials.existingSecret
+    template: templates/deployment.yaml
+    set:
+      credentials.create: false
+      credentials.existingSecret: my-external-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: my-external-secret
+
+  - it: appends extraArgs after chart-managed flags
+    template: templates/deployment.yaml
+    set:
+      extraArgs:
+        - --feature-gates=Foo=true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --feature-gates=Foo=true
+
+  - it: honors global.imageRegistry override
+    template: templates/deployment.yaml
+    set:
+      global.imageRegistry: harbor.internal
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: harbor.internal/upcloudltd/cloud-controller-manager:latest
+
+  - it: pins by digest when images.ccm.digest is set
+    template: templates/deployment.yaml
+    set:
+      images.ccm.digest: sha256:deadbeef
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/upcloudltd/cloud-controller-manager@sha256:deadbeef

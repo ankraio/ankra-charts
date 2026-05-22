@@ -1,0 +1,76 @@
+Thank you for installing {{ .Chart.Name }} ({{ .Chart.Version }}, appVersion {{ .Chart.AppVersion }}).
+
+The UpCloud CSI driver is now deployed to namespace {{ include "upcloud-csi.namespace" . }}.
+
+NEXT STEPS
+==========
+
+1. Verify the driver pods are healthy:
+
+       kubectl -n {{ include "upcloud-csi.namespace" . }} rollout status statefulset/{{ include "upcloud-csi.fullname" . }}-controller
+       kubectl -n {{ include "upcloud-csi.namespace" . }} rollout status daemonset/{{ include "upcloud-csi.fullname" . }}-node
+       kubectl -n {{ include "upcloud-csi.namespace" . }} get pods -l app.kubernetes.io/name={{ include "upcloud-csi.name" . }}
+
+2. Confirm the StorageClasses are registered:
+
+       kubectl get storageclass
+
+{{- if .Values.storageClasses.defaultClass }}
+
+3. A post-install Job has marked
+   "{{ (index .Values.storageClasses .Values.storageClasses.defaultClass).name }}"
+   as the cluster's default StorageClass.
+   {{- if .Values.storageClasses.disableLocalPathDefault }}
+   The default flag was also removed from K3s' built-in `local-path` SC (no-op on
+   non-K3s clusters).
+   {{- end }}
+
+   Verify with:
+
+       kubectl get sc -o custom-columns=NAME:.metadata.name,DEFAULT:.metadata.annotations."storageclass\.kubernetes\.io/is-default-class"
+       kubectl -n {{ include "upcloud-csi.namespace" . }} logs job/{{ include "upcloud-csi.fullname" . }}-default-sc
+{{- else }}
+
+3. To make an UpCloud StorageClass the cluster default later, you can either:
+
+   a) Re-run `helm upgrade` with `--set storageClasses.defaultClass=maxiops` (or
+      `standard` / `hdd`); the post-install Job will patch the annotations for you.
+
+   b) Or patch the annotations manually:
+
+       kubectl patch storageclass local-path \
+         -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+       kubectl patch storageclass upcloud-block-storage-maxiops \
+         -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+{{- end }}
+
+4. Test by creating a PVC and binding a Pod:
+
+       cat <<EOF | kubectl apply -f -
+       apiVersion: v1
+       kind: PersistentVolumeClaim
+       metadata:
+         name: upcloud-csi-test
+         namespace: default
+       spec:
+         accessModes: [ReadWriteOnce]
+         resources:
+           requests:
+             storage: 10Gi
+       EOF
+
+{{- if .Values.credentials.existingSecret }}
+
+NOTE: This release reuses the existing Secret "{{ .Values.credentials.existingSecret }}"
+in namespace {{ include "upcloud-csi.namespace" . }} for UpCloud API credentials.
+Make sure that Secret exists (the upcloud-ccm chart's default Secret name is
+"upcloud-ccm-credentials").
+{{- end }}
+
+{{- if .Values.snapshotWebhook.enabled }}
+
+The snapshot validation webhook is enabled. Make sure the TLS Secret
+"{{ .Values.snapshotWebhook.tlsSecretName }}" exists with valid `cert.pem` /
+`key.pem` keys, otherwise the webhook will fail open
+(failurePolicy={{ .Values.snapshotWebhook.failurePolicy }}).
+{{- end }}

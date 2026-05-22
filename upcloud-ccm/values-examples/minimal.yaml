@@ -1,0 +1,7 @@
+# Minimal install: K3s defaults + inline credentials + a stable cluster ID.
+ccmConfig:
+  clusterID: "REPLACE-ME-WITH-uuidgen-OUTPUT"
+credentials:
+  create: true
+  username: "REPLACE-ME"
+  password: "REPLACE-ME"

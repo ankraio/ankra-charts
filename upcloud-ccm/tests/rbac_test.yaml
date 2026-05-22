@@ -1,0 +1,52 @@
+suite: ServiceAccount + RBAC gating
+templates:
+  - templates/serviceaccount.yaml
+  - templates/clusterrolebinding.yaml
+release:
+  name: ut
+  namespace: kube-system
+set:
+  ccmConfig.clusterID: t
+  credentials.username: u
+  credentials.password: p
+
+tests:
+  - it: no SA / no CRB by default (K3s ships them)
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/serviceaccount.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/clusterrolebinding.yaml
+
+  - it: creates SA when serviceAccount.create=true
+    set:
+      serviceAccount.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/serviceaccount.yaml
+      - isKind:
+          of: ServiceAccount
+        template: templates/serviceaccount.yaml
+
+  - it: creates ClusterRoleBinding bound to system:cloud-controller-manager when rbac.create=true
+    set:
+      rbac.create: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/clusterrolebinding.yaml
+      - isKind:
+          of: ClusterRoleBinding
+        template: templates/clusterrolebinding.yaml
+      - equal:
+          path: roleRef.name
+          value: system:cloud-controller-manager
+        template: templates/clusterrolebinding.yaml
+
+  # credentials.create + credentials.existingSecret mutex is enforced by the
+  # `upcloud-ccm.validate` helper at template time (see _helpers.tpl). We
+  # cover it with a `helm template` smoke test in upcloud-charts-lint.yml
+  # because helm-unittest swallows `fail` errors across multi-template suites.

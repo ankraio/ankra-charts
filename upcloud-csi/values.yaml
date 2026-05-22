@@ -1,0 +1,400 @@
+# -- Global values applied across every workload in this chart.
+global:
+  # -- Override every `images.*.registry` (useful for air-gapped installs).
+  imageRegistry: ""
+  # -- Appended to chart-level `imagePullSecrets`.
+  imagePullSecrets: []
+
+# -- Override the release namespace for every rendered resource.
+# Defaults to `.Release.Namespace`; production clusters usually install
+# into `kube-system`.
+namespaceOverride: ""
+
+# -- Common labels stamped onto every resource.
+commonLabels: {}
+# -- Common annotations stamped onto every resource.
+commonAnnotations: {}
+
+# -- Image-pull secrets for all containers (combined with `global.imagePullSecrets`).
+imagePullSecrets: []
+
+# -- Image references. Each entry follows the Bitnami pattern:
+# `registry/repository[:tag|@digest]`. Setting `digest` takes precedence
+# over `tag`. Tags are pinned to the versions shipped by UpCloud CSI
+# v1.4.0's setup-upcloud-csi.yaml and are auto-bumped by the sync workflow.
+images:
+  csiDriver:
+    registry: ghcr.io
+    repository: upcloudltd/upcloud-csi
+    tag: ""   # falls back to .Chart.AppVersion (v1.4.0)
+    digest: ""
+    pullPolicy: IfNotPresent
+  provisioner:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-provisioner
+    tag: "v3.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  attacher:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-attacher
+    tag: "v3.4.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  resizer:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-resizer
+    tag: "v1.4.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  snapshotter:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-snapshotter
+    tag: "v4.2.1"
+    digest: ""
+    pullPolicy: IfNotPresent
+  snapshotController:
+    registry: registry.k8s.io
+    repository: sig-storage/snapshot-controller
+    tag: "v4.2.1"
+    digest: ""
+    pullPolicy: IfNotPresent
+  nodeDriverRegistrar:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-node-driver-registrar
+    tag: "v2.5.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  snapshotValidationWebhook:
+    registry: registry.k8s.io
+    repository: sig-storage/snapshot-validation-webhook
+    tag: "v4.2.1"
+    digest: ""
+    pullPolicy: IfNotPresent
+  kubectl:
+    # Used only by the default-SC patch hook Job.
+    registry: registry.k8s.io
+    repository: kubectl
+    tag: "v1.31.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+
+# -- UpCloud API credentials. By default the chart reuses the Secret created
+# by the upcloud-ccm chart (when that chart's release is named `upcloud-ccm`).
+credentials:
+  # -- Reuse an externally-managed Secret. When set, no Secret is rendered.
+  # Default matches the Secret name created by `helm install upcloud-ccm ...`.
+  existingSecret: "upcloud-ccm-credentials"
+  # -- Render a Secret from `username`/`password` (set `existingSecret: ""`
+  # at the same time, otherwise the chart refuses to render).
+  create: false
+  # -- Secret key holding the UpCloud API username.
+  usernameKey: username
+  # -- Secret key holding the UpCloud API password.
+  passwordKey: password
+  # -- UpCloud API username. Required when `create: true`.
+  username: ""
+  # -- UpCloud API password. Required when `create: true`.
+  password: ""
+
+serviceAccount:
+  # -- Create the upstream-named ServiceAccounts. Off only for advanced
+  # operators bringing their own.
+  create: true
+  # -- Name of the controller SA (referenced by every controller RoleBinding).
+  controllerName: csi-upcloud-controller-sa
+  # -- Name of the node DaemonSet SA.
+  nodeName: csi-upcloud-node-sa
+  annotations: {}
+
+rbac:
+  # -- Render the upstream ClusterRoles & bindings. Off only for advanced
+  # operators supplying their own RBAC.
+  create: true
+
+# -- StorageClass configuration. Each tier can be enabled/disabled and one
+# can be marked as the cluster default via `defaultClass`.
+storageClasses:
+  # -- Which class to mark as the cluster default. Empty string leaves
+  # default-class management to the operator. Allowed: "", "maxiops",
+  # "standard", "hdd". When set, a post-install Job patches the chosen SC
+  # on (and optionally local-path off).
+  defaultClass: ""
+  # -- When `defaultClass` is set, also remove the default flag from K3s'
+  # built-in `local-path` SC. Set false to leave local-path's annotation alone.
+  disableLocalPathDefault: true
+  # -- ReclaimPolicy for all chart-managed StorageClasses (`Retain` matches upstream).
+  reclaimPolicy: Retain
+  # -- VolumeBindingMode for all chart-managed StorageClasses.
+  volumeBindingMode: Immediate
+  # -- Allow PVC expansion (matches upstream).
+  allowVolumeExpansion: true
+  maxiops:
+    # -- Render the maxiops StorageClass.
+    enabled: true
+    # -- StorageClass name.
+    name: upcloud-block-storage-maxiops
+    # -- Extra parameters merged into the SC `parameters` map.
+    extraParameters: {}
+  standard:
+    enabled: true
+    name: upcloud-block-storage-standard
+    extraParameters: {}
+  hdd:
+    enabled: true
+    name: upcloud-block-storage-hdd
+    extraParameters: {}
+
+# -- Controller StatefulSet (csi-provisioner, csi-attacher, csi-resizer,
+# csi-snapshotter, csi-upcloud-plugin).
+controller:
+  replicaCount: 1
+  # -- PriorityClass for the controller pod.
+  priorityClassName: system-cluster-critical
+  # -- DNS policy. `ClusterFirst` works for the controller (no host network).
+  dnsPolicy: ClusterFirst
+  # -- Run controller on control-plane nodes only by default.
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: controller
+                app.kubernetes.io/name: upcloud-csi
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: controller
+          app.kubernetes.io/name: upcloud-csi
+  terminationGracePeriodSeconds: 60
+  revisionHistoryLimit: 3
+  updateStrategy:
+    type: RollingUpdate
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 65532
+    capabilities:
+      drop:
+        - ALL
+  podAnnotations: {}
+  podLabels: {}
+  podDisruptionBudget:
+    enabled: false   # auto-enabled if replicaCount > 1
+    minAvailable: 1
+    maxUnavailable: ""
+  resources:
+    csiDriver:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    sidecar:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+  # -- Verbosity for sidecars + csi-upcloud-plugin (`--v=N`).
+  logVerbosity: 5
+  # -- Extra args appended to the csi-upcloud-plugin container.
+  extraArgs: []
+  # -- Extra environment variables for the csi-upcloud-plugin container.
+  extraEnv: []
+
+# -- Snapshot Controller Deployment (provides VolumeSnapshot controller loop).
+snapshotController:
+  enabled: true
+  replicaCount: 2
+  priorityClassName: system-cluster-critical
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+  affinity: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  podAnnotations: {}
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  logVerbosity: 5
+
+# -- Node DaemonSet (csi-node-driver-registrar + csi-upcloud-plugin).
+# Runs on every node, including control-plane.
+node:
+  # -- PriorityClass for node pods.
+  priorityClassName: system-node-critical
+  # -- Tolerate every taint by default — DaemonSet must run everywhere PVs
+  # might be mounted.
+  tolerations:
+    - operator: Exists
+  # -- Kubelet root directory. K3s symlinks `/var/lib/rancher/k3s/agent/kubelet`
+  # to `/var/lib/kubelet`, so the default works there too.
+  kubeletDir: /var/lib/kubelet
+  # -- Update strategy.
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: "10%"
+  terminationGracePeriodSeconds: 30
+  # -- Pod-level security context. The node pod must be `privileged` because
+  # csi-node-driver-registrar talks to the kubelet plugin socket and the
+  # CSI driver performs bind mounts.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  # -- Container-level security context for csi-upcloud-plugin on the node.
+  # `privileged: true` is REQUIRED for the CSI mount/unmount syscalls.
+  pluginSecurityContext:
+    privileged: true
+    capabilities:
+      add: ["SYS_ADMIN"]
+    allowPrivilegeEscalation: true
+  # -- Container-level security context for the node-driver-registrar sidecar.
+  registrarSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: false   # registrar needs root to talk to the kubelet socket
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    csiDriver:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    sidecar:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+  podAnnotations: {}
+  logVerbosity: 5
+  # -- Extra args appended to the csi-upcloud-plugin container on the node.
+  extraArgs: []
+  # -- Extra environment variables for the csi-upcloud-plugin container on the node.
+  extraEnv: []
+
+# -- Snapshot validation webhook (optional; requires snapshot CRDs + a TLS
+# cert in `Secret/snapshot-validation-secret`).
+snapshotWebhook:
+  enabled: false
+  replicaCount: 3
+  failurePolicy: Ignore
+  timeoutSeconds: 2
+  # -- TLS secret holding `cert.pem` and `key.pem`. Either supply this yourself,
+  # or let cert-manager provision it.
+  tlsSecretName: snapshot-validation-secret
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# -- Default-StorageClass patch Job. Auto-rendered when
+# `storageClasses.defaultClass` is set.
+defaultClassJob:
+  ttlSecondsAfterFinished: 600
+  activeDeadlineSeconds: 120
+  backoffLimit: 2
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  nodeSelector: {}
+  tolerations:
+    - operator: Exists
+
+# -- Opt-in NetworkPolicy.
+networkPolicy:
+  enabled: false
+  extraIngress: []
+  extraEgress: []

@@ -1,0 +1,47 @@
+Thank you for installing {{ .Chart.Name }} ({{ .Chart.Version }}, appVersion {{ .Chart.AppVersion }}).
+
+The UpCloud Cloud Controller Manager is now deployed to namespace {{ include "upcloud-ccm.namespace" . }} with {{ .Values.replicaCount }} replica(s).
+
+NEXT STEPS
+==========
+
+1. Annotate every node with its UpCloud VM UUID and Private Network UUID.
+   The CCM matches Kubernetes nodes to UpCloud infrastructure via these annotations:
+
+       kubectl annotate node <node-name> \
+         infrastructure.cluster.x-k8s.io/upcloud-vm-uuid=<YOUR_UPCLOUD_VM_UUID>
+
+       kubectl annotate node <node-name> \
+         infrastructure.cluster.x-k8s.io/upcloud-vm-private-nw-uuid=<YOUR_UPCLOUD_PRIVATE_NETWORK_UUID>
+
+   You can find the UUIDs in the UpCloud Hub dashboard or via the UpCloud CLI:
+
+       upctl server list
+       upctl network list
+
+2. Verify the CCM is healthy:
+
+       kubectl -n {{ include "upcloud-ccm.namespace" . }} rollout status deployment/{{ include "upcloud-ccm.fullname" . }}
+       kubectl -n {{ include "upcloud-ccm.namespace" . }} logs -l app.kubernetes.io/name={{ include "upcloud-ccm.name" . }} --tail=50
+
+   Once the CCM recognizes your nodes it will clear the
+   `node.cloudprovider.kubernetes.io/uninitialized` taint and the nodes will become Ready.
+
+3. Test by deploying a `Service` of `type: LoadBalancer`. The CCM will provision an
+   UpCloud Managed Load Balancer (plan: {{ .Values.ccmConfig.loadBalancerPlan }}) and surface
+   its external IP back on the Service.
+
+{{- if not .Values.credentials.existingSecret }}
+{{- if .Values.credentials.create }}
+
+NOTE: This release created its own UpCloud API credentials Secret
+({{ include "upcloud-ccm.secretName" . }}). The sibling upcloud-csi chart can reuse it
+by setting `credentials.existingSecret={{ include "upcloud-ccm.secretName" . }}`.
+{{- end }}
+{{- end }}
+
+{{- if .Values.metrics.serviceMonitor.enabled }}
+
+A ServiceMonitor has been created for Prometheus Operator. Metrics are scraped from
+port {{ .Values.metrics.port }} of the headless Service `{{ include "upcloud-ccm.fullname" . }}-metrics`.
+{{- end }}

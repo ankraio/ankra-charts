@@ -1,0 +1,40 @@
+# Production overlay: 3 replicas, doubled limits, ServiceMonitor + NetworkPolicy on.
+# Credentials are sourced from an ExternalSecret managed Secret named
+# `upcloud-api-credentials`.
+
+replicaCount: 3
+
+credentials:
+  create: false
+  existingSecret: "upcloud-api-credentials"
+
+ccmConfig:
+  clusterID: "REPLACE-ME-WITH-uuidgen-OUTPUT"
+  clusterName: "production"
+  loadBalancerPlan: "production-medium"
+  loadBalancerMaxBackendMembers: 200
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 400m
+    memory: 512Mi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      release: prometheus
+
+networkPolicy:
+  enabled: true
+
+# Cluster-critical priority + topology spread keeps replicas on different nodes.
+priorityClassName: system-cluster-critical

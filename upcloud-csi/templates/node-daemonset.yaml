@@ -1,0 +1,139 @@
+{{- include "upcloud-csi.validate" . -}}
+{{/*
+csi-upcloud-node DaemonSet — vendored from UpCloud CSI v1.4.0 setup-upcloud-csi.yaml.
+Runs on every node and exposes the CSI driver socket to the local kubelet.
+The csi-upcloud-plugin container MUST run privileged for mount syscalls.
+*/}}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-node
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node
+spec:
+  selector:
+    matchLabels:
+      {{- include "upcloud-csi.nodeSelectorLabels" . | nindent 6 }}
+  updateStrategy:
+    {{- toYaml .Values.node.updateStrategy | nindent 4 }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.credentials.create }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.node.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "upcloud-csi.nodeSelectorLabels" . | nindent 8 }}
+        role: csi-upcloud
+    spec:
+      {{- include "upcloud-csi.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ .Values.serviceAccount.nodeName }}
+      automountServiceAccountToken: true
+      priorityClassName: {{ .Values.node.priorityClassName }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: {{ .Values.node.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.node.podSecurityContext | nindent 8 }}
+      {{- with .Values.node.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "upcloud-csi.nodeSelectorLabels" . | nindent 18 }}
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: csi-node-driver-registrar
+          image: {{ include "upcloud-csi.image" (dict "image" .Values.images.nodeDriverRegistrar "context" .) }}
+          imagePullPolicy: {{ .Values.images.nodeDriverRegistrar.pullPolicy }}
+          args:
+            - "--v={{ .Values.node.logVerbosity }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: {{ .Values.node.kubeletDir }}/plugins/storage.csi.upcloud.com/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            {{- toYaml .Values.node.registrarSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.node.resources.sidecar | nindent 12 }}
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi/
+            - name: registration-dir
+              mountPath: /registration/
+        - name: csi-upcloud-plugin
+          image: {{ include "upcloud-csi.image" (dict "image" .Values.images.csiDriver "context" .) }}
+          imagePullPolicy: {{ .Values.images.csiDriver.pullPolicy }}
+          args:
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodehost=$(NODE_ID)"
+            - "--mode=monolith"
+            {{- with .Values.node.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: UPCLOUD_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "upcloud-csi.secretName" . }}
+                  key: {{ .Values.credentials.usernameKey }}
+            - name: UPCLOUD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "upcloud-csi.secretName" . }}
+                  key: {{ .Values.credentials.passwordKey }}
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            {{- with .Values.node.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.node.pluginSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.node.resources.csiDriver | nindent 12 }}
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: pods-mount-dir
+              mountPath: {{ .Values.node.kubeletDir }}
+              # Required so any mounts set up inside this container are
+              # propagated back to the host.
+              mountPropagation: Bidirectional
+            - name: device-dir
+              mountPath: /dev
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.node.kubeletDir }}/plugins_registry/
+            type: DirectoryOrCreate
+        - name: plugin-dir
+          hostPath:
+            path: {{ .Values.node.kubeletDir }}/plugins/storage.csi.upcloud.com
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: {{ .Values.node.kubeletDir }}
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev

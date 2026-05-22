@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ankra.io/schemas/upcloud-csi/values.schema.json",
+  "title": "upcloud-csi values",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "imageRegistry": { "type": "string" },
+        "imagePullSecrets": { "type": "array" }
+      }
+    },
+    "namespaceOverride": { "type": "string" },
+    "images": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "registry": { "type": "string", "minLength": 1 },
+          "repository": { "type": "string", "minLength": 1 },
+          "tag": { "type": "string" },
+          "digest": { "type": "string" },
+          "pullPolicy": { "type": "string", "enum": ["IfNotPresent", "Always", "Never"] }
+        },
+        "required": ["registry", "repository", "pullPolicy"]
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "usernameKey": { "type": "string", "minLength": 1 },
+        "passwordKey": { "type": "string", "minLength": 1 },
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["create", "existingSecret", "usernameKey", "passwordKey"]
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" },
+        "controllerName": { "type": "string", "minLength": 1 },
+        "nodeName": { "type": "string", "minLength": 1 }
+      },
+      "required": ["create", "controllerName", "nodeName"]
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "create": { "type": "boolean" }
+      },
+      "required": ["create"]
+    },
+    "storageClasses": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "defaultClass": {
+          "type": "string",
+          "enum": ["", "maxiops", "standard", "hdd"]
+        },
+        "disableLocalPathDefault": { "type": "boolean" },
+        "reclaimPolicy": { "type": "string", "enum": ["Delete", "Retain"] },
+        "volumeBindingMode": { "type": "string", "enum": ["Immediate", "WaitForFirstConsumer"] },
+        "allowVolumeExpansion": { "type": "boolean" },
+        "maxiops": { "$ref": "#/$defs/storageClass" },
+        "standard": { "$ref": "#/$defs/storageClass" },
+        "hdd": { "$ref": "#/$defs/storageClass" }
+      },
+      "required": ["defaultClass", "maxiops", "standard", "hdd"]
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "replicaCount": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["replicaCount"]
+    },
+    "snapshotController": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["enabled", "replicaCount"]
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "kubeletDir": { "type": "string", "minLength": 1 }
+      },
+      "required": ["kubeletDir"]
+    },
+    "snapshotWebhook": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "failurePolicy": { "type": "string", "enum": ["Ignore", "Fail"] },
+        "tlsSecretName": { "type": "string", "minLength": 1 }
+      },
+      "required": ["enabled"]
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["enabled"]
+    }
+  },
+  "required": [
+    "images",
+    "credentials",
+    "serviceAccount",
+    "rbac",
+    "storageClasses",
+    "controller",
+    "snapshotController",
+    "node",
+    "snapshotWebhook"
+  ],
+  "$defs": {
+    "storageClass": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": { "type": "string", "minLength": 1 },
+        "extraParameters": { "type": "object" }
+      },
+      "required": ["enabled", "name"]
+    }
+  }
+}

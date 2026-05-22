@@ -1,0 +1,30 @@
+# Air-gapped overlay: every image pulled from a private registry by digest.
+# Generate the digest with `crane digest ghcr.io/upcloudltd/cloud-controller-manager:<tag>`
+# and mirror the image into your registry first.
+
+global:
+  imageRegistry: harbor.internal
+
+images:
+  ccm:
+    repository: mirror/upcloudltd/cloud-controller-manager
+    # Pinning by digest beats tag for supply-chain guarantees.
+    digest: "sha256:REPLACE-ME"
+
+imagePullSecrets:
+  - name: harbor-pull-secret
+
+ccmConfig:
+  clusterID: "REPLACE-ME-WITH-uuidgen-OUTPUT"
+
+credentials:
+  create: false
+  existingSecret: "upcloud-api-credentials"
+
+# Disable outbound metrics + the optional NetworkPolicy (air-gapped clusters
+# typically run a local Prometheus that scrapes the in-cluster Service).
+metrics:
+  serviceMonitor:
+    enabled: true
+networkPolicy:
+  enabled: true

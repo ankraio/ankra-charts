@@ -1,0 +1,23 @@
+{{- include "upcloud-ccm.validate" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "upcloud-ccm.fullname" . }}-config
+  namespace: {{ include "upcloud-ccm.namespace" . }}
+  labels:
+    {{- include "upcloud-ccm.labels" . | nindent 4 }}
+  {{- with (include "upcloud-ccm.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+data:
+  ccm-config.yaml: |
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    kind: CCMConfig
+    metadata:
+      name: ccm-config
+    data:
+      clusterName: {{ .Values.ccmConfig.clusterName | quote }}
+      clusterID: {{ required "ccmConfig.clusterID is required" .Values.ccmConfig.clusterID | quote }}
+      loadBalancerPlan: {{ .Values.ccmConfig.loadBalancerPlan | quote }}
+      loadBalancerMaxBackendMembers: {{ .Values.ccmConfig.loadBalancerMaxBackendMembers }}
