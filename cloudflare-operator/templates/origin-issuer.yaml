@@ -1,0 +1,23 @@
+{{- if .Values.originIssuer.enabled -}}
+{{- /*
+  Cloudflare's official `cert-manager.k8s.cloudflare.com` API group is owned
+  by the cloudflare/origin-ca-issuer Helm chart (installed separately). This
+  template only renders the cluster-scoped CR; install that chart first so
+  the CRDs exist:
+
+      helm install origin-ca-issuer \
+        oci://ghcr.io/cloudflare/origin-ca-issuer-charts/origin-ca-issuer
+*/ -}}
+apiVersion: cert-manager.k8s.cloudflare.com/v1
+kind: ClusterOriginIssuer
+metadata:
+  name: {{ .Values.originIssuer.name }}
+  labels:
+    {{- include "cloudflare-operator.labels" . | nindent 4 }}
+spec:
+  requestType: {{ .Values.originIssuer.requestType }}
+  auth:
+    tokenRef:
+      name: {{ include "cloudflare-operator.originIssuerSecretName" . }}
+      key: {{ .Values.originIssuer.secret.key }}
+{{- end }}

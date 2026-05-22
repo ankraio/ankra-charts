@@ -1,0 +1,16 @@
+# Minimal install: assumes cert-manager and a pre-existing `cloudflare-secrets`
+# Secret already exist in the `cloudflare-operator-system` namespace, exactly
+# matching the existing Ankra production stack.
+#
+#   kubectl create ns cloudflare-operator-system
+#   kubectl -n cloudflare-operator-system create secret generic cloudflare-secrets \
+#     --from-literal=CLOUDFLARE_API_TOKEN=... \
+#     --from-literal=CLOUDFLARE_ACCOUNT_ID=...
+#
+#   helm install cloudflare-operator ./cloudflare-operator \
+#     -n cloudflare-operator-system --create-namespace \
+#     -f values-examples/minimal.yaml
+
+credentials:
+  create: false
+  existingSecret: cloudflare-secrets

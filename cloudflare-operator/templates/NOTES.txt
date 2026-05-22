@@ -1,0 +1,102 @@
+Thank you for installing {{ .Chart.Name }} ({{ .Chart.Version }}, appVersion {{ .Chart.AppVersion }}).
+
+The Cloudflare Operator is now deployed to namespace
+{{ include "cloudflare-operator.namespace" . }} with {{ .Values.replicaCount }} replica(s).
+
+NEXT STEPS
+==========
+
+1. Verify the controller is healthy:
+
+       kubectl -n {{ include "cloudflare-operator.namespace" . }} rollout status \
+         deployment/{{ include "cloudflare-operator.fullname" . }}
+       kubectl -n {{ include "cloudflare-operator.namespace" . }} logs \
+         -l app.kubernetes.io/name={{ include "cloudflare-operator.name" . }} --tail=50
+
+2. Confirm the CRDs are installed and the conversion webhook is reachable:
+
+       kubectl get crd | grep cfargotunnel.com
+       kubectl get apiservice | grep cfargotunnel.com
+{{- if .Values.webhook.certManager.enabled }}
+
+   The chart provisioned the webhook serving cert via cert-manager
+   (Issuer: {{ if .Values.webhook.certManager.createSelfSignedIssuer -}}
+{{ include "cloudflare-operator.fullname" . }}-selfsigned (self-signed)
+{{- else -}}
+{{ .Values.webhook.certManager.issuerRef.name }} ({{ .Values.webhook.certManager.issuerRef.kind }})
+{{- end }}). cert-manager must be installed in the cluster for this to work.
+{{- end }}
+
+3. Create a ClusterTunnel pointing at your Cloudflare account. The Secret
+   `{{ include "cloudflare-operator.cloudflareSecretName" . }}` is expected to live in
+   `{{ include "cloudflare-operator.namespace" . }}` and contain keys
+   `{{ .Values.credentials.apiTokenKey }}` and `{{ .Values.credentials.accountIdKey }}`.
+{{- if .Values.credentials.create }}
+
+   This release rendered the Secret with the values you supplied.
+{{- else }}
+
+   You set `credentials.existingSecret={{ .Values.credentials.existingSecret }}` — make
+   sure that Secret exists in `{{ include "cloudflare-operator.namespace" . }}` before
+   the operator can reconcile tunnels.
+{{- end }}
+
+   Minimal example (TunnelBinding glues a Service to a hostname):
+
+       apiVersion: networking.cfargotunnel.com/v1alpha2
+       kind: ClusterTunnel
+       metadata:
+         name: prod-tunnel
+       spec:
+         newTunnel:
+           name: prod-tunnel
+         cloudflare:
+           email: admin@example.com
+           domain: example.com
+           secret: {{ include "cloudflare-operator.cloudflareSecretName" . }}
+           accountId: <your-cloudflare-account-id>
+       ---
+       apiVersion: networking.cfargotunnel.com/v1alpha1
+       kind: TunnelBinding
+       metadata:
+         name: my-app
+         namespace: my-app
+       subjects:
+         - name: my-app          # Service name
+           spec:
+             fqdn: app.example.com
+       tunnelRef:
+         kind: ClusterTunnel
+         name: prod-tunnel
+{{- if .Values.sampleClusterTunnel.enabled }}
+
+   A sample ClusterTunnel `{{ .Values.sampleClusterTunnel.name }}` was rendered for
+   `{{ .Values.sampleClusterTunnel.cloudflareDomain }}` — verify it became Ready:
+
+       kubectl get clustertunnel {{ .Values.sampleClusterTunnel.name }}
+{{- end }}
+
+4. Metrics.{{ if .Values.metrics.serviceMonitor.enabled }} A ServiceMonitor was created;
+   Prometheus Operator should start scraping `{{ include "cloudflare-operator.fullname" . }}-metrics:{{ .Values.metrics.port }}` shortly.{{ else }} The secure metrics endpoint is exposed
+   on container port {{ .Values.metrics.port }}. Enable
+   `metrics.serviceMonitor.enabled=true` to wire it into Prometheus Operator.{{ end }}
+
+{{- if .Values.originIssuer.enabled }}
+
+5. Origin CA Issuer integration.
+   The chart rendered a `ClusterOriginIssuer/{{ .Values.originIssuer.name }}` CR.
+   The CRDs for that resource are owned by the upstream cloudflare/origin-ca-issuer
+   Helm chart, which this chart does NOT install. Make sure it is installed before
+   the cert-manager controller reconciles certificates:
+
+       helm install origin-ca-issuer \
+         oci://ghcr.io/cloudflare/origin-ca-issuer-charts/origin-ca-issuer \
+         -n cert-manager
+{{- end }}
+
+DOCS
+====
+
+  Operator: https://adyanth.github.io/cloudflare-operator/
+  Cloudflare Tunnel: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+  Cloudflare Origin CA: https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/

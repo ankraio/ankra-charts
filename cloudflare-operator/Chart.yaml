@@ -1,0 +1,71 @@
+apiVersion: v2
+name: cloudflare-operator
+description: |
+  Helm chart for the community Cloudflare Operator
+  (adyanth/cloudflare-operator) that reconciles Tunnel, ClusterTunnel,
+  AccessTunnel and TunnelBinding CRDs against Cloudflare Zero Trust /
+  Cloudflare Tunnel. Optionally renders a ClusterOriginIssuer for use with
+  the cert-manager origin-ca-issuer.
+type: application
+version: 0.1.0
+appVersion: "0.13.1"
+kubeVersion: ">=1.27.0-0"
+
+home: https://github.com/ankra-io/platform/tree/main/charts/cloudflare-operator
+sources:
+  - https://github.com/ankra-io/platform/tree/main/charts/cloudflare-operator
+  - https://github.com/adyanth/cloudflare-operator
+
+keywords:
+  - cloudflare
+  - cloudflare-tunnel
+  - cloudflared
+  - cloudflare-operator
+  - cert-manager
+  - origin-ca-issuer
+  - zero-trust
+
+maintainers:
+  - name: Ankra AB
+    email: admin@ankra.io
+
+dependencies: []
+
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/maintainers: |
+    - name: Ankra AB
+      email: admin@ankra.io
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Basic Install
+  artifacthub.io/crds: |
+    - kind: Tunnel
+      version: networking.cfargotunnel.com/v1alpha2
+      name: tunnels.networking.cfargotunnel.com
+      displayName: Cloudflare Tunnel
+      description: Namespaced Cloudflare Tunnel reconciled by the operator.
+    - kind: ClusterTunnel
+      version: networking.cfargotunnel.com/v1alpha2
+      name: clustertunnels.networking.cfargotunnel.com
+      displayName: Cloudflare Cluster Tunnel
+      description: Cluster-scoped Cloudflare Tunnel shared across namespaces.
+    - kind: TunnelBinding
+      version: networking.cfargotunnel.com/v1alpha1
+      name: tunnelbindings.networking.cfargotunnel.com
+      displayName: Cloudflare Tunnel Binding
+      description: Binds Kubernetes Services to a Cloudflare Tunnel hostname.
+    - kind: AccessTunnel
+      version: networking.cfargotunnel.com/v1alpha1
+      name: accesstunnels.networking.cfargotunnel.com
+      displayName: Cloudflare Access Tunnel
+      description: Cloudflare Zero Trust Access tunnel resource.
+  artifacthub.io/links: |
+    - name: Upstream project
+      url: https://github.com/adyanth/cloudflare-operator
+    - name: Upstream documentation
+      url: https://adyanth.github.io/cloudflare-operator/
+    - name: Cloudflare Origin CA Issuer (cert-manager external issuer)
+      url: https://github.com/cloudflare/origin-ca-issuer
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release of the cloudflare-operator Helm chart, packaging adyanth/cloudflare-operator v0.13.1 with cert-manager-backed webhook serving certs, full RBAC, ClusterOriginIssuer + sample ClusterTunnel toggles, ServiceMonitor and NetworkPolicy support.

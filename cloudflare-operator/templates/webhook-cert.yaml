@@ -1,0 +1,70 @@
+{{- if and .Values.webhook.certManager.enabled .Values.webhook.certManager.createSelfSignedIssuer -}}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "cloudflare-operator.fullname" . }}-selfsigned
+  namespace: {{ include "cloudflare-operator.namespace" . }}
+  labels:
+    {{- include "cloudflare-operator.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+{{- end }}
+{{- if .Values.webhook.certManager.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "cloudflare-operator.fullname" . }}-serving-cert
+  namespace: {{ include "cloudflare-operator.namespace" . }}
+  labels:
+    {{- include "cloudflare-operator.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+    - {{ include "cloudflare-operator.fullname" . }}-webhook.{{ include "cloudflare-operator.namespace" . }}.svc
+    - {{ include "cloudflare-operator.fullname" . }}-webhook.{{ include "cloudflare-operator.namespace" . }}.svc.cluster.local
+  secretName: {{ include "cloudflare-operator.webhookCertSecretName" . }}
+  {{- with .Values.webhook.certManager.duration }}
+  duration: {{ . }}
+  {{- end }}
+  {{- with .Values.webhook.certManager.renewBefore }}
+  renewBefore: {{ . }}
+  {{- end }}
+  issuerRef:
+  {{- if .Values.webhook.certManager.createSelfSignedIssuer }}
+    name: {{ include "cloudflare-operator.fullname" . }}-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+  {{- else }}
+    name: {{ required "webhook.certManager.issuerRef.name is required when createSelfSignedIssuer=false" .Values.webhook.certManager.issuerRef.name }}
+    kind: {{ .Values.webhook.certManager.issuerRef.kind }}
+    group: {{ .Values.webhook.certManager.issuerRef.group }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.webhook.certManager.enabled .Values.metrics.certificate.enabled }}
+---
+# Metrics serving cert — used by the manager's `--metrics-bind-address` HTTPS
+# endpoint. Mirrors upstream behaviour so kube-rbac-proxy-style scraping
+# works out of the box.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "cloudflare-operator.fullname" . }}-metrics-cert
+  namespace: {{ include "cloudflare-operator.namespace" . }}
+  labels:
+    {{- include "cloudflare-operator.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+    - {{ include "cloudflare-operator.fullname" . }}-metrics.{{ include "cloudflare-operator.namespace" . }}.svc
+    - {{ include "cloudflare-operator.fullname" . }}-metrics.{{ include "cloudflare-operator.namespace" . }}.svc.cluster.local
+  secretName: {{ include "cloudflare-operator.metricsCertSecretName" . }}
+  issuerRef:
+  {{- if .Values.webhook.certManager.createSelfSignedIssuer }}
+    name: {{ include "cloudflare-operator.fullname" . }}-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+  {{- else }}
+    name: {{ .Values.webhook.certManager.issuerRef.name }}
+    kind: {{ .Values.webhook.certManager.issuerRef.kind }}
+    group: {{ .Values.webhook.certManager.issuerRef.group }}
+  {{- end }}
+{{- end }}

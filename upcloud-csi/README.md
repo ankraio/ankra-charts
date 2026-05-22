@@ -12,20 +12,20 @@ them via a single `helm install`.
 
 ```bash
 # 1. Install the CCM first (it creates the shared UpCloud credentials Secret).
-helm install upcloud-ccm ./upcloud-charts/upcloud-ccm -n kube-system \
+helm install upcloud-ccm ./charts/upcloud-ccm -n kube-system \
   --set ccmConfig.clusterID="$(uuidgen)" \
   --set credentials.username="$UPCLOUD_USERNAME" \
   --set credentials.password="$UPCLOUD_PASSWORD"
 
 # 2. Install the CSI driver — defaults reuse the CCM's Secret.
-helm install upcloud-csi ./upcloud-charts/upcloud-csi -n kube-system \
+helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
   --set storageClasses.defaultClass=maxiops
 ```
 
 Or, if installing CSI standalone with its own credentials:
 
 ```bash
-helm install upcloud-csi ./upcloud-charts/upcloud-csi -n kube-system \
+helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
   --set credentials.create=true \
   --set credentials.existingSecret="" \
   --set credentials.username="$UPCLOUD_USERNAME" \
@@ -70,7 +70,7 @@ credentials:
 If your CCM release is named differently, override the Secret name accordingly:
 
 ```bash
-helm install upcloud-csi ./upcloud-charts/upcloud-csi -n kube-system \
+helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
   --set credentials.existingSecret=ccm-prod-credentials \
   --set storageClasses.defaultClass=maxiops
 ```
@@ -121,7 +121,7 @@ Off by default because it requires a TLS cert. To enable:
 1. Provision a TLS Secret named `snapshot-validation-secret` in the chart
    namespace (e.g. via cert-manager) with `cert.pem` / `key.pem` valid for
    the Service DNS names `snapshot-validation-service.<ns>.svc[.cluster.local]`.
-2. `helm upgrade upcloud-csi ./upcloud-charts/upcloud-csi --set snapshotWebhook.enabled=true`.
+2. `helm upgrade upcloud-csi ./charts/upcloud-csi --set snapshotWebhook.enabled=true`.
 
 ## Upgrade story
 
@@ -131,18 +131,18 @@ The chart vendors a pinned upstream snapshot. To bump:
 
 ```bash
 # Local
-./upcloud-charts/scripts/sync-upstream.sh csi v1.5.0
-helm lint upcloud-charts/upcloud-csi
-git diff upcloud-charts/upcloud-csi/
+./charts/scripts/sync-upstream.sh csi v1.5.0
+helm lint charts/upcloud-csi
+git diff charts/upcloud-csi/
 ```
 
-The daily `.github/workflows/upcloud-charts-sync.yml` workflow does this
+The daily `.github/workflows/charts-upcloud-sync.yml` workflow does this
 automatically and opens a PR.
 
 ### Upgrading the chart
 
 ```bash
-helm upgrade upcloud-csi ./upcloud-charts/upcloud-csi -n kube-system -f my-values.yaml
+helm upgrade upcloud-csi ./charts/upcloud-csi -n kube-system -f my-values.yaml
 ```
 
 CRDs under `crds/` are installed only on the first `helm install` and never
@@ -150,7 +150,7 @@ deleted (per Helm 3 semantics + `helm.sh/resource-policy: keep`). To pick
 up upstream CRD changes, run:
 
 ```bash
-kubectl replace -f upcloud-charts/upcloud-csi/crds/
+kubectl replace -f charts/upcloud-csi/crds/
 ```
 
 ## Uninstall

@@ -3,7 +3,7 @@
 RBAC vendored from UpCloud CSI v1.4.0's rbac-upcloud-csi.yaml.
 Namespace and ServiceAccount names are templated; rules are verbatim
 from upstream (least-privilege already curated by UpCloud).
-Regenerate via `upcloud-charts/scripts/sync-upstream.sh csi <version>`.
+Regenerate via `charts/scripts/sync-upstream.sh csi <version>`.
 */}}
 {{- $ns := include "upcloud-csi.namespace" . }}
 {{- $ctrlSA := .Values.serviceAccount.controllerName }}

@@ -13,7 +13,7 @@ NetworkPolicy.
 # Generate a stable cluster ID once and pin it in your values file.
 uuidgen
 
-helm install upcloud-ccm ./upcloud-charts/upcloud-ccm -n kube-system \
+helm install upcloud-ccm ./charts/upcloud-ccm -n kube-system \
   --set ccmConfig.clusterID="$(uuidgen)" \
   --set credentials.username="$UPCLOUD_USERNAME" \
   --set credentials.password="$UPCLOUD_PASSWORD"
@@ -38,7 +38,7 @@ match Kubernetes nodes to UpCloud infrastructure.
 ### K3s (defaults work out of the box)
 
 ```bash
-helm install upcloud-ccm ./upcloud-charts/upcloud-ccm -n kube-system \
+helm install upcloud-ccm ./charts/upcloud-ccm -n kube-system \
   --set ccmConfig.clusterID=<your-stable-uuid> \
   --set credentials.username=<upcloud-api-username> \
   --set credentials.password=<upcloud-api-password>
@@ -47,7 +47,7 @@ helm install upcloud-ccm ./upcloud-charts/upcloud-ccm -n kube-system \
 ### Vanilla Kubernetes (create SA + RBAC yourself)
 
 ```bash
-helm install upcloud-ccm ./upcloud-charts/upcloud-ccm -n kube-system \
+helm install upcloud-ccm ./charts/upcloud-ccm -n kube-system \
   --set ccmConfig.clusterID=<your-stable-uuid> \
   --set credentials.username=<upcloud-api-username> \
   --set credentials.password=<upcloud-api-password> \
@@ -58,7 +58,7 @@ helm install upcloud-ccm ./upcloud-charts/upcloud-ccm -n kube-system \
 ### With an externally-managed Secret (e.g. External Secrets Operator)
 
 ```bash
-helm install upcloud-ccm ./upcloud-charts/upcloud-ccm -n kube-system \
+helm install upcloud-ccm ./charts/upcloud-ccm -n kube-system \
   --set ccmConfig.clusterID=<your-stable-uuid> \
   --set credentials.create=false \
   --set credentials.existingSecret=upcloud-api-credentials
@@ -149,7 +149,7 @@ Balancers until the Service objects themselves are deleted.
 ## Upgrading
 
 ```bash
-helm upgrade upcloud-ccm ./upcloud-charts/upcloud-ccm -n kube-system \
+helm upgrade upcloud-ccm ./charts/upcloud-ccm -n kube-system \
   -f my-values.yaml
 ```
 

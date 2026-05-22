@@ -7,7 +7,7 @@ uses [Semantic Versioning](https://semver.org/).
 The chart's `appVersion` tracks upstream
 [`UpCloudLtd/upcloud-csi`](https://github.com/UpCloudLtd/upcloud-csi)
 releases. Daily sync via
-[`upcloud-charts-sync.yml`](../../.github/workflows/upcloud-charts-sync.yml)
+[`charts-upcloud-sync.yml`](../../.github/workflows/charts-upcloud-sync.yml)
 auto-bumps these.
 
 ## [Unreleased]

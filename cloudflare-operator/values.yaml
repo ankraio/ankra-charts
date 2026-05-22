@@ -1,0 +1,379 @@
+# Default values for cloudflare-operator.
+#
+# This chart packages the community Cloudflare Operator
+# (https://github.com/adyanth/cloudflare-operator) which reconciles Cloudflare
+# Tunnel resources (Tunnel / ClusterTunnel / TunnelBinding / AccessTunnel)
+# against the Cloudflare API.
+#
+# It optionally renders Cloudflare-shaped Secrets and an example
+# ClusterOriginIssuer custom resource (consumed by cert-manager via the
+# upstream cloudflare/origin-ca-issuer Helm chart, which this chart does NOT
+# install).
+
+# -- Global values, applied across every workload in this chart and composable
+# with sibling Bitnami-style charts (e.g. `global.imageRegistry`).
+global:
+  # -- Override every `images.*.registry` (useful for air-gapped installs that
+  # mirror images into a private registry such as Harbor).
+  imageRegistry: ""
+  # -- Appended to chart-level `imagePullSecrets`.
+  imagePullSecrets: []
+
+# -- Override the release namespace for every rendered resource. Defaults to
+# `.Release.Namespace`. The org-wide convention is `cloudflare-operator-system`
+# (mirrors the upstream install bundle); the `namespace.create` toggle below
+# can render it when installing with `--create-namespace` is not desirable.
+namespaceOverride: ""
+
+namespace:
+  # -- Render a `Namespace` resource. Disabled by default because
+  # `helm install --create-namespace` is the idiomatic path; enable if you
+  # cannot pass that flag (e.g. ArgoCD with `CreateNamespace=false`).
+  create: false
+  # -- Extra labels on the rendered Namespace.
+  labels: {}
+  # -- Extra annotations on the rendered Namespace.
+  annotations: {}
+
+# -- Common labels stamped onto every resource (in addition to the standard
+# Helm/Kubernetes recommended labels).
+commonLabels: {}
+# -- Common annotations stamped onto every resource.
+commonAnnotations: {}
+
+# -- Override the chart name (used as `app.kubernetes.io/name`).
+nameOverride: ""
+# -- Override the fully-qualified app name.
+fullnameOverride: ""
+
+# -- Number of controller-manager replicas. Defaults to 1: leader election is
+# enabled by default so additional replicas only buy faster failover, not
+# throughput. Set to 2 for HA control planes.
+replicaCount: 1
+
+# -- Image-pull secrets for all containers (merged with `global.imagePullSecrets`).
+imagePullSecrets: []
+
+images:
+  manager:
+    # -- Registry the operator image is pulled from (overridden by
+    # `global.imageRegistry`). Upstream publishes to Docker Hub.
+    registry: docker.io
+    # -- Repository within the registry.
+    repository: adyanth/cloudflare-operator
+    # -- Tag. Empty string falls back to `.Chart.AppVersion`.
+    tag: ""
+    # -- Image digest (sha256:...). When set, takes precedence over `tag` and
+    # yields `registry/repository@sha256:...`. Recommended for production /
+    # air-gapped use.
+    digest: ""
+    # -- `IfNotPresent`, `Always`, or `Never`.
+    pullPolicy: IfNotPresent
+
+# -- CRD lifecycle. Set `install: false` if you manage the four
+# `networking.cfargotunnel.com` CRDs out-of-band (e.g. a separate
+# `cloudflare-operator-crds` Helm release or a GitOps overlay).
+# Note: even when installed by this chart, CRDs carry
+# `helm.sh/resource-policy: keep` so `helm uninstall` does not drop user data.
+crds:
+  install: true
+
+credentials:
+  # -- Render an Opaque Secret with the supplied Cloudflare API token and
+  # account ID. Mutually exclusive with `existingSecret`.
+  create: false
+  # -- Reference an externally-managed Secret (e.g. one created by the
+  # External Secrets Operator or sealed-secrets). The Secret must live in the
+  # release namespace and contain the keys named in `apiTokenKey` and
+  # `accountIdKey` below.
+  existingSecret: "cloudflare-secrets"
+  # -- Name to use when this chart renders the Secret (`create: true`).
+  # Defaults to `cloudflare-secrets` to match the existing Ankra convention.
+  secretName: "cloudflare-secrets"
+  # -- Secret key holding the Cloudflare API token.
+  apiTokenKey: CLOUDFLARE_API_TOKEN
+  # -- Secret key holding the Cloudflare account ID.
+  accountIdKey: CLOUDFLARE_ACCOUNT_ID
+  # -- Cloudflare API token (use a scoped token, not a global API key).
+  # Required when `create: true`. Pass via `--set-string` or sealed-secrets;
+  # never check this value into git in plaintext.
+  apiToken: ""
+  # -- Cloudflare account ID. Required when `create: true`.
+  accountId: ""
+
+serviceAccount:
+  # -- Create the operator ServiceAccount.
+  create: true
+  # -- Name of the SA to use (either created here or referenced). Empty falls
+  # back to `<fullname>-controller-manager` to match upstream naming.
+  name: ""
+  # -- Extra annotations on the SA (e.g. workload-identity bindings).
+  annotations: {}
+  # -- Mount the SA token automatically into the operator pod. Required:
+  # the controller uses the in-cluster client.
+  automountServiceAccountToken: true
+
+rbac:
+  # -- Render ClusterRole + ClusterRoleBinding for the manager, the
+  # leader-election Role + RoleBinding, the metrics auth/reader ClusterRoles,
+  # and the per-CRD admin/editor/viewer aggregate ClusterRoles. Disable only
+  # if you provision RBAC out-of-band.
+  create: true
+  # -- Render the per-CRD aggregate viewer/editor/admin ClusterRoles. These
+  # are intended for cluster operators to bind to human/team SAs; they are
+  # NOT bound to anything by this chart.
+  aggregateClusterRoles: true
+
+webhook:
+  # -- Conversion webhook port the manager listens on inside the pod.
+  port: 9443
+  # -- Service port the webhook is exposed on (target: `webhook.port`).
+  servicePort: 443
+  # -- TLS for the conversion webhook. The operator requires a cert-manager
+  # `Certificate` because the CRDs reference `cert-manager.io/inject-ca-from`.
+  # If you cannot run cert-manager (rare), set `certManager.enabled: false`
+  # and supply your own Secret via `existingSecretName`.
+  certManager:
+    enabled: true
+    # -- Use the chart-managed self-signed Issuer (matches upstream behaviour),
+    # or set false to reference your own Issuer / ClusterIssuer.
+    createSelfSignedIssuer: true
+    # -- External Issuer reference, used only when `createSelfSignedIssuer: false`.
+    issuerRef:
+      name: ""
+      kind: Issuer
+      group: cert-manager.io
+    # -- Certificate `duration` and `renewBefore`. cert-manager defaults are
+    # 90 days / 15 days, which are fine; override for stricter policies.
+    duration: ""
+    renewBefore: ""
+  # -- Pre-existing TLS Secret containing `tls.crt` and `tls.key`. Used when
+  # `certManager.enabled: false`. The Secret must also carry the CA bundle
+  # that signed the cert, since the operator's CRDs reference an
+  # `inject-ca-from` annotation.
+  existingSecretName: ""
+
+manager:
+  # -- Extra command-line flags appended to the manager (chart-managed flags
+  # appear first, so user flags override on conflict).
+  extraArgs: []
+  # -- Extra environment variables for the manager container.
+  extraEnv: []
+  # -- Extra volume mounts for the manager container.
+  extraVolumeMounts: []
+  # -- Extra volumes for the operator pod.
+  extraVolumes: []
+  # -- Toggle Kubernetes leader election (`--leader-elect`). Required when
+  # `replicaCount > 1`.
+  leaderElect: true
+  # -- Health probe bind address (`--health-probe-bind-address`).
+  healthBindAddress: ":8081"
+
+# -- PriorityClass for the operator pod. `system-cluster-critical` keeps the
+# tunnels' control loop scheduled under pressure.
+priorityClassName: system-cluster-critical
+
+# -- Tolerations. Empty by default: the operator does NOT need to run on
+# control-plane nodes, so it schedules on regular workers.
+tolerations: []
+
+# -- Node selector for the operator pod.
+nodeSelector: {}
+
+# -- Soft anti-affinity to spread replicas across nodes when possible.
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudflare-operator
+              app.kubernetes.io/component: controller-manager
+
+# -- Topology spread constraints.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: cloudflare-operator
+        app.kubernetes.io/component: controller-manager
+
+# -- Grace period before SIGKILL.
+terminationGracePeriodSeconds: 30
+
+# -- Restrict revision history to keep etcd lean.
+revisionHistoryLimit: 3
+
+# -- Rolling update strategy. `maxUnavailable: 0` keeps at least one replica
+# running during upgrades; combined with leader election this means no
+# reconciliation gap.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# -- Pod-level security context.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context (matches upstream defaults).
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+
+# -- Resource requests & limits (matches upstream defaults).
+resources:
+  requests:
+    cpu: 100m
+    memory: 100Mi
+  limits:
+    cpu: 200m
+    memory: 200Mi
+
+# -- Pod annotations.
+podAnnotations:
+  kubectl.kubernetes.io/default-container: manager
+
+# -- Pod labels (in addition to chart-managed labels).
+podLabels: {}
+
+# -- Pod Disruption Budget. Active when `replicaCount > 1`.
+podDisruptionBudget:
+  enabled: true
+  # -- One of `minAvailable` / `maxUnavailable` must be set.
+  minAvailable: 1
+  maxUnavailable: ""
+
+metrics:
+  # -- Enable the secure metrics endpoint (`--metrics-bind-address`).
+  enabled: true
+  # -- Port the manager binds metrics on (must match upstream `:8443`).
+  port: 8443
+  service:
+    # -- Render a metrics Service. Auto-enabled when `serviceMonitor.enabled`.
+    enabled: false
+    type: ClusterIP
+    annotations: {}
+  # -- cert-manager Certificate for the metrics endpoint. Upstream ships one
+  # so kube-rbac-proxy-style scraping works out of the box.
+  certificate:
+    enabled: true
+  serviceMonitor:
+    # -- Opt-in: requires the Prometheus Operator CRDs.
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    namespace: ""
+    labels: {}
+    relabelings: []
+    metricRelabelings: []
+    # -- The manager serves metrics with cert-manager-issued certs; clients
+    # need the CA to verify. Easiest path: `insecureSkipVerify: true`.
+    tlsConfig:
+      insecureSkipVerify: true
+
+# -- Logging verbosity. The operator uses controller-runtime defaults; this
+# value is exposed as a no-op placeholder for parity with the other Ankra
+# charts and forward-compat with future upstream flags.
+logVerbosity: 0
+
+# -- Liveness probe (HTTP `/healthz` on the health bind port 8081).
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# -- Readiness probe (HTTP `/readyz`).
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /readyz
+    port: health
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# -- Startup probe (off by default; controller-manager starts in < 5s).
+startupProbe:
+  enabled: false
+  httpGet:
+    path: /healthz
+    port: health
+  periodSeconds: 5
+  failureThreshold: 12
+
+# -- Opt-in NetworkPolicy. Off by default because policies vary by CNI.
+# Enable for compliance-heavy environments. The default policy allows:
+#   - Ingress: kube-apiserver -> webhook on `webhook.servicePort`
+#   - Ingress: Prometheus (any namespace) -> metrics on `metrics.port`
+#   - Egress:  DNS (UDP/TCP 53), kube-apiserver (TCP 6443/443),
+#              Cloudflare API (TCP 443 to 0.0.0.0/0 minus link-local).
+networkPolicy:
+  enabled: false
+  extraIngress: []
+  extraEgress: []
+
+# -- Optional: render a sample `ClusterTunnel` custom resource pointing at
+# the Cloudflare account configured above. Convenient for quickstart
+# clusters; recommended `enabled: false` for production where tunnels are
+# managed via GitOps in app namespaces.
+sampleClusterTunnel:
+  enabled: false
+  name: example-cluster-tunnel
+  # -- Cloudflare zone domain (e.g. `example.com`).
+  cloudflareDomain: ""
+  # -- Cloudflare account email associated with the API token.
+  cloudflareEmail: ""
+  # -- Tunnel name shown in the Cloudflare dashboard. Defaults to `name`.
+  tunnelName: ""
+
+originIssuer:
+  # -- Render a `ClusterOriginIssuer` custom resource (from the official
+  # Cloudflare `cert-manager.k8s.cloudflare.com` API group). This requires
+  # the cloudflare/origin-ca-issuer Helm chart to be installed separately
+  # (this chart does NOT install it because Cloudflare ships an official
+  # chart at `oci://ghcr.io/cloudflare/origin-ca-issuer-charts/origin-ca-issuer`).
+  enabled: false
+  # -- Name of the ClusterOriginIssuer CR.
+  name: cloudflare-origin-issuer
+  # -- Where the underlying Secret containing the Origin CA API token lives.
+  # The Origin CA issuer must be configured to watch this namespace.
+  secret:
+    # -- Render the Secret holding the Cloudflare Origin CA API token.
+    # Mutually exclusive with `existingSecret`.
+    create: false
+    # -- Reference an existing Secret instead of creating one.
+    existingSecret: "origin-ca-issuer-secret"
+    # -- Name to use when this chart renders the Secret.
+    name: origin-ca-issuer-secret
+    # -- Namespace where the Origin CA issuer expects the Secret. The
+    # cloudflare/origin-ca-issuer chart watches `cert-manager` by default.
+    namespace: cert-manager
+    # -- Secret key the Origin CA issuer reads.
+    key: api-token
+    # -- Cloudflare Origin CA API token value. Required when `create: true`.
+    token: ""
+  # -- `OriginRSA` or `OriginECC`. ECC is recommended for new deployments.
+  requestType: OriginECC

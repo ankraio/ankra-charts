@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "cloudflare-operator values",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "global": {
+      "type": "object",
+      "properties": {
+        "imageRegistry": { "type": "string" },
+        "imagePullSecrets": { "type": "array" }
+      }
+    },
+    "namespaceOverride": { "type": "string" },
+    "namespace": {
+      "type": "object",
+      "required": ["create"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "labels": { "type": "object" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "commonLabels": { "type": "object" },
+    "commonAnnotations": { "type": "object" },
+    "replicaCount": { "type": "integer", "minimum": 1 },
+    "imagePullSecrets": { "type": "array" },
+    "images": {
+      "type": "object",
+      "required": ["manager"],
+      "properties": {
+        "manager": {
+          "type": "object",
+          "required": ["registry", "repository", "pullPolicy"],
+          "properties": {
+            "registry": { "type": "string", "minLength": 1 },
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "digest": { "type": "string", "pattern": "^(sha256:[a-f0-9]{64})?$" },
+            "pullPolicy": { "enum": ["IfNotPresent", "Always", "Never"] }
+          }
+        }
+      }
+    },
+    "crds": {
+      "type": "object",
+      "required": ["install"],
+      "properties": {
+        "install": { "type": "boolean" }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "required": ["create", "apiTokenKey", "accountIdKey"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "secretName": { "type": "string" },
+        "apiTokenKey": { "type": "string", "minLength": 1 },
+        "accountIdKey": { "type": "string", "minLength": 1 },
+        "apiToken": { "type": "string" },
+        "accountId": { "type": "string" }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "required": ["create"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" },
+        "automountServiceAccountToken": { "type": "boolean" }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "required": ["create"],
+      "properties": {
+        "create": { "type": "boolean" },
+        "aggregateClusterRoles": { "type": "boolean" }
+      }
+    },
+    "webhook": {
+      "type": "object",
+      "required": ["port", "servicePort", "certManager"],
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "servicePort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "certManager": {
+          "type": "object",
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "createSelfSignedIssuer": { "type": "boolean" },
+            "issuerRef": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "kind": { "enum": ["Issuer", "ClusterIssuer"] },
+                "group": { "type": "string" }
+              }
+            },
+            "duration": { "type": "string" },
+            "renewBefore": { "type": "string" }
+          }
+        },
+        "existingSecretName": { "type": "string" }
+      }
+    },
+    "manager": {
+      "type": "object",
+      "properties": {
+        "extraArgs": { "type": "array" },
+        "extraEnv": { "type": "array" },
+        "extraVolumeMounts": { "type": "array" },
+        "extraVolumes": { "type": "array" },
+        "leaderElect": { "type": "boolean" },
+        "healthBindAddress": { "type": "string", "pattern": "^:?[0-9.]*:[0-9]+$|^:[0-9]+$" }
+      }
+    },
+    "priorityClassName": { "type": "string" },
+    "tolerations": { "type": "array" },
+    "nodeSelector": { "type": "object" },
+    "affinity": { "type": "object" },
+    "topologySpreadConstraints": { "type": "array" },
+    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
+    "revisionHistoryLimit": { "type": "integer", "minimum": 0 },
+    "updateStrategy": { "type": "object" },
+    "podSecurityContext": { "type": "object" },
+    "securityContext": { "type": "object" },
+    "resources": { "type": "object" },
+    "podAnnotations": { "type": "object" },
+    "podLabels": { "type": "object" },
+    "podDisruptionBudget": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": ["integer", "string"] },
+        "maxUnavailable": { "type": ["integer", "string"] }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["enabled", "port"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "service": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "type": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+            "annotations": { "type": "object" }
+          }
+        },
+        "certificate": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "string" },
+            "scrapeTimeout": { "type": "string" },
+            "namespace": { "type": "string" },
+            "labels": { "type": "object" },
+            "relabelings": { "type": "array" },
+            "metricRelabelings": { "type": "array" },
+            "tlsConfig": { "type": "object" }
+          }
+        }
+      }
+    },
+    "logVerbosity": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "livenessProbe": { "type": "object" },
+    "readinessProbe": { "type": "object" },
+    "startupProbe": { "type": "object" },
+    "networkPolicy": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "extraIngress": { "type": "array" },
+        "extraEgress": { "type": "array" }
+      }
+    },
+    "sampleClusterTunnel": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": { "type": "string", "minLength": 1 },
+        "cloudflareDomain": { "type": "string" },
+        "cloudflareEmail": { "type": "string" },
+        "tunnelName": { "type": "string" }
+      }
+    },
+    "originIssuer": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": { "type": "string", "minLength": 1 },
+        "requestType": { "enum": ["OriginRSA", "OriginECC"] },
+        "secret": {
+          "type": "object",
+          "required": ["create", "namespace", "key"],
+          "properties": {
+            "create": { "type": "boolean" },
+            "existingSecret": { "type": "string" },
+            "name": { "type": "string" },
+            "namespace": { "type": "string", "minLength": 1 },
+            "key": { "type": "string", "minLength": 1 },
+            "token": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

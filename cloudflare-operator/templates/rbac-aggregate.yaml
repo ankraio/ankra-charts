@@ -1,0 +1,56 @@
+{{- if and .Values.rbac.create .Values.rbac.aggregateClusterRoles -}}
+{{- /*
+  Aggregate ClusterRoles intended for cluster operators to bind to humans
+  or team ServiceAccounts. NOT bound to anything by this chart.
+  Mirrors upstream upstream kubebuilder-style "viewer / editor / admin"
+  ClusterRoles for each tunnel CRD.
+*/ -}}
+{{- $resources := list "tunnels" "clustertunnels" "accesstunnels" -}}
+{{- range $r := $resources }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cloudflare-operator.fullname" $ }}-{{ $r }}-viewer
+  labels:
+    {{- include "cloudflare-operator.labels" $ | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: [networking.cfargotunnel.com]
+    resources: [{{ $r }}]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.cfargotunnel.com]
+    resources: [{{ $r }}/status]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cloudflare-operator.fullname" $ }}-{{ $r }}-editor
+  labels:
+    {{- include "cloudflare-operator.labels" $ | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups: [networking.cfargotunnel.com]
+    resources: [{{ $r }}]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [networking.cfargotunnel.com]
+    resources: [{{ $r }}/status]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cloudflare-operator.fullname" $ }}-{{ $r }}-admin
+  labels:
+    {{- include "cloudflare-operator.labels" $ | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [networking.cfargotunnel.com]
+    resources: [{{ $r }}]
+    verbs: ["*"]
+  - apiGroups: [networking.cfargotunnel.com]
+    resources: [{{ $r }}/status]
+    verbs: [get]
+{{- end }}
+{{- end }}

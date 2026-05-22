@@ -1,0 +1,135 @@
+suite: deployment
+templates:
+  - templates/deployment.yaml
+  - templates/secret-cloudflare.yaml
+release:
+  name: ut
+  namespace: cloudflare-operator-system
+chart:
+  version: 0.1.0
+  appVersion: "0.13.1"
+
+tests:
+  - it: renders a Deployment with the chart-managed name + namespace
+    template: templates/deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: ut-cloudflare-operator
+      - equal:
+          path: metadata.namespace
+          value: cloudflare-operator-system
+
+  - it: defaults to a single replica with leader-election still enabled
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+
+  - it: drops all caps + runs nonroot + readonly fs
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: reuses the cloudflare-secrets Secret by default (existingSecret)
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: CLOUDFLARE_API_TOKEN
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: cloudflare-secrets
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: CLOUDFLARE_ACCOUNT_ID
+      - equal:
+          path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.name
+          value: cloudflare-secrets
+
+  - it: switches to the chart-managed Secret name when credentials.create is true
+    template: templates/deployment.yaml
+    set:
+      credentials.create: true
+      credentials.existingSecret: ""
+      credentials.apiToken: tok
+      credentials.accountId: acc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: cloudflare-secrets
+
+  - it: honors global.imageRegistry override and strips leading v from appVersion
+    template: templates/deployment.yaml
+    set:
+      global.imageRegistry: harbor.internal
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: harbor.internal/adyanth/cloudflare-operator:0.13.1
+
+  - it: pins by digest when images.manager.digest is set
+    template: templates/deployment.yaml
+    set:
+      images.manager.digest: sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/adyanth/cloudflare-operator@sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+
+  - it: appends manager.extraArgs after chart-managed flags
+    template: templates/deployment.yaml
+    set:
+      manager.extraArgs:
+        - --some-feature=true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --some-feature=true
+
+  - it: mounts the chart-managed webhook serving cert Secret
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: webhook-certs
+            secret:
+              secretName: ut-cloudflare-operator-webhook-tls
+              defaultMode: 420
+
+  - it: switches the mounted webhook Secret when bring-your-own TLS is used
+    template: templates/deployment.yaml
+    set:
+      webhook.certManager.enabled: false
+      webhook.existingSecretName: my-byo-webhook-tls
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: webhook-certs
+            secret:
+              secretName: my-byo-webhook-tls
+              defaultMode: 420

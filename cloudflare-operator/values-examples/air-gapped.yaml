@@ -1,0 +1,29 @@
+# Air-gapped overlay: every image pulled from an internal mirror, pinned by
+# digest, with pull secrets and tight resource budgets.
+#
+#   helm install cloudflare-operator ./cloudflare-operator \
+#     -n cloudflare-operator-system --create-namespace \
+#     -f values-examples/air-gapped.yaml
+
+global:
+  # Mirror the upstream `docker.io/adyanth/cloudflare-operator` into your
+  # internal registry under the same path:
+  #   harbor.internal/docker.io/adyanth/cloudflare-operator
+  imageRegistry: harbor.internal/docker.io
+  imagePullSecrets:
+    - harbor-pull-secret
+
+images:
+  manager:
+    # Pin by digest, not tag, so even a mutable tag in the mirror cannot
+    # silently drift.
+    digest: ""
+
+webhook:
+  certManager:
+    enabled: true
+    createSelfSignedIssuer: true
+
+credentials:
+  create: false
+  existingSecret: cloudflare-secrets

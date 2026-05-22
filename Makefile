@@ -1,51 +1,67 @@
-# Developer convenience targets for upcloud-charts.
-# All targets run from the repository root and are idempotent.
+# Developer convenience targets for charts/.
+#
+# All targets assume `make` is invoked with this Makefile's directory as the
+# working directory. Both `cd charts && make lint` and
+# `make -C charts lint` (from the repo root) work.
 
-CHARTS := upcloud-ccm upcloud-csi
-HELM   ?= helm
+CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator
+HELM     ?= helm
 KCONFORM ?= kubeconform
 
-.PHONY: help lint template unittest test sync sync-csi sync-ccm check docs
+.PHONY: help lint template unittest test \
+        sync sync-ccm sync-csi sync-cloudflare check docs
 
 help:
 	@printf 'Available targets:\n'
 	@awk '/^[a-zA-Z][a-zA-Z0-9_-]*:/ {print "  " $$0}' $(MAKEFILE_LIST) | sort -u
 
 lint:
-	@for c in $(CHARTS); do \
-		echo "==> helm lint $$c"; \
-		$(HELM) lint upcloud-charts/$$c --set ccmConfig.clusterID=ci-test --set credentials.username=ci --set credentials.password=ci; \
-	done
+	@echo "==> helm lint upcloud-ccm"
+	@$(HELM) lint upcloud-ccm \
+		--set ccmConfig.clusterID=ci-test \
+		--set credentials.username=ci --set credentials.password=ci
+	@echo "==> helm lint upcloud-csi"
+	@$(HELM) lint upcloud-csi
+	@echo "==> helm lint cloudflare-operator"
+	@$(HELM) lint cloudflare-operator
 
 template:
-	@$(HELM) template ccm upcloud-charts/upcloud-ccm \
+	@mkdir -p /tmp/rendered
+	@$(HELM) template ccm upcloud-ccm \
 		--set ccmConfig.clusterID=ci-test \
 		--set credentials.username=ci --set credentials.password=ci \
-		> /tmp/upcloud-ccm.yaml
-	@$(HELM) template csi upcloud-charts/upcloud-csi > /tmp/upcloud-csi.yaml
-	@echo "rendered to /tmp/upcloud-{ccm,csi}.yaml"
+		> /tmp/rendered/upcloud-ccm.yaml
+	@$(HELM) template csi upcloud-csi > /tmp/rendered/upcloud-csi.yaml
+	@$(HELM) template cf  cloudflare-operator \
+		--namespace cloudflare-operator-system \
+		> /tmp/rendered/cloudflare-operator.yaml
+	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator}.yaml"
 
 unittest:
 	@for c in $(CHARTS); do \
 		echo "==> helm unittest $$c"; \
-		$(HELM) unittest upcloud-charts/$$c; \
+		$(HELM) unittest $$c; \
 	done
 
 test: lint template unittest
 
 sync:
-	@./upcloud-charts/scripts/sync-upstream.sh ccm
-	@./upcloud-charts/scripts/sync-upstream.sh csi
-
-sync-csi:
-	@./upcloud-charts/scripts/sync-upstream.sh csi $(VERSION)
+	@./scripts/sync-upstream.sh ccm
+	@./scripts/sync-upstream.sh csi
+	@./scripts/sync-upstream.sh cloudflare
 
 sync-ccm:
-	@./upcloud-charts/scripts/sync-upstream.sh ccm $(VERSION)
+	@./scripts/sync-upstream.sh ccm $(VERSION)
+
+sync-csi:
+	@./scripts/sync-upstream.sh csi $(VERSION)
+
+sync-cloudflare:
+	@./scripts/sync-upstream.sh cloudflare $(VERSION)
 
 check:
-	@./upcloud-charts/scripts/sync-upstream.sh check
+	@./scripts/sync-upstream.sh check
 
 docs:
 	@command -v helm-docs >/dev/null 2>&1 || { echo "install helm-docs: https://github.com/norwoodj/helm-docs"; exit 1; }
-	@helm-docs --chart-search-root=upcloud-charts
+	@helm-docs --chart-search-root=.

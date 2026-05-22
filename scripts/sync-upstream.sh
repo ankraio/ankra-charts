@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# sync-upstream.sh - Sync upcloud-charts/{upcloud-ccm,upcloud-csi} with the
-# latest UpCloud upstream releases. Idempotent: re-running with the same
+# sync-upstream.sh - Sync charts/{upcloud-ccm,upcloud-csi,cloudflare-operator}
+# with the latest upstream releases. Idempotent: re-running with the same
 # version produces no git diff.
 #
 # Usage:
 #   ./scripts/sync-upstream.sh check                  # print latest upstream versions, no writes
 #   ./scripts/sync-upstream.sh ccm [version]          # bump CCM appVersion (e.g. v1.2.3); default: latest
 #   ./scripts/sync-upstream.sh csi [version]          # re-vendor + bump CSI appVersion; default: latest
+#   ./scripts/sync-upstream.sh cloudflare [version]   # re-vendor + bump cloudflare-operator appVersion; default: latest
 #
 # Exit codes:
 #   0 - success, no structural change (image-tag-only diff). Safe to auto-merge.
@@ -21,14 +22,18 @@ set -euo pipefail
 IFS=$'\n\t'
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CHARTS_DIR="${REPO_ROOT}/upcloud-charts"
+CHARTS_DIR="${REPO_ROOT}/charts"
 CCM_DIR="${CHARTS_DIR}/upcloud-ccm"
 CSI_DIR="${CHARTS_DIR}/upcloud-csi"
 CSI_VENDOR_DIR="${CSI_DIR}/vendor"
+CF_DIR="${CHARTS_DIR}/cloudflare-operator"
+CF_VENDOR_DIR="${CF_DIR}/vendor"
 
 CCM_GHCR_IMAGE="ghcr.io/upcloudltd/cloud-controller-manager"
 CCM_GH_REPO="UpCloudLtd/cloud-controller-manager"
 CSI_GH_REPO="UpCloudLtd/upcloud-csi"
+CF_GH_REPO="adyanth/cloudflare-operator"
+CF_IMAGE="docker.io/adyanth/cloudflare-operator"
 
 # -------------------------------------------------------------------------
 # Helpers
@@ -175,6 +180,14 @@ patch_ccm_image_digest() {
     patch_values_image_field "${CCM_DIR}/values.yaml" ccm digest "$1"
 }
 
+patch_cf_image_tag() {
+    patch_values_image_field "${CF_DIR}/values.yaml" manager tag "$1"
+}
+
+patch_cf_image_digest() {
+    patch_values_image_field "${CF_DIR}/values.yaml" manager digest "$1"
+}
+
 # Honour GITHUB_TOKEN to dodge rate limits in CI and authenticated local runs.
 gh_curl() {
     local -a auth=()
@@ -237,19 +250,22 @@ cmd_check() {
     require_tool curl
     require_tool jq
 
-    local ccm_current ccm_latest csi_current csi_latest
+    local ccm_current ccm_latest csi_current csi_latest cf_current cf_latest
     ccm_current=$(read_chart_appversion "${CCM_DIR}")
     csi_current=$(read_chart_appversion "${CSI_DIR}")
+    cf_current=$(read_chart_appversion "${CF_DIR}")
     ccm_latest=$(gh_latest_release "${CCM_GH_REPO}")
     if [[ -z "$ccm_latest" ]]; then
         ccm_latest=$(ghcr_latest_tag "${CCM_GHCR_IMAGE}")
         ccm_latest="${ccm_latest:+${ccm_latest} (via GHCR)}"
     fi
     csi_latest=$(gh_latest_release "${CSI_GH_REPO}")
+    cf_latest=$(gh_latest_release "${CF_GH_REPO}")
 
     printf 'chart\tcurrent\tlatest\n'
     printf 'upcloud-ccm\t%s\t%s\n' "${ccm_current:-?}" "${ccm_latest:-?}"
     printf 'upcloud-csi\t%s\t%s\n' "${csi_current:-?}" "${csi_latest:-?}"
+    printf 'cloudflare-operator\t%s\t%s\n' "${cf_current:-?}" "${cf_latest:-?}"
 }
 
 cmd_ccm() {
@@ -367,6 +383,155 @@ cmd_csi() {
     exit 0
 }
 
+cmd_cloudflare() {
+    require_tool curl
+    require_tool jq
+    require_tool python3
+
+    local version="${1:-}"
+    if [[ -z "$version" ]]; then
+        version=$(gh_latest_release "${CF_GH_REPO}")
+    fi
+    [[ -n "$version" ]] || die "could not determine latest cloudflare-operator version"
+
+    local stripped="${version#v}"
+    log "syncing cloudflare-operator to ${version} (chart appVersion ${stripped})"
+
+    local current
+    current=$(read_chart_appversion "${CF_DIR}")
+    local vendor_target="${CF_VENDOR_DIR}/${version}"
+    mkdir -p "${vendor_target}"
+
+    local assets=(cloudflare-operator.yaml cloudflare-operator.crds.yaml)
+    for asset in "${assets[@]}"; do
+        local url="https://github.com/${CF_GH_REPO}/releases/download/${version}/${asset}"
+        log "downloading ${asset}"
+        curl -fsSL "${url}" -o "${vendor_target}/${asset}" \
+            || die "failed to download ${url}"
+    done
+
+    # Swap the `current` symlink atomically.
+    local tmp_link
+    tmp_link="${CF_VENDOR_DIR}/current.tmp.$$"
+    ln -sfn "${version}" "${tmp_link}"
+    mv -f "${tmp_link}" "${CF_VENDOR_DIR}/current"
+
+    # Detect structural changes vs the previous vendor snapshot (ignoring
+    # image tag/digest churn so a digest-only release does not flip the bit).
+    local structural_change=0
+    if [[ -d "${CF_VENDOR_DIR}/${current}" || -d "${CF_VENDOR_DIR}/v${current}" ]]; then
+        local prev="${CF_VENDOR_DIR}/${current}"
+        [[ -d "$prev" ]] || prev="${CF_VENDOR_DIR}/v${current}"
+        log "diffing ${prev##*/} -> ${version} (cloudflare-operator.yaml only)"
+        if diff -u \
+            "${prev}/cloudflare-operator.yaml" \
+            "${vendor_target}/cloudflare-operator.yaml" \
+            | grep -vE '^(\+\+\+|---|@@|[+-]\s+image:|[+-]\s+tag:|[+-]\s+sha256:)' \
+            | grep -qE '^[+-]'
+        then
+            log "structural change detected in cloudflare-operator.yaml"
+            structural_change=1
+        fi
+    fi
+
+    # Re-split the CRDs into templates/crd-<name>.yaml and re-apply our
+    # templating patches (conversion webhook service ref + CA injection
+    # annotation + resource-policy + chart labels).
+    log "re-splitting CRDs into templates/crd-*.yaml"
+    python3 - "${vendor_target}/cloudflare-operator.crds.yaml" "${CF_DIR}/templates" <<'PY'
+import re, sys, pathlib
+
+src_path, tpl_dir = sys.argv[1:3]
+src = pathlib.Path(src_path).read_text()
+out_dir = pathlib.Path(tpl_dir)
+out_dir.mkdir(exist_ok=True)
+
+# Wipe previous crd-*.yaml so removed CRDs disappear from the chart.
+for old in out_dir.glob("crd-*.yaml"):
+    old.unlink()
+
+docs = [d for d in re.split(r'^---\s*$', src, flags=re.M) if d.strip()]
+for d in docs:
+    m = re.search(r'^\s+name:\s*(\S+)$', d, flags=re.M)
+    if not m:
+        continue
+    name = m.group(1)
+    short = name.split(".")[0]
+    body = d
+    body = body.replace(
+        "cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)",
+        'cert-manager.io/inject-ca-from: {{ include "cloudflare-operator.namespace" . }}/{{ include "cloudflare-operator.fullname" . }}-serving-cert',
+    )
+    body = re.sub(
+        r'(        service:\n          name: )webhook-service\n          namespace: system',
+        r'\1{{ include "cloudflare-operator.fullname" . }}-webhook\n          namespace: {{ include "cloudflare-operator.namespace" . }}',
+        body,
+    )
+    body = re.sub(
+        r'^metadata:\n  annotations:\n',
+        'metadata:\n  annotations:\n    helm.sh/resource-policy: keep\n',
+        body, count=1, flags=re.M,
+    )
+    lines = body.splitlines()
+    if not any(l.startswith("  labels:") for l in lines):
+        new_lines = []
+        for line in lines:
+            if line.startswith("  name:"):
+                new_lines.append(
+                    '  labels:\n'
+                    '    {{- include "cloudflare-operator.labels" . | nindent 4 }}'
+                )
+            new_lines.append(line)
+        body = "\n".join(new_lines)
+    wrapped = (
+        "{{- if .Values.crds.install -}}\n"
+        + body.lstrip("\n")
+        + ("\n" if not body.endswith("\n") else "")
+        + "{{- end }}\n"
+    )
+    (out_dir / f"crd-{short}.yaml").write_text(wrapped)
+    print("wrote", out_dir / f"crd-{short}.yaml")
+PY
+
+    # Extract the manager image tag from the upstream install yaml. Only
+    # patch values.yaml when tag != appVersion (otherwise the chart's
+    # AppVersion fallback already does the right thing).
+    local image_tag
+    image_tag=$(grep -oE 'image:\s*adyanth/cloudflare-operator:\S+' "${vendor_target}/cloudflare-operator.yaml" \
+        | head -1 | awk -F: '{print $NF}' || true)
+    if [[ -n "$image_tag" && "$image_tag" != "$stripped" ]]; then
+        log "patching images.manager.tag = ${image_tag}"
+        patch_cf_image_tag "${image_tag}"
+    else
+        # Clear any leftover hard-coded tag so the chart falls back to AppVersion.
+        patch_cf_image_tag ""
+    fi
+
+    # Bump Chart.yaml only when appVersion actually changed.
+    if [[ "$current" != "$stripped" ]]; then
+        local new_chart_version
+        new_chart_version=$(bump_patch "$(read_chart_version "${CF_DIR}")")
+        patch_chart_yaml "${CF_DIR}" "${stripped}" "${new_chart_version}"
+        log "cloudflare-operator bumped: ${current:-?} -> ${stripped} (chart ${new_chart_version})"
+    else
+        log "cloudflare-operator appVersion already ${stripped}; Chart.yaml left alone"
+    fi
+
+    # Best-effort: pin the manager image digest via crane (if available).
+    local digest
+    digest=$(image_digest "${CF_IMAGE}:${stripped}")
+    if [[ -n "$digest" ]]; then
+        log "pinning cloudflare-operator manager digest: ${digest}"
+        patch_cf_image_digest "${digest}"
+    fi
+
+    if [[ "$structural_change" == "1" ]]; then
+        log "STRUCTURAL CHANGE detected — workflow should label PR 'needs-review'"
+        exit 2
+    fi
+    exit 0
+}
+
 # Pull every `image: …` reference from the upstream setup-upcloud-csi.yaml
 # and map it to a values.yaml key. Patches the .tag of each. Skips upstream
 # `latest` tags for the csiDriver image — the chart resolves those from
@@ -422,17 +587,19 @@ main() {
     local cmd="${1:-}"
     shift || true
     case "$cmd" in
-        check) cmd_check "$@" ;;
-        ccm)   cmd_ccm   "$@" ;;
-        csi)   cmd_csi   "$@" ;;
+        check)      cmd_check      "$@" ;;
+        ccm)        cmd_ccm        "$@" ;;
+        csi)        cmd_csi        "$@" ;;
+        cloudflare) cmd_cloudflare "$@" ;;
         ""|-h|--help)
             cat >&2 <<EOF
-sync-upstream.sh - sync upcloud-charts with upstream UpCloud releases
+sync-upstream.sh - sync charts/* with their upstream releases
 
 Usage:
-  $0 check                  # print latest upstream versions
-  $0 ccm [version]          # bump upcloud-ccm appVersion (default: latest)
-  $0 csi [version]          # re-vendor upcloud-csi (default: latest)
+  $0 check                       # print latest upstream versions
+  $0 ccm [version]               # bump upcloud-ccm appVersion (default: latest)
+  $0 csi [version]               # re-vendor upcloud-csi (default: latest)
+  $0 cloudflare [version]        # re-vendor cloudflare-operator (default: latest)
 
 Exit codes:
   0 - success, image-tag-only diff

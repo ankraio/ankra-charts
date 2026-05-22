@@ -6,9 +6,9 @@ version: 0.1.0
 appVersion: "v1.4.0"
 kubeVersion: ">=1.27.0-0"
 
-home: https://github.com/ankra-io/platform/tree/main/upcloud-charts/upcloud-csi
+home: https://github.com/ankra-io/platform/tree/main/charts/upcloud-csi
 sources:
-  - https://github.com/ankra-io/platform/tree/main/upcloud-charts/upcloud-csi
+  - https://github.com/ankra-io/platform/tree/main/charts/upcloud-csi
   - https://github.com/UpCloudLtd/upcloud-csi
 
 keywords:

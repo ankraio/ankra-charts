@@ -1,0 +1,56 @@
+# Production overlay: HA replicas, PDB, ServiceMonitor, NetworkPolicy, and a
+# digest-pinned image. Credentials live in an externally-managed Secret
+# rotated by External Secrets / sealed-secrets / Vault Agent.
+#
+#   helm install cloudflare-operator ./cloudflare-operator \
+#     -n cloudflare-operator-system --create-namespace \
+#     -f values-examples/production.yaml
+
+replicaCount: 2
+
+images:
+  manager:
+    digest: ""
+
+credentials:
+  create: false
+  existingSecret: cloudflare-secrets
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+metrics:
+  enabled: true
+  service:
+    enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+
+networkPolicy:
+  enabled: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+webhook:
+  certManager:
+    enabled: true
+    createSelfSignedIssuer: true
+
+originIssuer:
+  enabled: true
+  name: cloudflare-origin-issuer
+  requestType: OriginECC
+  secret:
+    create: false
+    existingSecret: origin-ca-issuer-secret
+    namespace: cert-manager
+    key: api-token

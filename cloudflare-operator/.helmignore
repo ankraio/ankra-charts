@@ -1,0 +1,33 @@
+# Standard Helm chart ignores
+.DS_Store
+.git/
+.gitignore
+.bzr/
+.hg/
+.hgignore
+.svn/
+*.bak
+*.tmp
+*.orig
+*~
+
+# Editor noise
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local development & test artefacts
+tests/
+values-examples/
+
+# Pristine upstream manifests live here for diffing and sync-script automation.
+# Do NOT ship them inside the packaged tarball.
+vendor/
+
+# CI configs and project metadata
+.github/
+README.md
+CHANGELOG.md
+Makefile
+scripts/

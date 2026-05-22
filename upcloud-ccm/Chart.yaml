@@ -6,9 +6,9 @@ version: 0.1.0
 appVersion: "latest"
 kubeVersion: ">=1.27.0-0"
 
-home: https://github.com/ankra-io/platform/tree/main/upcloud-charts/upcloud-ccm
+home: https://github.com/ankra-io/platform/tree/main/charts/upcloud-ccm
 sources:
-  - https://github.com/ankra-io/platform/tree/main/upcloud-charts/upcloud-ccm
+  - https://github.com/ankra-io/platform/tree/main/charts/upcloud-ccm
   - https://upcloud.com/community/tutorials/getting-started-upcloud-kubernetes-services
 
 keywords:

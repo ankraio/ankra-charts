@@ -1,0 +1,121 @@
+suite: webhook
+templates:
+  - templates/webhook-cert.yaml
+  - templates/webhook-service.yaml
+  - templates/crd-clustertunnels.yaml
+release:
+  name: ut
+  namespace: cloudflare-operator-system
+chart:
+  version: 0.1.0
+  appVersion: "0.13.1"
+
+tests:
+  - it: renders a self-signed Issuer + serving Certificate (+ metrics cert) by default
+    template: templates/webhook-cert.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+      - documentIndex: 0
+        isKind:
+          of: Issuer
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: ut-cloudflare-operator-selfsigned
+      - documentIndex: 1
+        isKind:
+          of: Certificate
+      - documentIndex: 1
+        equal:
+          path: metadata.name
+          value: ut-cloudflare-operator-serving-cert
+      - documentIndex: 1
+        equal:
+          path: spec.secretName
+          value: ut-cloudflare-operator-webhook-tls
+      - documentIndex: 2
+        isKind:
+          of: Certificate
+      - documentIndex: 2
+        equal:
+          path: metadata.name
+          value: ut-cloudflare-operator-metrics-cert
+
+  - it: renders the webhook ClusterIP Service on port 443
+    template: templates/webhook-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: ut-cloudflare-operator-webhook
+      - equal:
+          path: metadata.namespace
+          value: cloudflare-operator-system
+      - equal:
+          path: spec.ports[0].port
+          value: 443
+      - equal:
+          path: spec.ports[0].targetPort
+          value: webhook
+
+  - it: skips the self-signed Issuer when an external Issuer is referenced
+    template: templates/webhook-cert.yaml
+    set:
+      webhook.certManager.createSelfSignedIssuer: false
+      webhook.certManager.issuerRef.name: my-cluster-issuer
+      webhook.certManager.issuerRef.kind: ClusterIssuer
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        isKind:
+          of: Certificate
+      - documentIndex: 0
+        equal:
+          path: spec.issuerRef.name
+          value: my-cluster-issuer
+      - documentIndex: 0
+        equal:
+          path: spec.issuerRef.kind
+          value: ClusterIssuer
+
+  - it: renders no cert-manager resources when certManager is disabled (BYO TLS)
+    template: templates/webhook-cert.yaml
+    set:
+      webhook.certManager.enabled: false
+      webhook.existingSecretName: my-byo-webhook-tls
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: skips the metrics Certificate when metrics.certificate.enabled=false
+    template: templates/webhook-cert.yaml
+    set:
+      metrics.certificate.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: templatizes the ClusterTunnel CRD conversion webhook to point at the chart-managed Service
+    template: templates/crd-clustertunnels.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: CustomResourceDefinition
+      - equal:
+          path: spec.conversion.webhook.clientConfig.service.name
+          value: ut-cloudflare-operator-webhook
+      - equal:
+          path: spec.conversion.webhook.clientConfig.service.namespace
+          value: cloudflare-operator-system
+      - matchRegex:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          pattern: '^cloudflare-operator-system/ut-cloudflare-operator-serving-cert$'
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep

@@ -1,0 +1,17 @@
+{{- if .Values.sampleClusterTunnel.enabled -}}
+{{- include "cloudflare-operator.validate" . -}}
+apiVersion: networking.cfargotunnel.com/v1alpha2
+kind: ClusterTunnel
+metadata:
+  name: {{ .Values.sampleClusterTunnel.name }}
+  labels:
+    {{- include "cloudflare-operator.labels" . | nindent 4 }}
+spec:
+  newTunnel:
+    name: {{ default .Values.sampleClusterTunnel.name .Values.sampleClusterTunnel.tunnelName }}
+  cloudflare:
+    email: {{ required "sampleClusterTunnel.cloudflareEmail is required" .Values.sampleClusterTunnel.cloudflareEmail | quote }}
+    domain: {{ required "sampleClusterTunnel.cloudflareDomain is required" .Values.sampleClusterTunnel.cloudflareDomain | quote }}
+    secret: {{ include "cloudflare-operator.cloudflareSecretName" . | quote }}
+    accountId: {{ .Values.credentials.accountId | quote }}
+{{- end }}

@@ -1,0 +1,51 @@
+suite: sample_crs
+templates:
+  - templates/sample-clustertunnel.yaml
+release:
+  name: ut
+  namespace: cloudflare-operator-system
+chart:
+  version: 0.1.0
+  appVersion: "0.13.1"
+
+tests:
+  - it: does not render the sample ClusterTunnel by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders a ClusterTunnel pointing at the cloudflare-secrets Secret
+    set:
+      sampleClusterTunnel.enabled: true
+      sampleClusterTunnel.cloudflareDomain: example.com
+      sampleClusterTunnel.cloudflareEmail: admin@example.com
+      credentials.accountId: my-account-id
+    asserts:
+      - isKind:
+          of: ClusterTunnel
+      - equal:
+          path: spec.newTunnel.name
+          value: example-cluster-tunnel
+      - equal:
+          path: spec.cloudflare.domain
+          value: example.com
+      - equal:
+          path: spec.cloudflare.email
+          value: admin@example.com
+      - equal:
+          path: spec.cloudflare.secret
+          value: cloudflare-secrets
+      - equal:
+          path: spec.cloudflare.accountId
+          value: my-account-id
+
+  - it: lets tunnelName override the Cloudflare-side tunnel name
+    set:
+      sampleClusterTunnel.enabled: true
+      sampleClusterTunnel.cloudflareDomain: example.com
+      sampleClusterTunnel.cloudflareEmail: admin@example.com
+      sampleClusterTunnel.tunnelName: my-cf-tunnel
+    asserts:
+      - equal:
+          path: spec.newTunnel.name
+          value: my-cf-tunnel
