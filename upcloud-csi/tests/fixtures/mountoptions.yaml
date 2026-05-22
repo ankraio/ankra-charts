@@ -1,0 +1,5 @@
+storageClasses:
+  maxiops:
+    mountOptions:
+      - noatime
+      - nodiratime

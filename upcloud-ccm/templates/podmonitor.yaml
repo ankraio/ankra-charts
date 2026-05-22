@@ -1,0 +1,38 @@
+{{- if .Values.metrics.podMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "upcloud-ccm.fullname" . }}
+  namespace: {{ default (include "upcloud-ccm.namespace" .) .Values.metrics.podMonitor.namespace }}
+  labels:
+    {{- include "upcloud-ccm.labels" . | nindent 4 }}
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "upcloud-ccm.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ include "upcloud-ccm.namespace" . }}
+  podMetricsEndpoints:
+    - port: metrics
+      scheme: https
+      path: /metrics
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+      bearerTokenSecret:
+        name: ""
+        key: ""
+      tlsConfig:
+        {{- toYaml .Values.metrics.podMonitor.tlsConfig | nindent 8 }}
+      {{- with .Values.metrics.podMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.metrics.podMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

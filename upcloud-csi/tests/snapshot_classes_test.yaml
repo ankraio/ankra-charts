@@ -1,0 +1,66 @@
+suite: snapshot classes
+templates:
+  - templates/volumesnapshotclass.yaml
+  - templates/volumesnapshotclass-retain.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: renders the Delete snapshotclass by default
+    template: templates/volumesnapshotclass.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VolumeSnapshotClass
+      - equal:
+          path: metadata.name
+          value: upcloud-csi-snapshotclass
+      - equal:
+          path: deletionPolicy
+          value: Delete
+
+  - it: does NOT render the Retain snapshotclass by default
+    template: templates/volumesnapshotclass-retain.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the Retain snapshotclass when enabled
+    template: templates/volumesnapshotclass-retain.yaml
+    set:
+      snapshotClasses.retain.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: VolumeSnapshotClass
+      - equal:
+          path: deletionPolicy
+          value: Retain
+
+  - it: snapshotController.enabled=false suppresses both classes
+    set:
+      snapshotController.enabled: false
+      snapshotClasses.retain.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/volumesnapshotclass.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/volumesnapshotclass-retain.yaml
+
+  - it: marks the retain class as default when isDefault=true
+    template: templates/volumesnapshotclass-retain.yaml
+    set:
+      snapshotClasses.retain.enabled: true
+      snapshotClasses.retain.isDefault: true
+    asserts:
+      - equal:
+          path: metadata.annotations["snapshot.storage.kubernetes.io/is-default-class"]
+          value: "true"
+      - equal:
+          path: deletionPolicy
+          value: Retain

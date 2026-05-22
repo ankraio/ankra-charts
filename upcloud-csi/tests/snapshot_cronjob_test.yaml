@@ -1,0 +1,55 @@
+suite: snapshot CronJob
+templates:
+  - templates/snapshot-cronjob.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders RBAC + CronJob when enabled
+    set:
+      snapshotCronJob.enabled: true
+    documentSelector:
+      path: kind
+      value: CronJob
+    asserts:
+      - isKind:
+          of: CronJob
+      - equal:
+          path: spec.schedule
+          value: "0 2 * * *"
+      - equal:
+          path: spec.concurrencyPolicy
+          value: Forbid
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.serviceAccountName
+          value: ut-upcloud-csi-snapshot-cronjob
+
+  - it: honours a custom schedule, snapshot class and retention
+    set:
+      snapshotCronJob.enabled: true
+      snapshotCronJob.schedule: "*/15 * * * *"
+      snapshotCronJob.snapshotClass: upcloud-csi-snapshotclass-retain
+      snapshotCronJob.retentionCount: 30
+    documentSelector:
+      path: kind
+      value: CronJob
+    asserts:
+      - equal:
+          path: spec.schedule
+          value: "*/15 * * * *"
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: SNAPSHOT_CLASS
+            value: upcloud-csi-snapshotclass-retain
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: RETENTION_COUNT
+            value: "30"

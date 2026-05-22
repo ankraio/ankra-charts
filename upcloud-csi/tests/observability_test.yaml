@@ -1,0 +1,62 @@
+suite: observability templates
+templates:
+  - templates/prometheusrule.yaml
+  - templates/podmonitor.yaml
+  - templates/dashboard.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: renders nothing when toggles are off
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders PrometheusRule when enabled
+    template: templates/prometheusrule.yaml
+    set:
+      metrics.prometheusRule.enabled: true
+    asserts:
+      - isKind:
+          of: PrometheusRule
+      - contains:
+          path: spec.groups[0].rules
+          content:
+            alert: UpCloudCSIControllerDown
+          any: true
+      - contains:
+          path: spec.groups[0].rules
+          content:
+            alert: UpCloudCSIPVCPending
+          any: true
+      - contains:
+          path: spec.groups[0].rules
+          content:
+            alert: UpCloudCSIVolumeNearFull
+          any: true
+
+  - it: renders PodMonitor when enabled
+    template: templates/podmonitor.yaml
+    set:
+      metrics.podMonitor.enabled: true
+    asserts:
+      - isKind:
+          of: PodMonitor
+      - equal:
+          path: spec.podMetricsEndpoints[0].port
+          value: metrics
+
+  - it: renders Grafana dashboard
+    template: templates/dashboard.yaml
+    set:
+      dashboard.enabled: true
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.labels["grafana_dashboard"]
+          value: "1"
+      - matchRegex:
+          path: data["upcloud-csi.json"]
+          pattern: '"uid": "upcloud-csi"'

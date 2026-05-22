@@ -11,13 +11,25 @@ metadata:
     {{- else }}
     storageclass.kubernetes.io/is-default-class: "false"
     {{- end }}
+    {{- with .Values.storageClasses.standard.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 provisioner: storage.csi.upcloud.com
 parameters:
   tier: standard
   {{- with .Values.storageClasses.standard.extraParameters }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
-reclaimPolicy: {{ .Values.storageClasses.reclaimPolicy }}
-volumeBindingMode: {{ .Values.storageClasses.volumeBindingMode }}
+reclaimPolicy: {{ .Values.storageClasses.standard.reclaimPolicy | default .Values.storageClasses.reclaimPolicy }}
+volumeBindingMode: {{ .Values.storageClasses.standard.volumeBindingMode | default .Values.storageClasses.volumeBindingMode }}
 allowVolumeExpansion: {{ .Values.storageClasses.allowVolumeExpansion }}
+{{- $topologies := default .Values.storageClasses.allowedTopologies .Values.storageClasses.standard.allowedTopologies }}
+{{- with $topologies }}
+allowedTopologies:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.storageClasses.standard.mountOptions }}
+mountOptions:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}

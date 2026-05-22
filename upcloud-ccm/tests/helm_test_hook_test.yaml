@@ -1,0 +1,48 @@
+suite: helm test hook
+templates:
+  - templates/tests/test-connection.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: renders by default
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+    asserts:
+      - isKind:
+          of: Pod
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+      - equal:
+          path: spec.restartPolicy
+          value: Never
+
+  - it: can be disabled
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+      tests.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: uses the configured kubectl image
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+      tests.image.registry: my-mirror.io
+      tests.image.repository: kubectl
+      tests.image.tag: v1.31.0
+    asserts:
+      - equal:
+          path: spec.containers[0].image
+          value: my-mirror.io/kubectl:v1.31.0

@@ -1,0 +1,43 @@
+{{- /*
+PodMonitor — scrapes the csi-upcloud-plugin metrics port on both the
+controller StatefulSet pods and the node DaemonSet pods. The driver exposes
+its metrics on the loopback interface; we expose them with `--metrics-address`
+via `controller.extraArgs`/`node.extraArgs` to a known port.
+*/ -}}
+{{- if .Values.metrics.podMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}
+  namespace: {{ default (include "upcloud-csi.namespace" .) .Values.metrics.podMonitor.namespace }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [{{ include "upcloud-csi.name" . }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [controller, node]
+  namespaceSelector:
+    matchNames:
+      - {{ include "upcloud-csi.namespace" . }}
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+      {{- with .Values.metrics.podMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.metrics.podMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

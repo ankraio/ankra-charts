@@ -41,11 +41,28 @@ spec:
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.schedulerName }}
+      schedulerName: {{ . }}
+      {{- end }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       hostNetwork: false
       dnsPolicy: ClusterFirst
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- /* fsGroupChangePolicy merged in so users don't have to repeat the rest of podSecurityContext */}}
+        {{- $psc := deepCopy .Values.podSecurityContext -}}
+        {{- if .Values.fsGroupChangePolicy }}{{- $_ := set $psc "fsGroupChangePolicy" .Values.fsGroupChangePolicy }}{{- end }}
+        {{- toYaml $psc | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -66,6 +83,7 @@ spec:
         - name: cloud-controller-manager
           image: {{ include "upcloud-ccm.image" (dict "image" .Values.images.ccm "context" .) }}
           imagePullPolicy: {{ .Values.images.ccm.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           command:

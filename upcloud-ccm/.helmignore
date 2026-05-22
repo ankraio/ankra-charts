@@ -18,6 +18,8 @@
 .vscode/
 
 # CI/dev helpers that shouldn't ship inside the chart tarball.
-tests/
-values-examples/
-CHANGELOG.md
+# Anchored with a leading slash so they only match at the chart root
+# (otherwise `templates/tests/` would be ignored too).
+/tests/
+/values-examples/
+/CHANGELOG.md

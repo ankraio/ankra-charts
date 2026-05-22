@@ -6,6 +6,36 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-22
+
+### Added
+
+- **Observability**: opt-in `PrometheusRule` with recommended alerts
+  (`UpCloudCCMDown`, `UpCloudCCMLeaderElectionFlapping`,
+  `UpCloudCCMReconcileErrors`, `UpCloudCCMPodCrashLooping`),
+  `PodMonitor` (alternative to ServiceMonitor for direct pod scraping),
+  and a pre-canned Grafana dashboard ConfigMap discovered by the
+  kube-prometheus-stack Grafana sidecar.
+- **helm test hook**: a `kubectl rollout status` pod that validates the
+  CCM Deployment after install/upgrade.
+- **Pod-spec passthroughs**: `hostAliases`, `dnsConfig`,
+  `runtimeClassName`, `schedulerName`, `fsGroupChangePolicy`
+  (default `OnRootMismatch`), `terminationMessagePolicy`
+  (default `FallbackToLogsOnError`).
+- **New overlay**: [`values-examples/observability.yaml`](values-examples/observability.yaml)
+  drops in the full kube-prometheus-stack observability bundle.
+- **Chart metadata**: artifacthub.io `category`, `images`, `recommendations`,
+  `screenshots`, and rich `changes` annotations.
+- **helm-unittest suites** covering the new templates.
+
+### Changed
+
+- `.helmignore` anchors `tests/` / `values-examples/` / `CHANGELOG.md` to the
+  chart root (leading `/`) so `templates/tests/test-connection.yaml` actually
+  ships in the chart tarball.
+- `values.schema.json` extended with `dashboard`, `tests`, pod-spec passthrough
+  fields.
+
 ## [0.1.0] - 2026-05-22
 
 ### Added

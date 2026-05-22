@@ -1,0 +1,7 @@
+storageClasses:
+  allowedTopologies:
+    - matchLabelExpressions:
+        - key: topology.kubernetes.io/zone
+          values:
+            - fi-hel1
+            - fi-hel2

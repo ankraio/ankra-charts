@@ -1,0 +1,64 @@
+suite: storageclass topology + per-tier overrides
+templates:
+  - templates/storageclass-maxiops.yaml
+  - templates/storageclass-standard.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: defaults — no allowedTopologies / mountOptions stamped
+    template: templates/storageclass-maxiops.yaml
+    asserts:
+      - isKind:
+          of: StorageClass
+      - notExists:
+          path: allowedTopologies
+      - notExists:
+          path: mountOptions
+
+  - it: stamps the chart-wide allowedTopologies
+    template: templates/storageclass-maxiops.yaml
+    values:
+      - ../tests/fixtures/topology-chartwide.yaml
+    asserts:
+      - equal:
+          path: allowedTopologies[0].matchLabelExpressions[0].key
+          value: topology.kubernetes.io/zone
+      - contains:
+          path: allowedTopologies[0].matchLabelExpressions[0].values
+          content: fi-hel1
+
+  - it: per-tier allowedTopologies wins over chart-wide
+    template: templates/storageclass-standard.yaml
+    values:
+      - ../tests/fixtures/topology-pertier.yaml
+    asserts:
+      - contains:
+          path: allowedTopologies[0].matchLabelExpressions[0].values
+          content: fi-hel2
+      - notContains:
+          path: allowedTopologies[0].matchLabelExpressions[0].values
+          content: fi-hel1
+
+  - it: mountOptions are stamped per tier
+    template: templates/storageclass-maxiops.yaml
+    values:
+      - ../tests/fixtures/mountoptions.yaml
+    asserts:
+      - contains:
+          path: mountOptions
+          content: noatime
+      - contains:
+          path: mountOptions
+          content: nodiratime
+
+  - it: per-tier reclaimPolicy override beats chart-wide
+    template: templates/storageclass-maxiops.yaml
+    set:
+      storageClasses.reclaimPolicy: Retain
+      storageClasses.maxiops.reclaimPolicy: Delete
+    asserts:
+      - equal:
+          path: reclaimPolicy
+          value: Delete

@@ -1,8 +1,8 @@
 apiVersion: v2
 name: upcloud-ccm
-description: UpCloud Cloud Controller Manager for Kubernetes
+description: UpCloud Cloud Controller Manager for Kubernetes — leader-elected, hardened, with built-in Prometheus alerts & Grafana dashboard.
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "latest"
 kubeVersion: ">=1.27.0-0"
 
@@ -18,21 +18,54 @@ keywords:
   - cloud-provider
   - load-balancer
   - k3s
+  - observability
+  - prometheus
+  - grafana
 
 maintainers:
   - name: Ankra AB
     email: admin@ankra.io
+    url: https://ankra.io
 
 annotations:
+  category: Infrastructure
+  licenses: Apache-2.0
   artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/prerelease: "false"
   artifacthub.io/maintainers: |
     - name: Ankra AB
       email: admin@ankra.io
   artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/ankraio/ankra-charts
     - name: Upstream image (GHCR)
       url: https://ghcr.io/upcloudltd/cloud-controller-manager
     - name: Chart (OCI)
       url: oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm
+  artifacthub.io/recommendations: |
+    - url: https://artifacthub.io/packages/helm/ankra-charts/upcloud-csi
+  artifacthub.io/operator: "false"
+  artifacthub.io/signKey: ""
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/images: |
+    - name: cloud-controller-manager
+      image: ghcr.io/upcloudltd/cloud-controller-manager:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Initial release of the UpCloud CCM Helm chart.
+      description: PrometheusRule with recommended alerts (CCM down, leader-election flapping, API errors, crash loop).
+    - kind: added
+      description: PodMonitor for direct pod scraping (alternative to ServiceMonitor).
+    - kind: added
+      description: Grafana dashboard ConfigMap rendered with the sidecar-discovery label.
+    - kind: added
+      description: helm test hook that runs kubectl rollout status against the CCM Deployment.
+    - kind: added
+      description: hostAliases, dnsConfig, runtimeClassName, schedulerName, fsGroupChangePolicy and terminationMessagePolicy across the pod spec.
+    - kind: changed
+      description: .helmignore anchors `tests/` / `values-examples/` / `CHANGELOG.md` to the chart root so `templates/tests/` ships in the package.
+    - kind: added
+      description: New values-examples/observability.yaml overlay.
+  artifacthub.io/screenshots: |
+    - title: UpCloud CCM Grafana dashboard
+      url: https://raw.githubusercontent.com/ankraio/ankra-charts/main/upcloud-ccm/values-examples/dashboard-screenshot.png

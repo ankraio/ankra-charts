@@ -1,0 +1,89 @@
+{{- if .Values.tests.enabled -}}
+{{- /*
+helm test: provision a PVC against the chart-installed default SC (or the
+explicitly configured tier), mount it in a busybox pod, write to it, then
+cleanup. Tests:
+  - CSI provisioner can reach the UpCloud API
+  - the controller StatefulSet is processing CreateVolume requests
+  - the node DaemonSet is mounting volumes on the kubelet
+*/}}
+{{- $sc := .Values.tests.storageClass | default (default "upcloud-block-storage-maxiops" (.Values.storageClasses.maxiops).name) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-test
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: helm-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.tests.pvcSize }}
+  storageClassName: {{ $sc }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-test-mount
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: helm-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- with .Values.tests.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.tests.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: writer
+      image: "{{ .Values.tests.image.registry }}/{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}"
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop: ["ALL"]
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "==> Writing to mounted PV"
+          dd if=/dev/urandom of=/data/upcloud-csi-test bs=1M count=4
+          echo "==> Reading back"
+          stat -c '%s bytes written: %n' /data/upcloud-csi-test
+          rm /data/upcloud-csi-test
+          echo "==> Volume read/write OK"
+      resources:
+        {{- toYaml .Values.tests.resources | nindent 8 }}
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: {{ include "upcloud-csi.fullname" . }}-test
+{{- end }}

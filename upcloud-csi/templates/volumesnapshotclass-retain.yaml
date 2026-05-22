@@ -1,0 +1,23 @@
+{{- if and .Values.snapshotController.enabled .Values.snapshotClasses.retain.enabled -}}
+{{- /*
+A secondary VolumeSnapshotClass with `deletionPolicy: Retain` — when the
+VolumeSnapshot Kubernetes object is deleted the underlying UpCloud snapshot
+is kept. Use for compliance / before destructive migrations.
+*/}}
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: {{ .Values.snapshotClasses.retain.name }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+  {{- if .Values.snapshotClasses.retain.isDefault }}
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+  {{- end }}
+driver: storage.csi.upcloud.com
+deletionPolicy: Retain
+{{- with .Values.snapshotClasses.retain.parameters }}
+parameters:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}

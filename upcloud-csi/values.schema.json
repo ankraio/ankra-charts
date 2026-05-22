@@ -72,11 +72,109 @@
         "reclaimPolicy": { "type": "string", "enum": ["Delete", "Retain"] },
         "volumeBindingMode": { "type": "string", "enum": ["Immediate", "WaitForFirstConsumer"] },
         "allowVolumeExpansion": { "type": "boolean" },
+        "allowedTopologies": { "type": "array" },
         "maxiops": { "$ref": "#/$defs/storageClass" },
         "standard": { "$ref": "#/$defs/storageClass" },
         "hdd": { "$ref": "#/$defs/storageClass" }
       },
       "required": ["defaultClass", "maxiops", "standard", "hdd"]
+    },
+    "snapshotClasses": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "delete": { "$ref": "#/$defs/snapshotClass" },
+        "retain": { "$ref": "#/$defs/snapshotClass" }
+      },
+      "required": ["delete", "retain"]
+    },
+    "snapshotCronJob": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "schedule": { "type": "string", "minLength": 1 },
+        "timeZone": { "type": "string", "minLength": 1 },
+        "concurrencyPolicy": { "type": "string", "enum": ["Allow", "Forbid", "Replace"] },
+        "snapshotClass": { "type": "string", "minLength": 1 },
+        "retentionCount": { "type": "integer", "minimum": 0 },
+        "dryRun": { "type": "boolean" },
+        "pvcLabelSelector": { "type": "string" },
+        "namespaceLabelSelector": { "type": "string" },
+        "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+        "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+        "startingDeadlineSeconds": { "type": "integer", "minimum": 0 },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 0 },
+        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 },
+        "image": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "registry": { "type": "string", "minLength": 1 },
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["IfNotPresent", "Always", "Never"] }
+          },
+          "required": ["registry", "repository", "tag", "pullPolicy"]
+        }
+      },
+      "required": ["enabled", "schedule", "snapshotClass"]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "podMonitor": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          },
+          "required": ["enabled"]
+        },
+        "prometheusRule": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          },
+          "required": ["enabled"]
+        }
+      }
+    },
+    "dashboard": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "namespace": { "type": "string" },
+        "label": { "type": "string", "minLength": 1 },
+        "labelValue": { "type": "string" }
+      },
+      "required": ["enabled", "label", "labelValue"]
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "pvcSize": { "type": "string", "minLength": 1 },
+        "storageClass": { "type": "string" }
+      },
+      "required": ["enabled", "pvcSize"]
+    },
+    "hostAliases": { "type": "array" },
+    "dnsConfig": { "type": "object" },
+    "runtimeClassName": { "type": "string" },
+    "schedulerName": { "type": "string" },
+    "fsGroupChangePolicy": {
+      "type": "string",
+      "enum": ["", "Always", "OnRootMismatch"]
+    },
+    "terminationMessagePolicy": {
+      "type": "string",
+      "enum": ["File", "FallbackToLogsOnError"]
     },
     "controller": {
       "type": "object",
@@ -140,7 +238,23 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "name": { "type": "string", "minLength": 1 },
-        "extraParameters": { "type": "object" }
+        "extraParameters": { "type": "object" },
+        "mountOptions": { "type": "array" },
+        "reclaimPolicy": { "type": "string", "enum": ["", "Delete", "Retain"] },
+        "volumeBindingMode": { "type": "string", "enum": ["", "Immediate", "WaitForFirstConsumer"] },
+        "allowedTopologies": { "type": "array" },
+        "annotations": { "type": "object" }
+      },
+      "required": ["enabled", "name"]
+    },
+    "snapshotClass": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": { "type": "string", "minLength": 1 },
+        "isDefault": { "type": "boolean" },
+        "parameters": { "type": "object" }
       },
       "required": ["enabled", "name"]
     }

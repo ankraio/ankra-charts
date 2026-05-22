@@ -124,11 +124,23 @@ storageClasses:
   # built-in `local-path` SC. Set false to leave local-path's annotation alone.
   disableLocalPathDefault: true
   # -- ReclaimPolicy for all chart-managed StorageClasses (`Retain` matches upstream).
+  # Per-tier `reclaimPolicy:` overrides this.
   reclaimPolicy: Retain
   # -- VolumeBindingMode for all chart-managed StorageClasses.
+  # `WaitForFirstConsumer` is recommended when `allowedTopologies` is set so
+  # the volume is provisioned in the same zone as the pod.
+  # Per-tier `volumeBindingMode:` overrides this.
   volumeBindingMode: Immediate
   # -- Allow PVC expansion (matches upstream).
   allowVolumeExpansion: true
+  # -- Chart-wide allowedTopologies stamped onto every StorageClass that does
+  # not override it. Use to restrict block volumes to a single UpCloud zone.
+  # Example:
+  #   allowedTopologies:
+  #     - matchLabelExpressions:
+  #         - key: topology.kubernetes.io/zone
+  #           values: [fi-hel1, fi-hel2]
+  allowedTopologies: []
   maxiops:
     # -- Render the maxiops StorageClass.
     enabled: true
@@ -136,14 +148,48 @@ storageClasses:
     name: upcloud-block-storage-maxiops
     # -- Extra parameters merged into the SC `parameters` map.
     extraParameters: {}
+    # -- Mount options applied to every PV provisioned by this SC.
+    mountOptions: []
+    # -- Per-tier overrides. Empty falls back to the chart-wide values.
+    reclaimPolicy: ""
+    volumeBindingMode: ""
+    allowedTopologies: []
+    annotations: {}
   standard:
     enabled: true
     name: upcloud-block-storage-standard
     extraParameters: {}
+    mountOptions: []
+    reclaimPolicy: ""
+    volumeBindingMode: ""
+    allowedTopologies: []
+    annotations: {}
   hdd:
     enabled: true
     name: upcloud-block-storage-hdd
     extraParameters: {}
+    mountOptions: []
+    reclaimPolicy: ""
+    volumeBindingMode: ""
+    allowedTopologies: []
+    annotations: {}
+
+# -- VolumeSnapshotClasses. The chart can render two — one with
+# `deletionPolicy: Delete` (CSI deletes the underlying UpCloud snapshot when
+# the K8s VolumeSnapshot is removed) and one with `deletionPolicy: Retain`
+# (UpCloud snapshot survives — used for compliance / pre-migration backups).
+snapshotClasses:
+  delete:
+    enabled: true
+    name: upcloud-csi-snapshotclass
+    # -- Marks this VolumeSnapshotClass as the cluster default.
+    isDefault: false
+    parameters: {}
+  retain:
+    enabled: false
+    name: upcloud-csi-snapshotclass-retain
+    isDefault: false
+    parameters: {}
 
 # -- Controller StatefulSet (csi-provisioner, csi-attacher, csi-resizer,
 # csi-snapshotter, csi-upcloud-plugin).
@@ -398,3 +444,132 @@ networkPolicy:
   enabled: false
   extraIngress: []
   extraEgress: []
+
+# -- Opt-in periodic VolumeSnapshot CronJob. Snapshots every PVC backed by an
+# UpCloud StorageClass (filtered by label) and rotates older snapshots.
+# Pair with `snapshotClasses.retain.enabled=true` for compliance archives.
+snapshotCronJob:
+  enabled: false
+  # -- Cron schedule (UTC by default — override `timeZone`).
+  schedule: "0 2 * * *"
+  timeZone: "Etc/UTC"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # -- Allowed: `Allow`, `Forbid`, `Replace`.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  backoffLimit: 2
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  # -- PVC label selector. Empty string snapshots every UpCloud-backed PVC.
+  # Example: `backup.ankra.io/enabled=true`.
+  pvcLabelSelector: ""
+  # -- Namespace label selector. Empty string scans every namespace.
+  namespaceLabelSelector: ""
+  # -- VolumeSnapshotClass name used for snapshot creation.
+  snapshotClass: upcloud-csi-snapshotclass
+  # -- Keep at most this many snapshots per PVC (oldest are deleted).
+  # 0 disables rotation.
+  retentionCount: 7
+  # -- When true, only log what would be snapshotted/rotated.
+  dryRun: false
+  image:
+    registry: registry.k8s.io
+    repository: kubectl
+    tag: v1.31.0
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  nodeSelector: {}
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+# -- Observability (PrometheusRule, PodMonitor, Grafana dashboard).
+# All resources are opt-in and require the Prometheus Operator CRDs in
+# the target namespace.
+metrics:
+  podMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    namespace: ""
+    labels: {}
+    relabelings: []
+    metricRelabelings: []
+  prometheusRule:
+    enabled: false
+    namespace: ""
+    labels: {}
+    extraRules: []
+    alerts:
+      controllerDown:
+        for: 5m
+        severity: critical
+        runbookUrl: ""
+      nodeMissing:
+        for: 10m
+        severity: warning
+      pvcPending:
+        for: 15m
+        severity: warning
+      snapshotControllerDown:
+        for: 10m
+        severity: warning
+      volumeNearFull:
+        for: 15m
+        severity: warning
+        # -- Trigger when used/capacity exceeds this fraction (0.0 - 1.0).
+        threshold: 0.85
+      crashLoop:
+        for: 5m
+        severity: critical
+
+# -- Pre-canned Grafana dashboard rendered as a ConfigMap. Sidecar-friendly.
+dashboard:
+  enabled: false
+  namespace: ""
+  label: grafana_dashboard
+  labelValue: "1"
+  extraLabels: {}
+  annotations: {}
+
+# -- Built-in `helm test` workload that provisions a small UpCloud PVC, mounts
+# it in a pod, writes random data and cleans up. Validates the full CSI path
+# end-to-end (controller -> UpCloud API -> node mount).
+tests:
+  enabled: true
+  pvcSize: 10Gi
+  # -- StorageClass to test against. Empty falls back to maxiops.
+  storageClass: ""
+  image:
+    registry: registry.k8s.io
+    repository: e2e-test-images/busybox
+    tag: "1.36.1-1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  nodeSelector: {}
+  tolerations: []
+
+# -- Pod-level scheduling / runtime knobs applied to controller, node, and
+# snapshot-controller pods.
+hostAliases: []
+dnsConfig: {}
+runtimeClassName: ""
+schedulerName: ""
+# -- `OnRootMismatch` skips fsGroup re-chowning when the volume root already
+# has the requested gid. Saves several minutes of startup on large PVs.
+fsGroupChangePolicy: OnRootMismatch
+terminationMessagePolicy: FallbackToLogsOnError

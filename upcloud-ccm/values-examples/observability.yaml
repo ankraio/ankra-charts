@@ -1,0 +1,66 @@
+# values-examples/observability.yaml — Full observability stack overlay.
+#
+# Assumes kube-prometheus-stack is installed in the cluster (Prometheus
+# Operator + Grafana sidecar with the default `grafana_dashboard: "1"`
+# label selector).
+#
+# Install:
+#   helm upgrade --install upcloud-ccm oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm \
+#     -n kube-system \
+#     -f values-examples/observability.yaml \
+#     --set ccmConfig.clusterID=$(uuidgen) \
+#     --set credentials.username=$UPCLOUD_USERNAME \
+#     --set credentials.password=$UPCLOUD_PASSWORD
+
+replicaCount: 3
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    # Pick up by the kube-prometheus-stack Prometheus instance.
+    labels:
+      release: kube-prometheus-stack
+  podMonitor:
+    enabled: false  # ServiceMonitor is sufficient unless you don't want the headless Service
+  prometheusRule:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+    alerts:
+      ccmDown:
+        for: 5m
+        severity: critical
+        runbookUrl: https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm#troubleshooting
+      apiErrors:
+        severity: warning
+      crashLoop:
+        severity: critical
+    extraRules:
+      - alert: UpCloudCCMHighMemory
+        expr: |
+          sum by (pod) (container_memory_working_set_bytes{
+            namespace="kube-system",
+            pod=~"upcloud-ccm-.*",
+            container!=""
+          }) > 200 * 1024 * 1024
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "UpCloud CCM pod {{ $labels.pod }} memory >200Mi"
+          description: |
+            The CCM pod has been consuming more than 200Mi for >15m.
+            Consider bumping `resources.limits.memory` in the chart values.
+
+dashboard:
+  enabled: true
+  label: grafana_dashboard
+  labelValue: "1"
+
+networkPolicy:
+  enabled: true
+
+logVerbosity: 4

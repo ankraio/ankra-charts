@@ -105,12 +105,53 @@ suit your environment:
   capabilities dropped, seccomp `RuntimeDefault`.
 - `--profiling=false` and `--contention-profiling=false`.
 - Liveness/readiness probes target the CCM secure `/healthz` over HTTPS.
-- `metrics.serviceMonitor.enabled` exposes a Prometheus ServiceMonitor
-  (requires the Prometheus Operator CRDs).
+- `metrics.serviceMonitor.enabled` (or `metrics.podMonitor.enabled`) exposes
+  the CCM to Prometheus — requires the Prometheus Operator CRDs.
+- `metrics.prometheusRule.enabled` renders the recommended alert rules
+  (CCM down, leader-election flapping, API errors, crash loop).
+- `dashboard.enabled` ships a Grafana dashboard ConfigMap discovered by the
+  Grafana sidecar (`grafana_dashboard: "1"`).
 - `networkPolicy.enabled` (opt-in) restricts egress and ingress.
+- Pod-spec knobs available out of the box: `hostAliases`, `dnsConfig`,
+  `runtimeClassName`, `schedulerName`, `fsGroupChangePolicy`,
+  `terminationMessagePolicy`.
 
 See [`values-examples/production.yaml`](values-examples/production.yaml) for
-a complete production overlay.
+a complete production overlay and
+[`values-examples/observability.yaml`](values-examples/observability.yaml)
+for a full kube-prometheus-stack-compatible setup.
+
+## Observability
+
+The chart ships three opt-in observability resources:
+
+| Resource | Value flag | Purpose |
+|---|---|---|
+| `ServiceMonitor` | `metrics.serviceMonitor.enabled` | Prometheus Operator scrapes the headless metrics Service. |
+| `PodMonitor` | `metrics.podMonitor.enabled` | Alternative — scrapes pods directly without a Service. |
+| `PrometheusRule` | `metrics.prometheusRule.enabled` | Recommended alerts (see below). |
+| Grafana dashboard | `dashboard.enabled` | ConfigMap auto-discovered by the kube-prometheus-stack Grafana sidecar. |
+
+### Bundled alerts
+
+| Alert | Severity | Trigger |
+|---|---|---|
+| `UpCloudCCMDown` | critical | No Prometheus target Up for >5m. |
+| `UpCloudCCMLeaderElectionFlapping` | warning | Leader changes >6/h for 10m. |
+| `UpCloudCCMReconcileErrors` | warning | >5 UpCloud API errors in 5m, sustained 10m. |
+| `UpCloudCCMPodCrashLooping` | critical | >3 restarts in 15m, sustained 5m. |
+
+Tune severities, durations and add `extraRules:` via
+`metrics.prometheusRule.alerts.*` / `metrics.prometheusRule.extraRules`.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Nodes stuck `NotReady` with `node.cloudprovider.kubernetes.io/uninitialized` | CCM cannot reach UpCloud API or node lacks `upcloud-vm-uuid` annotation | Check pod logs; verify the two annotations on every node. |
+| LoadBalancer Service stays `pending` | `loadBalancerPlan` exhausted in account, or `loadBalancerMaxBackendMembers` exceeded | Bump plan or reduce backends. |
+| `helm test upcloud-ccm` fails | Rollout still in progress, or CCM crashing | `kubectl -n kube-system describe deploy upcloud-ccm` and inspect events. |
+| PrometheusRule rendered but no alerts fire | `metrics.prometheusRule.labels` does not include the selector your Prometheus uses (kube-prometheus-stack defaults to `release: <release-name>`) | Add `metrics.prometheusRule.labels.release=kube-prometheus-stack` (or your value). |
 
 ## Air-gapped installs
 
@@ -179,8 +220,15 @@ See [`values.yaml`](values.yaml) for the full list of values. Key knobs:
 | `images.ccm.tag` | `""` | Falls back to `.Chart.AppVersion`. |
 | `images.ccm.digest` | `""` | sha256 digest; takes precedence over `tag`. |
 | `metrics.serviceMonitor.enabled` | `false` | Opt-in Prometheus Operator integration. |
+| `metrics.podMonitor.enabled` | `false` | Direct pod scraping (alternative to ServiceMonitor). |
+| `metrics.prometheusRule.enabled` | `false` | Render recommended alert rules. |
+| `dashboard.enabled` | `false` | Grafana dashboard ConfigMap (sidecar discovery). |
+| `tests.enabled` | `true` | Render the `helm test` rollout-status pod. |
 | `networkPolicy.enabled` | `false` | Opt-in NetworkPolicy. |
 | `podDisruptionBudget.enabled` | `true` | Active when `replicaCount > 1`. |
+| `hostAliases` / `dnsConfig` / `runtimeClassName` / `schedulerName` | `[]` / `{}` / `""` / `""` | Pod-spec passthroughs. |
+| `fsGroupChangePolicy` | `OnRootMismatch` | Skip fsGroup chowns when already correct. |
+| `terminationMessagePolicy` | `FallbackToLogsOnError` | Surface logs on non-zero exits. |
 <!-- helm-docs-values-table-end -->
 
 ## See also

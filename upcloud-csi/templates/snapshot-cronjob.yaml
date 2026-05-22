@@ -1,0 +1,167 @@
+{{- if .Values.snapshotCronJob.enabled -}}
+{{- /*
+Opt-in CronJob that takes a `VolumeSnapshot` of every PVC matching the
+configured label selector. Useful as a safety net for stateful workloads
+without their own backup tooling (e.g. databases, MinIO).
+
+The Job runs as the `snapshot-cronjob` ServiceAccount and only has rights
+to `get/list pvcs` and `create/list/delete volumesnapshots` (see RBAC below).
+*/}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-cronjob
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-cronjob
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-cronjob
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-cronjob
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims, namespaces]
+    verbs: [get, list]
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshots]
+    verbs: [get, list, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-cronjob
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-cronjob
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot-cronjob
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "upcloud-csi.fullname" . }}-snapshot-cronjob
+    namespace: {{ include "upcloud-csi.namespace" . }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-snapshot
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-cronjob
+spec:
+  schedule: {{ .Values.snapshotCronJob.schedule | quote }}
+  timeZone: {{ .Values.snapshotCronJob.timeZone | quote }}
+  successfulJobsHistoryLimit: {{ .Values.snapshotCronJob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.snapshotCronJob.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ .Values.snapshotCronJob.concurrencyPolicy }}
+  startingDeadlineSeconds: {{ .Values.snapshotCronJob.startingDeadlineSeconds }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.snapshotCronJob.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.snapshotCronJob.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.snapshotCronJob.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            {{- include "upcloud-csi.labels" . | nindent 12 }}
+            app.kubernetes.io/component: snapshot-cronjob
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "upcloud-csi.fullname" . }}-snapshot-cronjob
+          {{- with .Values.snapshotCronJob.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.snapshotCronJob.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: snapshot
+              image: "{{ .Values.snapshotCronJob.image.registry }}/{{ .Values.snapshotCronJob.image.repository }}:{{ .Values.snapshotCronJob.image.tag }}"
+              imagePullPolicy: {{ .Values.snapshotCronJob.image.pullPolicy }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                - name: PVC_LABEL_SELECTOR
+                  value: {{ .Values.snapshotCronJob.pvcLabelSelector | quote }}
+                - name: NAMESPACE_LABEL_SELECTOR
+                  value: {{ .Values.snapshotCronJob.namespaceLabelSelector | quote }}
+                - name: SNAPSHOT_CLASS
+                  value: {{ .Values.snapshotCronJob.snapshotClass | quote }}
+                - name: RETENTION_COUNT
+                  value: {{ .Values.snapshotCronJob.retentionCount | quote }}
+                - name: DRY_RUN
+                  value: {{ .Values.snapshotCronJob.dryRun | quote }}
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  ts="$(date -u +%Y%m%d-%H%M%S)"
+                  ns_filter=""
+                  if [ -n "$NAMESPACE_LABEL_SELECTOR" ]; then
+                    ns_filter="$(kubectl get ns -l $NAMESPACE_LABEL_SELECTOR -o jsonpath='{.items[*].metadata.name}')"
+                  else
+                    ns_filter="$(kubectl get ns -o jsonpath='{.items[*].metadata.name}')"
+                  fi
+                  echo "Namespaces in scope: $ns_filter"
+                  for ns in $ns_filter; do
+                    pvcs="$(kubectl -n "$ns" get pvc ${PVC_LABEL_SELECTOR:+-l $PVC_LABEL_SELECTOR} \
+                      -o jsonpath='{range .items[?(@.spec.storageClassName)]}{.spec.storageClassName}{"|"}{.metadata.name}{"\n"}{end}' \
+                      | grep '^upcloud-block-storage-' | awk -F'|' '{print $2}')"
+                    for pvc in $pvcs; do
+                      name="upcloud-snap-${pvc}-${ts}"
+                      if [ "$DRY_RUN" = "true" ]; then
+                        echo "[dry-run] would snapshot $ns/$pvc -> $name"
+                        continue
+                      fi
+                      echo "Snapshotting $ns/$pvc -> $name"
+                      cat <<EOF | kubectl apply -f -
+                  apiVersion: snapshot.storage.k8s.io/v1
+                  kind: VolumeSnapshot
+                  metadata:
+                    name: $name
+                    namespace: $ns
+                    labels:
+                      app.kubernetes.io/created-by: {{ include "upcloud-csi.fullname" . }}-snapshot
+                      upcloud-csi.ankra.io/source-pvc: "$pvc"
+                  spec:
+                    volumeSnapshotClassName: $SNAPSHOT_CLASS
+                    source:
+                      persistentVolumeClaimName: $pvc
+                  EOF
+                    done
+                    if [ "$RETENTION_COUNT" -gt 0 ] && [ "$DRY_RUN" != "true" ]; then
+                      old="$(kubectl -n "$ns" get volumesnapshot \
+                        -l app.kubernetes.io/created-by={{ include "upcloud-csi.fullname" . }}-snapshot \
+                        --sort-by=.metadata.creationTimestamp \
+                        -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' \
+                        | head -n -"$RETENTION_COUNT")"
+                      for snap in $old; do
+                        echo "Rotating out $ns/$snap"
+                        kubectl -n "$ns" delete volumesnapshot "$snap"
+                      done
+                    fi
+                  done
+              resources:
+                {{- toYaml .Values.snapshotCronJob.resources | nindent 16 }}
+{{- end }}

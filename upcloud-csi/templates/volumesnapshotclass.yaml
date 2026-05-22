@@ -1,10 +1,18 @@
-{{- if .Values.snapshotController.enabled -}}
+{{- if and .Values.snapshotController.enabled .Values.snapshotClasses.delete.enabled -}}
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshotClass
 metadata:
-  name: upcloud-csi-snapshotclass
+  name: {{ .Values.snapshotClasses.delete.name }}
   labels:
     {{- include "upcloud-csi.labels" . | nindent 4 }}
+  {{- if .Values.snapshotClasses.delete.isDefault }}
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+  {{- end }}
 driver: storage.csi.upcloud.com
 deletionPolicy: Delete
+{{- with .Values.snapshotClasses.delete.parameters }}
+parameters:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}

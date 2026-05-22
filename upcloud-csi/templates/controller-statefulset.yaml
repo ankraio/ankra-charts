@@ -46,10 +46,26 @@ spec:
       serviceAccountName: {{ .Values.serviceAccount.controllerName }}
       automountServiceAccountToken: true
       priorityClassName: {{ .Values.controller.priorityClassName }}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.schedulerName }}
+      schedulerName: {{ . }}
+      {{- end }}
       dnsPolicy: {{ .Values.controller.dnsPolicy }}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       terminationGracePeriodSeconds: {{ .Values.controller.terminationGracePeriodSeconds }}
       securityContext:
-        {{- toYaml .Values.controller.podSecurityContext | nindent 8 }}
+        {{- $psc := deepCopy .Values.controller.podSecurityContext -}}
+        {{- if .Values.fsGroupChangePolicy }}{{- $_ := set $psc "fsGroupChangePolicy" .Values.fsGroupChangePolicy }}{{- end }}
+        {{- toYaml $psc | nindent 8 }}
       {{- with .Values.controller.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -70,6 +86,7 @@ spec:
         - name: csi-provisioner
           image: {{ include "upcloud-csi.image" (dict "image" .Values.images.provisioner "context" .) }}
           imagePullPolicy: {{ .Values.images.provisioner.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           args:
             - "--csi-address=$(ADDRESS)"
             - "--v={{ .Values.controller.logVerbosity }}"
@@ -88,6 +105,7 @@ spec:
         - name: csi-attacher
           image: {{ include "upcloud-csi.image" (dict "image" .Values.images.attacher "context" .) }}
           imagePullPolicy: {{ .Values.images.attacher.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           args:
             - "--v={{ .Values.controller.logVerbosity }}"
             - "--csi-address=$(ADDRESS)"
@@ -106,6 +124,7 @@ spec:
         - name: csi-resizer
           image: {{ include "upcloud-csi.image" (dict "image" .Values.images.resizer "context" .) }}
           imagePullPolicy: {{ .Values.images.resizer.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           args:
             - "--v={{ .Values.controller.logVerbosity }}"
             - "--timeout=600s"
@@ -125,6 +144,7 @@ spec:
         - name: csi-snapshotter
           image: {{ include "upcloud-csi.image" (dict "image" .Values.images.snapshotter "context" .) }}
           imagePullPolicy: {{ .Values.images.snapshotter.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           args:
             - "--csi-address=$(ADDRESS)"
             - "--v={{ .Values.controller.logVerbosity }}"
@@ -147,6 +167,7 @@ spec:
         - name: csi-upcloud-plugin
           image: {{ include "upcloud-csi.image" (dict "image" .Values.images.csiDriver "context" .) }}
           imagePullPolicy: {{ .Values.images.csiDriver.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--nodehost=$(NODE_ID)"

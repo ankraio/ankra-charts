@@ -1,0 +1,35 @@
+# values-examples/backup-cronjob.yaml — periodic VolumeSnapshot CronJob.
+#
+# Snapshots every UpCloud-backed PVC every day at 02:00 UTC and rotates
+# old snapshots, keeping the 7 most recent per PVC. Snapshots use the
+# "Retain" VolumeSnapshotClass so the underlying UpCloud snapshot survives
+# the K8s VolumeSnapshot being deleted, matching a "weekly archive" policy.
+#
+# Pair with the upcloud-csi observability overlay to alert on snapshot
+# failures.
+
+snapshotClasses:
+  retain:
+    enabled: true
+    name: upcloud-csi-snapshotclass-retain
+
+snapshotCronJob:
+  enabled: true
+  schedule: "0 2 * * *"
+  timeZone: "Etc/UTC"
+  # Snapshot only PVCs explicitly opted in via this label. Drop this to
+  # snapshot every UpCloud PVC in the cluster.
+  pvcLabelSelector: "backup.ankra.io/enabled=true"
+  # Restrict to specific namespaces; empty to scan everything.
+  namespaceLabelSelector: ""
+  snapshotClass: upcloud-csi-snapshotclass-retain
+  retentionCount: 7
+  dryRun: false
+  concurrencyPolicy: Forbid
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi

@@ -18,9 +18,11 @@
 .vscode/
 
 # Vendored upstream YAML kept for diffing; not part of the rendered chart.
-vendor/
+/vendor/
 
-# CI/dev helpers.
-tests/
-values-examples/
-CHANGELOG.md
+# CI/dev helpers. Anchored with a leading slash so they only match the chart
+# root (otherwise `templates/tests/` — the helm-test hook pods — would be
+# excluded from the rendered chart too).
+/tests/
+/values-examples/
+/CHANGELOG.md

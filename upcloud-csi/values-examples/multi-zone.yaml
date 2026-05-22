@@ -1,0 +1,77 @@
+# values-examples/multi-zone.yaml — restrict each StorageClass to a single
+# UpCloud zone and have the scheduler co-locate pods with their PVs.
+#
+# UpCloud block storage volumes are zone-bound: a `fi-hel1` volume cannot be
+# attached to a `fi-hel2` VM. When a single cluster spans multiple zones,
+# WaitForFirstConsumer + allowedTopologies ensures the scheduler picks a
+# node in a zone where the volume can actually be created.
+#
+# This overlay assumes nodes are labelled with
+# `topology.kubernetes.io/zone=<fi-hel1|fi-hel2|...>` — set this via the CCM
+# (when running) or kubectl label.
+
+storageClasses:
+  defaultClass: maxiops
+  # WFC is recommended whenever allowedTopologies is set.
+  volumeBindingMode: WaitForFirstConsumer
+  reclaimPolicy: Retain
+  # Chart-wide allowedTopologies — applied to every tier unless that tier
+  # overrides it.
+  allowedTopologies:
+    - matchLabelExpressions:
+        - key: topology.kubernetes.io/zone
+          values:
+            - fi-hel1
+            - fi-hel2
+
+  maxiops:
+    enabled: true
+    name: upcloud-block-storage-maxiops
+    extraParameters:
+      # Filesystem to format with (ext4 default, xfs supported)
+      csi.storage.k8s.io/fstype: xfs
+    mountOptions:
+      - noatime
+      - nodiratime
+    # Override the chart-wide allowedTopologies to pin to a single zone.
+    allowedTopologies:
+      - matchLabelExpressions:
+          - key: topology.kubernetes.io/zone
+            values: [fi-hel1]
+
+  standard:
+    enabled: true
+    name: upcloud-block-storage-standard
+    extraParameters:
+      csi.storage.k8s.io/fstype: ext4
+    allowedTopologies:
+      - matchLabelExpressions:
+          - key: topology.kubernetes.io/zone
+            values: [fi-hel2]
+
+  hdd:
+    enabled: false
+
+snapshotClasses:
+  delete:
+    enabled: true
+    isDefault: true
+  # Retain SC for compliance backups before destructive changes.
+  retain:
+    enabled: true
+    name: upcloud-csi-snapshotclass-retain
+
+# Pin controllers to a single zone for snapshot/restore consistency.
+controller:
+  replicaCount: 2
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+    topology.kubernetes.io/zone: fi-hel1
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: controller
+          app.kubernetes.io/name: upcloud-csi

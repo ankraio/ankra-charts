@@ -16,22 +16,49 @@ that touches a chart (or manually via **Actions → charts-publish → Run workf
 Registry namespace: `oci://ghcr.io/ankraio/ankra-charts`
 
 ```bash
-# UpCloud CCM
+# UpCloud CCM (0.2.0+ ships PrometheusRule, PodMonitor, Grafana dashboard, helm test hook)
 helm install upcloud-ccm oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm \
-  --version 0.1.0 -n kube-system \
+  --version 0.2.0 -n kube-system \
   --set ccmConfig.clusterID="$(uuidgen)" \
   --set credentials.username="$UPCLOUD_USERNAME" \
   --set credentials.password="$UPCLOUD_PASSWORD"
 
-# UpCloud CSI
+# UpCloud CSI (0.2.0+ ships VolumeSnapshotClass with Retain policy, periodic snapshot CronJob,
+# allowedTopologies, PrometheusRule, PodMonitor, Grafana dashboard, helm test hook)
 helm install upcloud-csi oci://ghcr.io/ankraio/ankra-charts/upcloud-csi \
-  --version 0.1.0 -n kube-system \
+  --version 0.2.0 -n kube-system \
   --set storageClasses.defaultClass=maxiops
 
 # Cloudflare operator
 helm install cloudflare-operator oci://ghcr.io/ankraio/ankra-charts/cloudflare-operator \
   --version 0.1.0 -n cloudflare-operator-system --create-namespace \
   -f cloudflare-operator/values-examples/minimal.yaml
+```
+
+### UpCloud — observability overlays
+
+```bash
+# Full kube-prometheus-stack integration for both charts (alerts + dashboard).
+helm upgrade upcloud-ccm oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm \
+  --version 0.2.0 -n kube-system \
+  -f upcloud-ccm/values-examples/observability.yaml \
+  --set ccmConfig.clusterID="$(uuidgen)" \
+  --set credentials.username="$UPCLOUD_USERNAME" \
+  --set credentials.password="$UPCLOUD_PASSWORD"
+
+helm upgrade upcloud-csi oci://ghcr.io/ankraio/ankra-charts/upcloud-csi \
+  --version 0.2.0 -n kube-system \
+  -f upcloud-csi/values-examples/observability.yaml
+
+# Periodic VolumeSnapshot CronJob (daily 02:00 UTC, 7-snapshot retention).
+helm upgrade upcloud-csi oci://ghcr.io/ankraio/ankra-charts/upcloud-csi \
+  --version 0.2.0 -n kube-system \
+  -f upcloud-csi/values-examples/backup-cronjob.yaml
+
+# Multi-zone topology constraints.
+helm upgrade upcloud-csi oci://ghcr.io/ankraio/ankra-charts/upcloud-csi \
+  --version 0.2.0 -n kube-system \
+  -f upcloud-csi/values-examples/multi-zone.yaml
 ```
 
 Private clusters need a registry login first:

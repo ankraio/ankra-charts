@@ -1,0 +1,47 @@
+suite: helm test hook
+templates:
+  - templates/tests/test-storage.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: renders by default
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.storageClassName
+          value: upcloud-block-storage-maxiops
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+
+  - it: renders the mount pod with hook-weight 1
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Pod
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "1"
+      - equal:
+          path: spec.containers[0].volumeMounts[0].mountPath
+          value: /data
+
+  - it: can be disabled
+    set:
+      tests.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: honours tests.storageClass override
+    documentIndex: 0
+    set:
+      tests.storageClass: upcloud-block-storage-standard
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: upcloud-block-storage-standard

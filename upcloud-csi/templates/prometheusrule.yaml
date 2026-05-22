@@ -1,0 +1,118 @@
+{{- if .Values.metrics.prometheusRule.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}
+  namespace: {{ default (include "upcloud-csi.namespace" .) .Values.metrics.prometheusRule.namespace }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: upcloud-csi.rules
+      rules:
+        - alert: UpCloudCSIControllerDown
+          expr: |
+            kube_statefulset_status_replicas_ready{
+              namespace="{{ include "upcloud-csi.namespace" . }}",
+              statefulset="{{ include "upcloud-csi.fullname" . }}-controller"
+            } < {{ .Values.controller.replicaCount }}
+          for: {{ .Values.metrics.prometheusRule.alerts.controllerDown.for | default "5m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.controllerDown.severity | default "critical" }}
+          annotations:
+            summary: "UpCloud CSI controller has fewer Ready replicas than expected"
+            description: |
+              StatefulSet {{ include "upcloud-csi.fullname" . }}-controller has
+              fewer Ready replicas than requested. PVC creation, attachment
+              and resize will stall.
+            runbook_url: {{ .Values.metrics.prometheusRule.alerts.controllerDown.runbookUrl | default "https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi#troubleshooting" | quote }}
+
+        - alert: UpCloudCSINodeMissing
+          expr: |
+            (
+              count(kube_node_info)
+              - count(kube_pod_info{
+                  namespace="{{ include "upcloud-csi.namespace" . }}",
+                  pod=~"{{ include "upcloud-csi.fullname" . }}-node-.*"
+                })
+            ) > 0
+          for: {{ .Values.metrics.prometheusRule.alerts.nodeMissing.for | default "10m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.nodeMissing.severity | default "warning" }}
+          annotations:
+            summary: "UpCloud CSI node DaemonSet is missing pods on some nodes"
+            description: |
+              The csi-upcloud node DaemonSet is not present on every node in
+              the cluster. New pods on those nodes will fail to mount UpCloud
+              PersistentVolumes.
+
+        - alert: UpCloudCSIPVCPending
+          expr: |
+            kube_persistentvolumeclaim_status_phase{
+              phase="Pending",
+              storageclass=~"upcloud-block-storage-.*"
+            } > 0
+          for: {{ .Values.metrics.prometheusRule.alerts.pvcPending.for | default "15m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.pvcPending.severity | default "warning" }}
+          annotations:
+            summary: "PVC pending against an UpCloud StorageClass for >15m"
+            description: |
+              PVC {{`{{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }}`}}
+              has been Pending for >15m. Common causes: UpCloud API quota
+              exhausted, region mismatch between PVC topology and worker node,
+              or CSI controller crash-looping.
+
+        - alert: UpCloudCSISnapshotControllerDown
+          expr: |
+            kube_deployment_status_replicas_available{
+              namespace="{{ include "upcloud-csi.namespace" . }}",
+              deployment="{{ include "upcloud-csi.fullname" . }}-snapshot-controller"
+            } < 1
+          for: {{ .Values.metrics.prometheusRule.alerts.snapshotControllerDown.for | default "10m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.snapshotControllerDown.severity | default "warning" }}
+          annotations:
+            summary: "Snapshot controller has no Available replicas"
+            description: |
+              VolumeSnapshot reconciliation has stopped. New `VolumeSnapshot`
+              resources will not be promoted to `VolumeSnapshotContent`.
+
+        - alert: UpCloudCSIVolumeNearFull
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes
+                / kubelet_volume_stats_capacity_bytes
+            ) > {{ .Values.metrics.prometheusRule.alerts.volumeNearFull.threshold | default 0.85 }}
+            and on (namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_info{storageclass=~"upcloud-block-storage-.*"}
+          for: {{ .Values.metrics.prometheusRule.alerts.volumeNearFull.for | default "15m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.volumeNearFull.severity | default "warning" }}
+          annotations:
+            summary: "UpCloud PV {{`{{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }}`}} is >{{ (mul (.Values.metrics.prometheusRule.alerts.volumeNearFull.threshold | default 0.85) 100) | int }}% full"
+            description: |
+              Resize the PVC (`kubectl edit pvc ...` — UpCloud CSI supports
+              online resize since v1.4.0) or schedule a backup + rotation.
+
+        - alert: UpCloudCSIPodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{
+              namespace="{{ include "upcloud-csi.namespace" . }}",
+              pod=~"{{ include "upcloud-csi.fullname" . }}-.*"
+            }[15m]) > 3
+          for: {{ .Values.metrics.prometheusRule.alerts.crashLoop.for | default "5m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.crashLoop.severity | default "critical" }}
+          annotations:
+            summary: "UpCloud CSI pod {{`{{ $labels.pod }}`}} is crash-looping"
+            description: |
+              `kubectl -n {{ include "upcloud-csi.namespace" . }} logs {{`{{ $labels.pod }}`}} -c csi-upcloud-plugin`
+              usually surfaces the cause.
+        {{- with .Values.metrics.prometheusRule.extraRules }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

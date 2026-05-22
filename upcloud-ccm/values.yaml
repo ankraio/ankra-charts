@@ -220,6 +220,102 @@ metrics:
     # -- The CCM uses a self-signed cert on its secure port.
     tlsConfig:
       insecureSkipVerify: true
+  # -- PodMonitor (alternative to ServiceMonitor — scrapes pods directly without
+  # requiring a Service). Useful when running multiple replicas behind a headless
+  # Service is undesirable.
+  podMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    namespace: ""
+    labels: {}
+    relabelings: []
+    metricRelabelings: []
+    tlsConfig:
+      insecureSkipVerify: true
+  # -- PrometheusRule containing recommended alerts (CCM down, leader election
+  # flapping, API errors, crash loop).
+  prometheusRule:
+    enabled: false
+    namespace: ""
+    labels: {}
+    # -- Free-form list of extra `monitoring.coreos.com/v1` alert rules merged
+    # into the rendered group. Use to add project-specific SLOs.
+    extraRules: []
+    alerts:
+      ccmDown:
+        for: 5m
+        severity: critical
+        runbookUrl: ""
+        extraLabels: {}
+      leaderElectionFlapping:
+        for: 10m
+        severity: warning
+      apiErrors:
+        for: 10m
+        severity: warning
+      crashLoop:
+        for: 5m
+        severity: critical
+
+# -- Pre-canned Grafana dashboard rendered as a ConfigMap. Picked up by the
+# kube-prometheus-stack Grafana sidecar via the configured label/value.
+dashboard:
+  enabled: false
+  # -- Namespace for the ConfigMap. Defaults to the release namespace. Set this
+  # to your Grafana namespace if the sidecar only watches a specific namespace.
+  namespace: ""
+  # -- Label key the Grafana sidecar selects on
+  # (`--label`/`GF_SIDECAR_LABEL`). Default matches kube-prometheus-stack.
+  label: grafana_dashboard
+  # -- Value for the selector label.
+  labelValue: "1"
+  extraLabels: {}
+  annotations: {}
+
+# -- Built-in `helm test` pod that verifies the Deployment is healthy after
+# install/upgrade. Runs `kubectl rollout status` against the CCM Deployment.
+tests:
+  enabled: true
+  timeout: 120s
+  image:
+    registry: registry.k8s.io
+    repository: kubectl
+    tag: v1.31.0
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  nodeSelector: {}
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+
+# -- Optional pod-level scheduling/runtime knobs. Apply across the CCM
+# Deployment and the helm-test pod (where relevant).
+hostAliases: []
+# -- DNS overrides. Useful when the kube-apiserver is reached via a private
+# DNS zone resolved by an internal nameserver.
+dnsConfig: {}
+# -- Force a specific runtime class (e.g. `gvisor`, `kata`).
+runtimeClassName: ""
+# -- Use a non-default scheduler (e.g. `volcano`, a profile defined in
+# `KubeSchedulerConfiguration`). Empty string falls back to `default-scheduler`.
+schedulerName: ""
+# -- `OnRootMismatch` skips fsGroup ownership changes when the volume root
+# already has the requested gid. Faster startup for large PVs.
+fsGroupChangePolicy: OnRootMismatch
+# -- `FallbackToLogsOnError` makes Kubernetes surface container logs when the
+# container exits non-zero, instead of just `terminated` with no detail.
+terminationMessagePolicy: FallbackToLogsOnError
 
 # -- Logging verbosity (`--v=<n>` flag). 2 is upstream default.
 logVerbosity: 2

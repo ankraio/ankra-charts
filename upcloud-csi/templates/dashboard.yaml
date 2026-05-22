@@ -1,0 +1,120 @@
+{{- if .Values.dashboard.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "upcloud-csi.fullname" . }}-dashboard
+  namespace: {{ default (include "upcloud-csi.namespace" .) .Values.dashboard.namespace }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    {{ .Values.dashboard.label }}: {{ .Values.dashboard.labelValue | quote }}
+    {{- with .Values.dashboard.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.dashboard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  upcloud-csi.json: |-
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "graphTooltip": 1,
+      "title": "UpCloud CSI (block storage)",
+      "uid": "upcloud-csi",
+      "tags": ["upcloud", "csi", "storage", "ankra"],
+      "schemaVersion": 38,
+      "version": 1,
+      "time": {"from": "now-6h", "to": "now"},
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "query": "label_values(kube_pod_info, namespace)",
+            "current": {"text": "{{ include "upcloud-csi.namespace" . }}", "value": "{{ include "upcloud-csi.namespace" . }}"},
+            "refresh": 1
+          },
+          {
+            "name": "storageclass",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "query": "label_values(kube_storageclass_info{storageclass=~\"upcloud-block-storage-.*\"}, storageclass)",
+            "includeAll": true,
+            "multi": true,
+            "refresh": 1
+          }
+        ]
+      },
+      "panels": [
+        {
+          "title": "Controller replicas Ready",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "kube_statefulset_status_replicas_ready{namespace=\"$namespace\", statefulset=~\".*upcloud-csi-controller\"}", "refId": "A"}],
+          "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4}
+        },
+        {
+          "title": "Node DaemonSet Ready",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "kube_daemonset_status_number_ready{namespace=\"$namespace\", daemonset=~\".*upcloud-csi-node\"}", "refId": "A"}],
+          "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4}
+        },
+        {
+          "title": "Snapshot controller Ready",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "kube_deployment_status_replicas_available{namespace=\"$namespace\", deployment=~\".*upcloud-csi-snapshot-controller\"}", "refId": "A"}],
+          "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}
+        },
+        {
+          "title": "Pending UpCloud PVCs",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum(kube_persistentvolumeclaim_status_phase{phase=\"Pending\", storageclass=~\"upcloud-block-storage-.*\"})", "refId": "A"}],
+          "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}}},
+          "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4}
+        },
+        {
+          "title": "UpCloud volumes Bound by StorageClass",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum by (storageclass) (kube_persistentvolume_info{storageclass=~\"$storageclass\"})", "legendFormat": "{{`{{storageclass}}`}}", "refId": "A"}],
+          "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8}
+        },
+        {
+          "title": "Total storage Bound (GB)",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum by (storageclass) (kube_persistentvolume_capacity_bytes{storageclass=~\"$storageclass\"} / 1024 / 1024 / 1024)", "legendFormat": "{{`{{storageclass}}`}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "decgbytes"}},
+          "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8}
+        },
+        {
+          "title": "Volume utilisation (top 20)",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "topk(20, kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes and on (namespace, persistentvolumeclaim) kube_persistentvolumeclaim_info{storageclass=~\"upcloud-block-storage-.*\"})", "legendFormat": "{{`{{namespace}}/{{persistentvolumeclaim}}`}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "percentunit", "max": 1}},
+          "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10}
+        },
+        {
+          "title": "CSI controller restarts (15m)",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", pod=~\".*upcloud-csi.*\"}[15m]))", "legendFormat": "{{`{{pod}}`}}", "refId": "A"}],
+          "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8}
+        },
+        {
+          "title": "Memory usage (UpCloud CSI pods)",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\".*upcloud-csi.*\", container!=\"\"})", "legendFormat": "{{`{{pod}}`}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "bytes"}},
+          "gridPos": {"x": 12, "y": 22, "w": 12, "h": 8}
+        }
+      ]
+    }
+{{- end }}

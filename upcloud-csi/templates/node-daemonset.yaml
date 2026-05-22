@@ -35,8 +35,22 @@ spec:
       serviceAccountName: {{ .Values.serviceAccount.nodeName }}
       automountServiceAccountToken: true
       priorityClassName: {{ .Values.node.priorityClassName }}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.schedulerName }}
+      schedulerName: {{ . }}
+      {{- end }}
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       terminationGracePeriodSeconds: {{ .Values.node.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.node.podSecurityContext | nindent 8 }}
@@ -55,6 +69,7 @@ spec:
         - name: csi-node-driver-registrar
           image: {{ include "upcloud-csi.image" (dict "image" .Values.images.nodeDriverRegistrar "context" .) }}
           imagePullPolicy: {{ .Values.images.nodeDriverRegistrar.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           args:
             - "--v={{ .Values.node.logVerbosity }}"
             - "--csi-address=$(ADDRESS)"
@@ -80,6 +95,7 @@ spec:
         - name: csi-upcloud-plugin
           image: {{ include "upcloud-csi.image" (dict "image" .Values.images.csiDriver "context" .) }}
           imagePullPolicy: {{ .Values.images.csiDriver.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--nodehost=$(NODE_ID)"

@@ -1,0 +1,88 @@
+suite: observability templates
+templates:
+  - templates/prometheusrule.yaml
+  - templates/podmonitor.yaml
+  - templates/dashboard.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: renders nothing when observability toggles are off
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders PrometheusRule when enabled
+    template: templates/prometheusrule.yaml
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+      metrics.prometheusRule.enabled: true
+      metrics.prometheusRule.labels.release: kube-prometheus-stack
+    asserts:
+      - isKind:
+          of: PrometheusRule
+      - equal:
+          path: metadata.labels["release"]
+          value: kube-prometheus-stack
+      - contains:
+          path: spec.groups[0].rules
+          content:
+            alert: UpCloudCCMDown
+          any: true
+
+  - it: renders PodMonitor when enabled
+    template: templates/podmonitor.yaml
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+      metrics.podMonitor.enabled: true
+    asserts:
+      - isKind:
+          of: PodMonitor
+      - equal:
+          path: spec.podMetricsEndpoints[0].port
+          value: metrics
+      - equal:
+          path: spec.podMetricsEndpoints[0].scheme
+          value: https
+
+  - it: renders Grafana dashboard ConfigMap with the sidecar label
+    template: templates/dashboard.yaml
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+      dashboard.enabled: true
+      dashboard.label: grafana_dashboard
+      dashboard.labelValue: "1"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.labels["grafana_dashboard"]
+          value: "1"
+      - matchRegex:
+          path: data["upcloud-ccm.json"]
+          pattern: '"uid": "upcloud-ccm"'
+
+  - it: lets users override the sidecar label key
+    template: templates/dashboard.yaml
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+      dashboard.enabled: true
+      dashboard.label: my.org/grafana-dashboard
+      dashboard.labelValue: "true"
+    asserts:
+      - equal:
+          path: metadata.labels["my.org/grafana-dashboard"]
+          value: "true"

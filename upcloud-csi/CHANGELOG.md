@@ -12,6 +12,52 @@ auto-bumps these.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-22
+
+### Added
+
+- **Observability**: opt-in `PrometheusRule` with six recommended alerts
+  (`UpCloudCSIControllerDown`, `UpCloudCSINodeMissing`,
+  `UpCloudCSIPVCPending`, `UpCloudCSISnapshotControllerDown`,
+  `UpCloudCSIVolumeNearFull`, `UpCloudCSIPodCrashLooping`),
+  `PodMonitor` selecting controller + node CSI plugin pods, and a
+  pre-canned Grafana dashboard ConfigMap.
+- **Second VolumeSnapshotClass**: opt-in `upcloud-csi-snapshotclass-retain`
+  with `deletionPolicy: Retain` for compliance / pre-migration archives.
+- **Snapshot CronJob**: opt-in periodic `VolumeSnapshot` creation across
+  every UpCloud-backed PVC, with namespace + PVC label selectors,
+  configurable schedule / timezone, retention rotation, dry-run mode and
+  least-privilege scoped RBAC.
+- **StorageClass enrichments**: chart-wide and per-tier `allowedTopologies`,
+  `mountOptions`, `annotations`, and `reclaimPolicy` / `volumeBindingMode`
+  overrides.
+- **helm test hook**: provisions a small PVC, mounts it on a busybox pod,
+  writes and reads 4MiB of random data, then cleans up — exercises the
+  full controller → UpCloud → node mount path.
+- **Pod-spec passthroughs**: `hostAliases`, `dnsConfig`,
+  `runtimeClassName`, `schedulerName`, `fsGroupChangePolicy`,
+  `terminationMessagePolicy` across controller, node, snapshot-controller.
+- **New overlays**:
+  [`values-examples/observability.yaml`](values-examples/observability.yaml),
+  [`values-examples/multi-zone.yaml`](values-examples/multi-zone.yaml),
+  [`values-examples/backup-cronjob.yaml`](values-examples/backup-cronjob.yaml).
+- **README runbooks** for snapshot/restore, multi-zone, observability and
+  troubleshooting.
+- **Chart metadata**: artifacthub.io `images`, `recommendations`,
+  `category`, and rich `changes` annotations.
+- **helm-unittest suites** for the new templates (snapshot classes,
+  snapshot CronJob, storage-class topology, helm test hook,
+  observability).
+
+### Changed
+
+- `.helmignore` anchors `tests/` / `values-examples/` / `vendor/` /
+  `CHANGELOG.md` to the chart root (leading `/`) so
+  `templates/tests/test-storage.yaml` actually ships in the chart tarball.
+- `values.schema.json` extended with `snapshotClasses`, `snapshotCronJob`,
+  `metrics`, `dashboard`, `tests`, pod-spec passthrough fields, and per-tier
+  storage-class overrides.
+
 ## [0.1.0] - 2026-05-22
 
 ### Added

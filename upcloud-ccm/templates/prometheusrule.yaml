@@ -1,0 +1,81 @@
+{{- if .Values.metrics.prometheusRule.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "upcloud-ccm.fullname" . }}
+  namespace: {{ default (include "upcloud-ccm.namespace" .) .Values.metrics.prometheusRule.namespace }}
+  labels:
+    {{- include "upcloud-ccm.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: upcloud-ccm.rules
+      rules:
+        - alert: UpCloudCCMDown
+          expr: |
+            absent(up{job=~".*{{ include "upcloud-ccm.fullname" . }}.*"} == 1)
+          for: {{ .Values.metrics.prometheusRule.alerts.ccmDown.for | default "5m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.ccmDown.severity | default "critical" }}
+            {{- with .Values.metrics.prometheusRule.alerts.ccmDown.extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: "UpCloud Cloud Controller Manager is not reachable"
+            description: |
+              No Prometheus target for the UpCloud CCM Deployment
+              {{ include "upcloud-ccm.fullname" . }} has been Up for >5m.
+              Without the CCM, new nodes will stay tainted with
+              `node.cloudprovider.kubernetes.io/uninitialized`, no UpCloud
+              LoadBalancers will be reconciled, and Service annotations will
+              not be applied.
+            runbook_url: {{ .Values.metrics.prometheusRule.alerts.ccmDown.runbookUrl | default "https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm#troubleshooting" | quote }}
+
+        - alert: UpCloudCCMLeaderElectionFlapping
+          expr: |
+            rate(leader_election_master_status_total{job=~".*{{ include "upcloud-ccm.fullname" . }}.*"}[10m]) > 0.1
+          for: {{ .Values.metrics.prometheusRule.alerts.leaderElectionFlapping.for | default "10m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.leaderElectionFlapping.severity | default "warning" }}
+          annotations:
+            summary: "UpCloud CCM leader election is flapping"
+            description: |
+              The CCM Deployment {{ include "upcloud-ccm.fullname" . }} is
+              gaining/losing leadership more than 6 times per hour. Usually
+              caused by network instability between replicas and the apiserver
+              or by an under-resourced control plane.
+
+        - alert: UpCloudCCMReconcileErrors
+          expr: |
+            increase(cloud_provider_upcloud_api_request_errors_total{job=~".*{{ include "upcloud-ccm.fullname" . }}.*"}[5m]) > 5
+          for: {{ .Values.metrics.prometheusRule.alerts.apiErrors.for | default "10m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.apiErrors.severity | default "warning" }}
+          annotations:
+            summary: "UpCloud CCM seeing API errors"
+            description: |
+              The CCM has logged >5 UpCloud API errors in the last 5 minutes.
+              Check credentials, the UpCloud account quota, and the UpCloud
+              status page: https://status.upcloud.com/.
+
+        - alert: UpCloudCCMPodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{
+              namespace="{{ include "upcloud-ccm.namespace" . }}",
+              pod=~"{{ include "upcloud-ccm.fullname" . }}-.*"
+            }[15m]) > 3
+          for: {{ .Values.metrics.prometheusRule.alerts.crashLoop.for | default "5m" }}
+          labels:
+            severity: {{ .Values.metrics.prometheusRule.alerts.crashLoop.severity | default "critical" }}
+          annotations:
+            summary: "UpCloud CCM pod is crash-looping"
+            description: |
+              Pod {{`{{ $labels.pod }}`}} has restarted >3 times in the last
+              15 minutes. Usually a credentials/RBAC issue. Inspect logs:
+              `kubectl -n {{ include "upcloud-ccm.namespace" . }} logs {{`{{ $labels.pod }}`}}`.
+        {{- with .Values.metrics.prometheusRule.extraRules }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

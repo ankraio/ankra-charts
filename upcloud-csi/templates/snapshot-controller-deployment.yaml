@@ -38,8 +38,24 @@ spec:
       serviceAccountName: {{ .Values.serviceAccount.controllerName }}
       automountServiceAccountToken: true
       priorityClassName: {{ .Values.snapshotController.priorityClassName }}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.schedulerName }}
+      schedulerName: {{ . }}
+      {{- end }}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
-        {{- toYaml .Values.snapshotController.podSecurityContext | nindent 8 }}
+        {{- $psc := deepCopy .Values.snapshotController.podSecurityContext -}}
+        {{- if .Values.fsGroupChangePolicy }}{{- $_ := set $psc "fsGroupChangePolicy" .Values.fsGroupChangePolicy }}{{- end }}
+        {{- toYaml $psc | nindent 8 }}
       {{- with .Values.snapshotController.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -56,6 +72,7 @@ spec:
         - name: snapshot-controller
           image: {{ include "upcloud-csi.image" (dict "image" .Values.images.snapshotController "context" .) }}
           imagePullPolicy: {{ .Values.images.snapshotController.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
           args:
             - "--v={{ .Values.snapshotController.logVerbosity }}"
             - "--leader-election=true"

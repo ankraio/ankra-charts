@@ -1,0 +1,118 @@
+{{- if .Values.dashboard.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "upcloud-ccm.fullname" . }}-dashboard
+  namespace: {{ default (include "upcloud-ccm.namespace" .) .Values.dashboard.namespace }}
+  labels:
+    {{- include "upcloud-ccm.labels" . | nindent 4 }}
+    {{- /* Picked up by Grafana's sidecar (kiwigrid/k8s-sidecar) when the */}}
+    {{- /* `--label` matches. The kube-prometheus-stack default is        */}}
+    {{- /* `grafana_dashboard: "1"`.                                       */}}
+    {{ .Values.dashboard.label }}: {{ .Values.dashboard.labelValue | quote }}
+    {{- with .Values.dashboard.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.dashboard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  upcloud-ccm.json: |-
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "title": "UpCloud Cloud Controller Manager",
+      "uid": "upcloud-ccm",
+      "tags": ["upcloud", "ccm", "kubernetes", "ankra"],
+      "schemaVersion": 38,
+      "version": 1,
+      "time": {"from": "now-6h", "to": "now"},
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "query": "label_values(up{job=~\".*upcloud-ccm.*\"}, namespace)",
+            "current": {"text": "{{ include "upcloud-ccm.namespace" . }}", "value": "{{ include "upcloud-ccm.namespace" . }}"},
+            "refresh": 1
+          },
+          {
+            "name": "instance",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "query": "label_values(up{job=~\".*upcloud-ccm.*\", namespace=\"$namespace\"}, instance)",
+            "includeAll": true,
+            "multi": true,
+            "refresh": 1
+          }
+        ]
+      },
+      "panels": [
+        {
+          "title": "CCM Up",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum(up{job=~\".*upcloud-ccm.*\", namespace=\"$namespace\"})", "refId": "A"}],
+          "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}},
+          "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4}
+        },
+        {
+          "title": "Replicas",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "count(up{job=~\".*upcloud-ccm.*\", namespace=\"$namespace\"})", "refId": "A"}],
+          "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4}
+        },
+        {
+          "title": "Leader",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "leader_election_master_status{job=~\".*upcloud-ccm.*\", namespace=\"$namespace\"}", "legendFormat": "{{`{{instance}}`}}", "refId": "A"}],
+          "gridPos": {"x": 8, "y": 0, "w": 8, "h": 4}
+        },
+        {
+          "title": "Restarts (15m)",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", pod=~\".*upcloud-ccm.*\"}[15m]))", "refId": "A"}],
+          "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]}}},
+          "gridPos": {"x": 16, "y": 0, "w": 8, "h": 4}
+        },
+        {
+          "title": "Reconcile QPS",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum by (instance) (rate(workqueue_adds_total{job=~\".*upcloud-ccm.*\", namespace=\"$namespace\"}[5m]))", "legendFormat": "{{`{{instance}}`}}", "refId": "A"}],
+          "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8}
+        },
+        {
+          "title": "Reconcile latency p99",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "histogram_quantile(0.99, sum by (le, instance) (rate(workqueue_work_duration_seconds_bucket{job=~\".*upcloud-ccm.*\", namespace=\"$namespace\"}[5m])))", "legendFormat": "{{`{{instance}}`}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "s"}},
+          "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8}
+        },
+        {
+          "title": "CPU",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\".*upcloud-ccm.*\", container!=\"\"}[5m]))", "legendFormat": "{{`{{pod}}`}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "cores"}},
+          "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8}
+        },
+        {
+          "title": "Memory",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "targets": [{"expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\".*upcloud-ccm.*\", container!=\"\"})", "legendFormat": "{{`{{pod}}`}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "bytes"}},
+          "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8}
+        }
+      ]
+    }
+{{- end }}

@@ -1,0 +1,66 @@
+# values-examples/observability.yaml — Full observability stack overlay.
+#
+# Assumes kube-prometheus-stack is installed in the cluster (Prometheus
+# Operator + Grafana sidecar with the default `grafana_dashboard: "1"`
+# label selector).
+#
+# Install:
+#   helm upgrade --install upcloud-csi oci://ghcr.io/ankraio/ankra-charts/upcloud-csi \
+#     -n kube-system -f values-examples/observability.yaml
+
+controller:
+  replicaCount: 2
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+snapshotController:
+  enabled: true
+  replicaCount: 2
+
+metrics:
+  podMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      release: kube-prometheus-stack
+  prometheusRule:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+    alerts:
+      controllerDown:
+        for: 5m
+        severity: critical
+      pvcPending:
+        for: 15m
+        severity: warning
+      volumeNearFull:
+        for: 15m
+        severity: warning
+        threshold: 0.85
+      crashLoop:
+        severity: critical
+    extraRules:
+      - alert: UpCloudCSIAttachmentSlow
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(storage_operation_duration_seconds_bucket{
+              operation_name=~"volume_attach|volume_detach"
+            }[5m]))
+          ) > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "UpCloud CSI volume attach/detach p99 >60s"
+          description: |
+            Attach/detach is slow. Usually an UpCloud API rate-limit; the
+            csi-attacher will eventually catch up. Consider spreading
+            workloads across more PVCs.
+
+dashboard:
+  enabled: true
+  label: grafana_dashboard
+  labelValue: "1"

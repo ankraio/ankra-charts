@@ -1,0 +1,62 @@
+{{- if .Values.tests.enabled -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "upcloud-ccm.fullname" . }}-test-connection
+  namespace: {{ include "upcloud-ccm.namespace" . }}
+  labels:
+    {{- /* `upcloud-ccm.labels` already stamps an `app.kubernetes.io/component`
+           value of `cloud-controller-manager`. Skip adding a second one to
+           avoid duplicate YAML keys. */}}
+    {{- include "upcloud-ccm.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "upcloud-ccm.serviceAccountName" . }}
+  automountServiceAccountToken: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  {{- with .Values.tests.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.tests.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: kubectl
+      image: "{{ .Values.tests.image.registry }}/{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}"
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop: ["ALL"]
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "==> Checking CCM Deployment rollout"
+          kubectl -n "{{ include "upcloud-ccm.namespace" . }}" \
+            rollout status deployment/{{ include "upcloud-ccm.fullname" . }} \
+            --timeout={{ .Values.tests.timeout }}
+          echo "==> Checking that at least one CCM pod is Ready"
+          ready=$(kubectl -n "{{ include "upcloud-ccm.namespace" . }}" \
+            get pods -l app.kubernetes.io/name={{ include "upcloud-ccm.name" . }} \
+            -o jsonpath='{.items[?(@.status.containerStatuses[0].ready==true)].metadata.name}' | wc -w)
+          if [ "$ready" -lt 1 ]; then
+            echo "FAIL: no Ready CCM pods"; exit 1
+          fi
+          echo "==> CCM is healthy ($ready ready replicas)"
+      resources:
+        {{- toYaml .Values.tests.resources | nindent 8 }}
+{{- end }}
