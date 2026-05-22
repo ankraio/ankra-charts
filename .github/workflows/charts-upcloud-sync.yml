@@ -1,0 +1,175 @@
+name: charts-upcloud-sync
+
+# Daily sync of upcloud-{ccm,csi} against the upstream UpCloud release feeds.
+# Opens a single rolling PR whenever either chart is out of date with upstream.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      chart:
+        description: "Which chart to sync"
+        type: choice
+        options: [both, ccm, csi]
+        default: both
+      version:
+        description: "Override upstream version (default: latest from upstream)"
+        type: string
+        required: false
+
+concurrency:
+  group: charts-upcloud-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Install yq + crane
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+          CRANE_VERSION=v0.20.2
+          curl -fsSL -o /tmp/crane.tar.gz \
+            "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+          sudo tar -xzf /tmp/crane.tar.gz -C /usr/local/bin crane
+          crane version
+
+      - name: Determine which charts to sync
+        id: plan
+        env:
+          INPUT_CHART: ${{ github.event.inputs.chart || 'both' }}
+        run: |
+          set -euo pipefail
+          echo "Requested chart: ${INPUT_CHART}"
+          echo "do_ccm=false" >> "$GITHUB_OUTPUT"
+          echo "do_csi=false" >> "$GITHUB_OUTPUT"
+          if [[ "${INPUT_CHART}" == "both" || "${INPUT_CHART}" == "ccm" ]]; then
+            echo "do_ccm=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "${INPUT_CHART}" == "both" || "${INPUT_CHART}" == "csi" ]]; then
+            echo "do_csi=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run sync (CCM)
+        id: sync_ccm
+        if: steps.plan.outputs.do_ccm == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ github.event.inputs.version || '' }}
+        run: |
+          set -euo pipefail
+          rc=0
+          ./scripts/sync-upstream.sh ccm "${INPUT_VERSION}" || rc=$?
+          echo "exit_code=${rc}" >> "$GITHUB_OUTPUT"
+          if [[ "${rc}" != "0" && "${rc}" != "2" ]]; then
+            exit "${rc}"
+          fi
+
+      - name: Run sync (CSI)
+        id: sync_csi
+        if: steps.plan.outputs.do_csi == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ github.event.inputs.version || '' }}
+        run: |
+          set -euo pipefail
+          rc=0
+          ./scripts/sync-upstream.sh csi "${INPUT_VERSION}" || rc=$?
+          echo "exit_code=${rc}" >> "$GITHUB_OUTPUT"
+          if [[ "${rc}" != "0" && "${rc}" != "2" ]]; then
+            exit "${rc}"
+          fi
+
+      - name: Detect changes
+        id: changes
+        run: |
+          set -euo pipefail
+          if git diff --quiet --exit-code; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            git diff --stat
+          fi
+
+      - name: Helm lint (pre-PR sanity check)
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          set -euo pipefail
+          helm lint upcloud-ccm \
+            --set ccmConfig.clusterID=ci \
+            --set credentials.username=ci \
+            --set credentials.password=ci
+          helm lint upcloud-csi
+
+      - name: Compose PR body
+        if: steps.changes.outputs.has_changes == 'true'
+        id: pr_body
+        run: |
+          set -euo pipefail
+          ccm_rc="${{ steps.sync_ccm.outputs.exit_code || '0' }}"
+          csi_rc="${{ steps.sync_csi.outputs.exit_code || '0' }}"
+          ccm_app=$(grep -E '^appVersion:' upcloud-ccm/Chart.yaml | awk '{print $2}' | tr -d '"')
+          csi_app=$(grep -E '^appVersion:' upcloud-csi/Chart.yaml | awk '{print $2}' | tr -d '"')
+          {
+            echo "Automated sync of upcloud-{ccm,csi} against upstream UpCloud releases."
+            echo
+            echo "| Chart | Current appVersion | Sync exit code | Source |"
+            echo "|---|---|---|---|"
+            echo "| upcloud-ccm | \`${ccm_app}\` | \`${ccm_rc}\` | https://github.com/UpCloudLtd/cloud-controller-manager (fallback: GHCR tags) |"
+            echo "| upcloud-csi | \`${csi_app}\` | \`${csi_rc}\` | https://github.com/UpCloudLtd/upcloud-csi/releases/tag/${csi_app} |"
+            echo
+            if [[ "${ccm_rc}" == "2" || "${csi_rc}" == "2" ]]; then
+              echo "**Structural change detected** — vendored YAML changed in ways beyond image tags. **Manual review required.**"
+              echo
+            else
+              echo "Tag-only diff — safe to auto-merge once CI is green."
+              echo
+            fi
+            echo "Generated by [\`charts-upcloud-sync.yml\`](./.github/workflows/charts-upcloud-sync.yml) on $(date -u +%Y-%m-%dT%H:%M:%SZ)."
+          } > /tmp/pr-body.md
+          echo "body_path=/tmp/pr-body.md" >> "$GITHUB_OUTPUT"
+          labels="automated,dependencies,upcloud"
+          if [[ "${ccm_rc}" == "2" || "${csi_rc}" == "2" ]]; then
+            labels="${labels},needs-review"
+          fi
+          echo "labels=${labels}" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update PR
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6.1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore(upcloud): sync to upstream
+
+            Automated bump produced by .github/workflows/charts-upcloud-sync.yml.
+          branch: chore/charts-upcloud-sync
+          delete-branch: true
+          title: "chore(upcloud): sync to upstream UpCloud releases"
+          body-path: ${{ steps.pr_body.outputs.body_path }}
+          labels: ${{ steps.pr_body.outputs.labels }}
+          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+      - name: No-op summary
+        if: steps.changes.outputs.has_changes == 'false'
+        run: |
+          echo "UpCloud charts are already up to date with upstream. Nothing to PR."

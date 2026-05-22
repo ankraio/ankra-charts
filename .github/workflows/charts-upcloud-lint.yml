@@ -1,0 +1,186 @@
+name: charts-upcloud-lint
+
+# Lint, render, kubeconform-validate, helm-unittest, and chart-testing
+# install on kind for every PR touching upcloud-{ccm,csi}/** or the
+# shared sync script.
+
+on:
+  pull_request:
+    paths:
+      - "upcloud-ccm/**"
+      - "upcloud-csi/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-upcloud-lint.yml"
+      - ".github/workflows/charts-upcloud-sync.yml"
+  push:
+    paths:
+      - "upcloud-ccm/**"
+      - "upcloud-csi/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-upcloud-lint.yml"
+      - ".github/workflows/charts-upcloud-sync.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: charts-upcloud-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: shellcheck sync script
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+
+  lint:
+    name: helm lint / template / kubeconform / unittest (${{ matrix.chart }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: [upcloud-ccm, upcloud-csi]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.2
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          KC_VERSION=v0.6.7
+          curl -fsSL -o /tmp/kc.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KC_VERSION}/kubeconform-linux-amd64.tar.gz"
+          sudo tar -xzf /tmp/kc.tar.gz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: helm lint
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.chart }}" == "upcloud-ccm" ]]; then
+            helm lint ${{ matrix.chart }} \
+              --set ccmConfig.clusterID=ci-test \
+              --set credentials.username=ci \
+              --set credentials.password=ci
+          else
+            helm lint ${{ matrix.chart }}
+          fi
+
+      - name: helm template
+        id: render
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rendered
+          if [[ "${{ matrix.chart }}" == "upcloud-ccm" ]]; then
+            helm template ci ${{ matrix.chart }} \
+              --namespace kube-system \
+              --set ccmConfig.clusterID=ci-test \
+              --set credentials.username=ci \
+              --set credentials.password=ci \
+              > /tmp/rendered/${{ matrix.chart }}.yaml
+          else
+            helm template ci ${{ matrix.chart }} \
+              --namespace kube-system \
+              --set credentials.create=true \
+              --set credentials.existingSecret="" \
+              --set credentials.username=ci \
+              --set credentials.password=ci \
+              --set storageClasses.defaultClass=maxiops \
+              > /tmp/rendered/${{ matrix.chart }}.yaml
+          fi
+          wc -l /tmp/rendered/${{ matrix.chart }}.yaml
+
+      - name: kubeconform
+        run: |
+          set -euo pipefail
+          kubeconform \
+            -strict -summary -verbose \
+            -kubernetes-version 1.31.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{ .Group }}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \
+            -ignore-missing-schemas \
+            /tmp/rendered/${{ matrix.chart }}.yaml
+
+      - name: helm unittest
+        run: |
+          set -euo pipefail
+          if [[ -d "${{ matrix.chart }}/tests" ]]; then
+            helm unittest ${{ matrix.chart }}
+          else
+            echo "No tests/ directory yet; skipping helm-unittest"
+          fi
+
+  ct-install:
+    name: chart-testing install (kind ${{ matrix.k8s }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - k8s: "1.27"
+            node: "kindest/node:v1.27.16@sha256:2d21a61643eafc439905e18705b8186f3296384750a835ad7a005dceb9546d20"
+          - k8s: "1.29"
+            node: "kindest/node:v1.29.14@sha256:8703bd94ee24e51b778d5556ae310c6c0fa67d761fae6379c8e0bb480e6fea29"
+          - k8s: "1.31"
+            node: "kindest/node:v1.31.6@sha256:28b7cbb993dfe093c76641a0c95807637213c9109b761f1d422c2400e22b8e87"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.6.1
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          node_image: ${{ matrix.node }}
+          cluster_name: ct
+          config: |
+            kind: Cluster
+            apiVersion: kind.x-k8s.io/v1alpha4
+            nodes:
+              - role: control-plane
+              - role: worker
+
+      - name: ct install
+        run: |
+          set -euo pipefail
+          ct install \
+            --target-branch main \
+            --chart-dirs . \
+            --charts upcloud-ccm,upcloud-csi \
+            --helm-extra-set-args "--set=ccmConfig.clusterID=ci-test --set=credentials.username=ci --set=credentials.password=ci --set=credentials.create=true --set=credentials.existingSecret=" \
+            --skip-clean-up \
+            --validate-maintainers=false \
+            --upgrade=false || {
+              echo "ct install failed; printing pod state for debugging"
+              kubectl -n kube-system get pods -o wide
+              kubectl -n kube-system describe pods -l app.kubernetes.io/part-of=upcloud-charts || true
+              exit 1
+            }

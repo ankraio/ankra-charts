@@ -21,8 +21,8 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CHARTS_DIR="${REPO_ROOT}/charts"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+CHARTS_DIR="${REPO_ROOT}"
 CCM_DIR="${CHARTS_DIR}/upcloud-ccm"
 CSI_DIR="${CHARTS_DIR}/upcloud-csi"
 CSI_VENDOR_DIR="${CSI_DIR}/vendor"

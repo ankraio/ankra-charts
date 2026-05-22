@@ -1,0 +1,182 @@
+name: charts-cloudflare-operator-lint
+
+on:
+  pull_request:
+    paths:
+      - "cloudflare-operator/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-cloudflare-operator-lint.yml"
+      - ".github/workflows/charts-cloudflare-operator-sync.yml"
+  push:
+    paths:
+      - "cloudflare-operator/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-cloudflare-operator-lint.yml"
+      - ".github/workflows/charts-cloudflare-operator-sync.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: charts-cloudflare-operator-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: shellcheck sync-upstream.sh
+        run: shellcheck scripts/sync-upstream.sh
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Install helm-unittest + kubeconform
+        run: |
+          set -euo pipefail
+          if ! helm plugin list | awk '{print $1}' | grep -qx unittest; then
+            helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.2
+          fi
+          KUBECONFORM_VERSION=v0.6.7
+          curl -fsSL -o /tmp/kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          sudo tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: helm lint (defaults)
+        run: helm lint cloudflare-operator
+
+      - name: helm template — minimal overlay
+        run: |
+          mkdir -p /tmp/rendered
+          helm template ci cloudflare-operator \
+            --namespace cloudflare-operator-system \
+            -f cloudflare-operator/values-examples/minimal.yaml \
+            > /tmp/rendered/minimal.yaml
+
+      - name: helm template — production overlay
+        run: |
+          helm template ci cloudflare-operator \
+            --namespace cloudflare-operator-system \
+            -f cloudflare-operator/values-examples/production.yaml \
+            > /tmp/rendered/production.yaml
+
+      - name: helm template — air-gapped overlay
+        run: |
+          helm template ci cloudflare-operator \
+            --namespace cloudflare-operator-system \
+            -f cloudflare-operator/values-examples/air-gapped.yaml \
+            > /tmp/rendered/air-gapped.yaml
+
+      - name: helm template — full toggles
+        run: |
+          helm template ci cloudflare-operator \
+            --namespace cloudflare-operator-system \
+            --set credentials.create=true \
+            --set credentials.existingSecret="" \
+            --set-string credentials.apiToken=ci-token \
+            --set-string credentials.accountId=ci-account \
+            --set sampleClusterTunnel.enabled=true \
+            --set sampleClusterTunnel.cloudflareDomain=example.com \
+            --set sampleClusterTunnel.cloudflareEmail=ci@example.com \
+            --set originIssuer.enabled=true \
+            --set originIssuer.secret.create=true \
+            --set originIssuer.secret.existingSecret="" \
+            --set-string originIssuer.secret.token=ci-origin-token \
+            --set metrics.serviceMonitor.enabled=true \
+            --set networkPolicy.enabled=true \
+            --set replicaCount=2 \
+            > /tmp/rendered/full.yaml
+
+      - name: kubeconform — validate every rendered overlay
+        run: |
+          set -euo pipefail
+          for f in /tmp/rendered/*.yaml; do
+            echo "::group::kubeconform $f"
+            kubeconform \
+              -strict \
+              -ignore-missing-schemas \
+              -skip "CustomResourceDefinition,ClusterTunnel,ClusterOriginIssuer,ServiceMonitor,Certificate,Issuer" \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              "$f"
+            echo "::endgroup::"
+          done
+
+      - name: helm unittest
+        run: helm unittest cloudflare-operator
+
+  chart-testing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s_version: ["v1.27.16", "v1.29.13", "v1.31.4"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.6.1
+
+      - name: Create Kind cluster (${{ matrix.k8s_version }})
+        uses: helm/kind-action@v1.10.0
+        with:
+          node_image: "kindest/node:${{ matrix.k8s_version }}"
+          cluster_name: cloudflare-operator-ct
+
+      - name: Install cert-manager (dependency of the chart)
+        run: |
+          set -euo pipefail
+          CM_VERSION=v1.16.2
+          kubectl apply --server-side --force-conflicts \
+            -f "https://github.com/cert-manager/cert-manager/releases/download/${CM_VERSION}/cert-manager.yaml"
+          kubectl wait --for=condition=Established --timeout=120s \
+            crd/certificates.cert-manager.io \
+            crd/issuers.cert-manager.io \
+            crd/clusterissuers.cert-manager.io
+          kubectl -n cert-manager rollout status deploy/cert-manager --timeout=180s
+          kubectl -n cert-manager rollout status deploy/cert-manager-cainjector --timeout=180s
+          kubectl -n cert-manager rollout status deploy/cert-manager-webhook --timeout=180s
+          kubectl wait --for=condition=Available --timeout=120s \
+            -n cert-manager deploy/cert-manager-webhook
+
+      - name: ct install (cloudflare-operator)
+        run: |
+          set -euo pipefail
+          kubectl create namespace cloudflare-operator-system \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n cloudflare-operator-system create secret generic cloudflare-secrets \
+            --from-literal=CLOUDFLARE_API_TOKEN=ci-placeholder \
+            --from-literal=CLOUDFLARE_ACCOUNT_ID=ci-placeholder \
+            --dry-run=client -o yaml | kubectl apply -f -
+          ct install \
+            --charts cloudflare-operator \
+            --namespace cloudflare-operator-system \
+            --helm-extra-args "--timeout 5m" \
+            --helm-extra-set-args "--set replicaCount=1 --set podDisruptionBudget.enabled=false --set networkPolicy.enabled=false"

@@ -18,19 +18,19 @@ In-tree Helm charts maintained by the Ankra platform team.
 
 ```bash
 # 1. UpCloud CCM
-helm install upcloud-ccm ./charts/upcloud-ccm -n kube-system \
+helm install upcloud-ccm ./upcloud-ccm -n kube-system \
   --set ccmConfig.clusterID="$(uuidgen)" \
   --set credentials.username="$UPCLOUD_USERNAME" \
   --set credentials.password="$UPCLOUD_PASSWORD"
 
 # 2. UpCloud CSI (reuses the CCM Secret by default)
-helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
+helm install upcloud-csi ./upcloud-csi -n kube-system \
   --set storageClasses.defaultClass=maxiops
 
 # 3. Cloudflare operator (assumes cert-manager + cloudflare-secrets exist)
-helm install cloudflare-operator ./charts/cloudflare-operator \
+helm install cloudflare-operator ./cloudflare-operator \
   -n cloudflare-operator-system --create-namespace \
-  -f ./charts/cloudflare-operator/values-examples/minimal.yaml
+  -f ./cloudflare-operator/values-examples/minimal.yaml
 ```
 
 ## Automation
@@ -39,10 +39,10 @@ GitHub Actions workflows under `.github/workflows/`:
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| [`charts-upcloud-sync.yml`](../.github/workflows/charts-upcloud-sync.yml) | Daily `17 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-upstream.sh` for both UpCloud charts and opens a rolling PR. |
-| [`charts-upcloud-lint.yml`](../.github/workflows/charts-upcloud-lint.yml) | PR / push under `charts/upcloud-{ccm,csi}/**` | `helm lint`, `helm template`, `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31. |
-| [`charts-cloudflare-operator-sync.yml`](../.github/workflows/charts-cloudflare-operator-sync.yml) | Daily `27 6 * * *` cron + `workflow_dispatch` | Re-vendors upstream `cloudflare-operator.{crds,}yaml`, re-splits CRDs, bumps `appVersion`, opens a rolling PR. |
-| [`charts-cloudflare-operator-lint.yml`](../.github/workflows/charts-cloudflare-operator-lint.yml) | PR / push under `charts/cloudflare-operator/**` | `shellcheck`, `helm lint`, `helm template` (4 overlays), `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31 (cert-manager pre-installed). |
+| [`charts-upcloud-sync.yml`](.github/workflows/charts-upcloud-sync.yml) | Daily `17 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-upstream.sh` for both UpCloud charts and opens a rolling PR. |
+| [`charts-upcloud-lint.yml`](.github/workflows/charts-upcloud-lint.yml) | PR / push under `upcloud-{ccm,csi}/**` | `helm lint`, `helm template`, `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31. |
+| [`charts-cloudflare-operator-sync.yml`](.github/workflows/charts-cloudflare-operator-sync.yml) | Daily `27 6 * * *` cron + `workflow_dispatch` | Re-vendors upstream `cloudflare-operator.{crds,}yaml`, re-splits CRDs, bumps `appVersion`, opens a rolling PR. |
+| [`charts-cloudflare-operator-lint.yml`](.github/workflows/charts-cloudflare-operator-lint.yml) | PR / push under `cloudflare-operator/**` | `shellcheck`, `helm lint`, `helm template` (4 overlays), `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31 (cert-manager pre-installed). |
 
 The sync script (`scripts/sync-upstream.sh`) is idempotent — re-running it
 with the same upstream version produces zero git diff. Exit codes:
@@ -57,65 +57,41 @@ with the same upstream version produces zero git diff. Exit codes:
 
 ```bash
 # Quick status — what versions are upstream vs vendored?
-./charts/scripts/sync-upstream.sh check
+./scripts/sync-upstream.sh check
 
 # Render charts.
-helm template ccm ./charts/upcloud-ccm -n kube-system \
+helm template ccm ./upcloud-ccm -n kube-system \
   --set ccmConfig.clusterID=ci-test \
   --set credentials.username=u --set credentials.password=p
-helm template csi ./charts/upcloud-csi -n kube-system
-helm template cf ./charts/cloudflare-operator -n cloudflare-operator-system
+helm template csi ./upcloud-csi -n kube-system
+helm template cf ./cloudflare-operator -n cloudflare-operator-system
 
 # Run helm-unittest suites.
 helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.2
-helm unittest charts/upcloud-ccm
-helm unittest charts/upcloud-csi
-helm unittest charts/cloudflare-operator
+helm unittest upcloud-ccm
+helm unittest upcloud-csi
+helm unittest cloudflare-operator
 
 # Sync a chart to a specific upstream version.
-./charts/scripts/sync-upstream.sh csi v1.5.0
-./charts/scripts/sync-upstream.sh ccm v1.2.3
-./charts/scripts/sync-upstream.sh cloudflare v0.13.1
+./scripts/sync-upstream.sh csi v1.5.0
+./scripts/sync-upstream.sh ccm v1.2.3
+./scripts/sync-upstream.sh cloudflare v0.13.1
 
-# Or simply `make` everything from the repo root.
-make -C charts test
+# Or simply `make test` from this repo root.
+make test
 ```
 
 ## Layout
 
 ```
-charts/
-├── README.md                      (this file)
-├── Makefile                       (developer convenience)
-├── scripts/
-│   └── sync-upstream.sh           (idempotent sync + tag/digest extraction)
+ankra-charts/                        (this repo root)
+├── README.md
+├── Makefile
+├── .github/workflows/               (GitHub Actions — must live here)
+├── scripts/sync-upstream.sh
 ├── upcloud-ccm/
-│   ├── Chart.yaml                 (apiVersion v2, kubeVersion >=1.27)
-│   ├── values.yaml                (Bitnami-pattern image overrides)
-│   ├── values.schema.json
-│   ├── README.md, CHANGELOG.md
-│   ├── templates/                 (Deployment, ConfigMap, Secret, SA, CRB, PDB, …)
-│   ├── tests/                     (helm-unittest)
-│   └── values-examples/{minimal,production,air-gapped}.yaml
 ├── upcloud-csi/
-│   ├── Chart.yaml                 (apiVersion v2, appVersion v1.4.0)
-│   ├── values.yaml                (per-image overrides for every sidecar)
-│   ├── values.schema.json
-│   ├── README.md, CHANGELOG.md
-│   ├── crds/                      (Helm 3 install-once; resource-policy: keep)
-│   ├── templates/                 (CSIDriver, controller STS, snapshot-controller, node DS, SCs, …)
-│   ├── tests/                     (helm-unittest)
-│   ├── vendor/                    (raw upstream YAML kept for diffing; not packaged)
-│   └── values-examples/{minimal,production,air-gapped}.yaml
 └── cloudflare-operator/
-    ├── Chart.yaml                 (apiVersion v2, appVersion 0.13.1, kubeVersion >=1.27)
-    ├── values.yaml                (Bitnami-pattern, credentials reuse, sample CRs)
-    ├── values.schema.json
-    ├── README.md, CHANGELOG.md
-    ├── templates/                 (CRDs, Deployment, RBAC, webhook cert/Service, metrics, NetworkPolicy, sample CRs)
-    ├── tests/                     (helm-unittest)
-    ├── vendor/                    (raw upstream YAML — install + CRDs — kept for diffing; not packaged)
-    └── values-examples/{minimal,production,air-gapped}.yaml
 ```
 
 ## License
