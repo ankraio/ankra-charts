@@ -171,7 +171,6 @@ jobs:
             --charts upcloud-ccm,upcloud-csi \
             --helm-extra-set-args "--set=ccmConfig.clusterID=ci-test --set=credentials.username=ci --set=credentials.password=ci --set=credentials.create=true --set=credentials.existingSecret=" \
             --skip-clean-up \
-            --validate-maintainers=false \
             --upgrade=false || {
               echo "ct install failed; printing pod state for debugging"
               kubectl -n kube-system get pods -o wide
