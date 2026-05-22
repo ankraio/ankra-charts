@@ -125,10 +125,20 @@ jobs:
             echo "No tests/ directory yet; skipping helm-unittest"
           fi
 
-  ct-install:
-    name: chart-testing install (kind ${{ matrix.k8s }})
+  install-dry-run:
+    # `ct install` performs a `helm install --wait` and fails because:
+    #   - upcloud-ccm needs a real UpCloud API to clear node taints, so the
+    #     control-loop pod never reports Ready;
+    #   - upcloud-csi's node DaemonSet expects UpCloud-specific host paths
+    #     and the controller StatefulSet attaches against a real API.
+    # Neither chart can ever reach Ready in CI, so we validate the manifests
+    # against a real apiserver (server-side dry-run) instead. This catches
+    # everything chart-testing would have caught short of "did the workload
+    # start" — admission webhooks, schema errors, RBAC validation, CRD
+    # presence — without false-failing on missing cloud infra.
+    name: helm install --dry-run=server (kind ${{ matrix.k8s }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     needs: lint
     strategy:
       fail-fast: false
@@ -142,19 +152,10 @@ jobs:
             node: "kindest/node:v1.31.6@sha256:28b7cbb993dfe093c76641a0c95807637213c9109b761f1d422c2400e22b8e87"
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: azure/setup-helm@v4
         with:
           version: v3.14.0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.6.1
 
       - name: Create kind cluster
         uses: helm/kind-action@v1.10.0
@@ -162,18 +163,26 @@ jobs:
           node_image: ${{ matrix.node }}
           cluster_name: ct
 
-      - name: ct install
+      - name: helm install --dry-run=server (upcloud-ccm)
         run: |
           set -euo pipefail
-          ct install \
-            --target-branch main \
-            --chart-dirs . \
-            --charts upcloud-ccm,upcloud-csi \
-            --helm-extra-set-args "--set=ccmConfig.clusterID=ci-test --set=credentials.username=ci --set=credentials.password=ci --set=credentials.create=true --set=credentials.existingSecret=" \
-            --skip-clean-up \
-            --upgrade=false || {
-              echo "ct install failed; printing pod state for debugging"
-              kubectl -n kube-system get pods -o wide
-              kubectl -n kube-system describe pods -l app.kubernetes.io/part-of=upcloud-charts || true
-              exit 1
-            }
+          kubectl create namespace ccm-ci --dry-run=client -o yaml | kubectl apply -f -
+          helm install ccm upcloud-ccm \
+            --namespace ccm-ci \
+            --dry-run=server \
+            --set ccmConfig.clusterID=ci-test \
+            --set credentials.username=ci \
+            --set credentials.password=ci
+
+      - name: helm install --dry-run=server (upcloud-csi)
+        run: |
+          set -euo pipefail
+          kubectl create namespace csi-ci --dry-run=client -o yaml | kubectl apply -f -
+          helm install csi upcloud-csi \
+            --namespace csi-ci \
+            --dry-run=server \
+            --set credentials.create=true \
+            --set credentials.existingSecret="" \
+            --set credentials.username=ci \
+            --set credentials.password=ci \
+            --set storageClasses.defaultClass=maxiops
