@@ -67,9 +67,10 @@ ccmConfig:
   loadBalancerMaxBackendMembers: 100
 
 serviceAccount:
-  # -- Create a ServiceAccount. Off by default because K3s ships
-  # `cloud-controller-manager` SA in `kube-system` out of the box.
-  create: false
+  # -- Create a ServiceAccount. K3s only ships the `cloud-controller-manager`
+  # SA when its embedded CCM is enabled; with `--disable-cloud-controller`
+  # (the external-CCM setup this chart targets) the SA must be created here.
+  create: true
   # -- Name of the SA to use (either created here or referenced).
   name: "cloud-controller-manager"
   # -- Extra annotations on the SA.
@@ -79,10 +80,11 @@ serviceAccount:
   automountServiceAccountToken: true
 
 rbac:
-  # -- Render a ClusterRoleBinding that binds the SA above to the upstream
-  # `system:cloud-controller-manager` ClusterRole. Off by default — K3s
-  # provides the binding automatically. Set true on vanilla Kubernetes.
-  create: false
+  # -- Render a ClusterRole with the standard cloud-controller-manager
+  # permissions plus a ClusterRoleBinding to the SA above. Required when the
+  # cluster does not ship CCM RBAC of its own (e.g. K3s started with
+  # `--disable-cloud-controller`, or vanilla Kubernetes).
+  create: true
 
 # -- PriorityClass for the CCM pods. `system-cluster-critical` ensures they
 # evict last under pressure.
@@ -200,9 +202,11 @@ metrics:
   enabled: true
   # -- CCM secure port. Metrics + healthz served here.
   port: 10258
-  # -- Bind address. `127.0.0.1` is safest; switched to `0.0.0.0` automatically
+  # -- Bind address for the secure serving port. Must be reachable from the
+  # kubelet for the `/healthz` probes to pass; `127.0.0.1` would fail every
+  # probe and crash-loop the pod. `0.0.0.0` is also switched on automatically
   # when `serviceMonitor.enabled` is true so Prometheus can scrape.
-  bindAddress: "127.0.0.1"
+  bindAddress: "0.0.0.0"
   service:
     # -- Render a headless Service so Prometheus can discover the pods.
     # Auto-enabled when `serviceMonitor.enabled` is true.

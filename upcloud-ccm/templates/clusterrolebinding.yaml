@@ -8,9 +8,15 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: system:cloud-controller-manager
+  name: {{ include "upcloud-ccm.fullname" . }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "upcloud-ccm.serviceAccountName" . }}
+    namespace: {{ include "upcloud-ccm.namespace" . }}
+  # The UpCloud CCM creates and uses a dedicated `upcloud-shared-informers`
+  # ServiceAccount at runtime for its node informer; it needs the same
+  # permissions as the main SA or node address/provider-ID patching fails.
+  - kind: ServiceAccount
+    name: upcloud-shared-informers
     namespace: {{ include "upcloud-ccm.namespace" . }}
 {{- end }}

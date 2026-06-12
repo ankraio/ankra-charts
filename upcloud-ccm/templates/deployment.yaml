@@ -87,7 +87,7 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           command:
-            - /cloud-controller-manager
+            - /usr/local/bin/cloud-controller-manager
           args:
             - --cloud-provider=upcloud
             - --cloud-config=/etc/config/ccm-config.yaml
