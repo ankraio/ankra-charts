@@ -11,18 +11,7 @@ set:
   credentials.password: p
 
 tests:
-  - it: no SA / no CRB by default (K3s ships them)
-    asserts:
-      - hasDocuments:
-          count: 0
-        template: templates/serviceaccount.yaml
-      - hasDocuments:
-          count: 0
-        template: templates/clusterrolebinding.yaml
-
-  - it: creates SA when serviceAccount.create=true
-    set:
-      serviceAccount.create: true
+  - it: creates SA + CRB by default (external-CCM setup)
     asserts:
       - hasDocuments:
           count: 1
@@ -30,10 +19,30 @@ tests:
       - isKind:
           of: ServiceAccount
         template: templates/serviceaccount.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/clusterrolebinding.yaml
+      - isKind:
+          of: ClusterRoleBinding
+        template: templates/clusterrolebinding.yaml
 
-  - it: creates ClusterRoleBinding bound to system:cloud-controller-manager when rbac.create=true
+  - it: omits the SA when serviceAccount.create=false (cluster ships its own)
     set:
-      rbac.create: true
+      serviceAccount.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/serviceaccount.yaml
+
+  - it: omits the ClusterRoleBinding when rbac.create=false (cluster ships CCM RBAC)
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/clusterrolebinding.yaml
+
+  - it: binds the ClusterRoleBinding to the chart-managed ClusterRole
     asserts:
       - hasDocuments:
           count: 1
@@ -42,8 +51,12 @@ tests:
           of: ClusterRoleBinding
         template: templates/clusterrolebinding.yaml
       - equal:
+          path: roleRef.kind
+          value: ClusterRole
+        template: templates/clusterrolebinding.yaml
+      - equal:
           path: roleRef.name
-          value: system:cloud-controller-manager
+          value: ut-upcloud-ccm
         template: templates/clusterrolebinding.yaml
 
   # credentials.create + credentials.existingSecret mutex is enforced by the
