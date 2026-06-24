@@ -334,11 +334,8 @@ cmd_csi() {
             || die "failed to download ${url}"
     done
 
-    # Swap the `current` symlink atomically.
-    local tmp_link
-    tmp_link="${CSI_VENDOR_DIR}/current.tmp.$$"
-    ln -sfn "${version}" "${tmp_link}"
-    mv -f "${tmp_link}" "${CSI_VENDOR_DIR}/current"
+    # Point the `current` symlink at the freshly vendored version.
+    ln -sfn "${version}" "${CSI_VENDOR_DIR}/current"
 
     # Detect structural changes vs the previous vendor snapshot.
     local structural_change=0
@@ -410,11 +407,8 @@ cmd_cloudflare() {
             || die "failed to download ${url}"
     done
 
-    # Swap the `current` symlink atomically.
-    local tmp_link
-    tmp_link="${CF_VENDOR_DIR}/current.tmp.$$"
-    ln -sfn "${version}" "${tmp_link}"
-    mv -f "${tmp_link}" "${CF_VENDOR_DIR}/current"
+    # Point the `current` symlink at the freshly vendored version.
+    ln -sfn "${version}" "${CF_VENDOR_DIR}/current"
 
     # Detect structural changes vs the previous vendor snapshot (ignoring
     # image tag/digest churn so a digest-only release does not flip the bit).

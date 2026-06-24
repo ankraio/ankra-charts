@@ -85,6 +85,7 @@ tests:
     template: templates/deployment.yaml
     set:
       global.imageRegistry: harbor.internal
+      images.manager.digest: ""
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
