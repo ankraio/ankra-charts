@@ -1,0 +1,256 @@
+apiVersion: v1
+entries:
+  cloudflare-operator:
+  - annotations:
+      artifacthub.io/category: networking
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: CRDs only carry the cert-manager.io/inject-ca-from annotation when webhook.certManager.enabled is true, so bring-your-own-TLS installs no longer wire CRDs to a non-existent Certificate.
+        - kind: fixed
+          description: The sample ClusterTunnel now renders a real accountId (sampleClusterTunnel.accountId, falling back to credentials.accountId) and validates that one is set.
+        - kind: fixed
+          description: Deployment honors serviceAccount.automountServiceAccountToken instead of hardcoding true.
+        - kind: changed
+          description: Added chart icon and ArtifactHub metadata parity (category, licenses, images, recommendations); corrected README/NOTES to state only ClusterTunnel uses a conversion webhook.
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/crds: |
+        - kind: Tunnel
+          version: networking.cfargotunnel.com/v1alpha2
+          name: tunnels.networking.cfargotunnel.com
+          displayName: Cloudflare Tunnel
+          description: Namespaced Cloudflare Tunnel reconciled by the operator.
+        - kind: ClusterTunnel
+          version: networking.cfargotunnel.com/v1alpha2
+          name: clustertunnels.networking.cfargotunnel.com
+          displayName: Cloudflare Cluster Tunnel
+          description: Cluster-scoped Cloudflare Tunnel shared across namespaces.
+        - kind: TunnelBinding
+          version: networking.cfargotunnel.com/v1alpha1
+          name: tunnelbindings.networking.cfargotunnel.com
+          displayName: Cloudflare Tunnel Binding
+          description: Binds Kubernetes Services to a Cloudflare Tunnel hostname.
+        - kind: AccessTunnel
+          version: networking.cfargotunnel.com/v1alpha1
+          name: accesstunnels.networking.cfargotunnel.com
+          displayName: Cloudflare Access Tunnel
+          description: Cloudflare Zero Trust Access tunnel resource.
+      artifacthub.io/images: |
+        - name: cloudflare-operator
+          image: docker.io/adyanth/cloudflare-operator:0.13.1
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Source
+          url: https://github.com/ankraio/ankra-charts
+        - name: Helm repo (helm repo add)
+          url: https://ankraio.github.io/ankra-charts
+        - name: Upstream project
+          url: https://github.com/adyanth/cloudflare-operator
+        - name: Upstream documentation
+          url: https://adyanth.github.io/cloudflare-operator/
+        - name: Cloudflare Origin CA Issuer (cert-manager external issuer)
+          url: https://github.com/cloudflare/origin-ca-issuer
+        - name: Chart (OCI)
+          url: oci://ghcr.io/ankraio/ankra-charts/cloudflare-operator
+      artifacthub.io/maintainers: |
+        - name: Ankra AB
+          email: admin@ankra.io
+      artifacthub.io/operator: "true"
+      artifacthub.io/operatorCapabilities: Basic Install
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
+      category: Networking
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.13.1
+    created: "2026-06-28T18:51:25.513957+02:00"
+    description: 'Helm chart for the community Cloudflare Operator (adyanth/cloudflare-operator)
+      that reconciles Tunnel, ClusterTunnel, AccessTunnel and TunnelBinding CRDs against
+      Cloudflare Zero Trust / Cloudflare Tunnel. Optionally renders a ClusterOriginIssuer
+      for use with the cert-manager origin-ca-issuer. '
+    digest: 9b503ce916901f7ce5c6b461f6ab14795a1ed1d38d0934709f9b94ea1961215c
+    home: https://github.com/ankraio/ankra-charts/tree/main/cloudflare-operator
+    icon: https://ankra.io/images/apple-touch-icon.png
+    keywords:
+    - cloudflare
+    - cloudflare-tunnel
+    - cloudflared
+    - cloudflare-operator
+    - cert-manager
+    - origin-ca-issuer
+    - zero-trust
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - email: admin@ankra.io
+      name: Ankra AB
+      url: https://ankra.io
+    name: cloudflare-operator
+    sources:
+    - https://github.com/ankraio/ankra-charts/tree/main/cloudflare-operator
+    - https://github.com/adyanth/cloudflare-operator
+    type: application
+    urls:
+    - https://ankraio.github.io/ankra-charts/cloudflare-operator-0.2.0.tgz
+    version: 0.2.0
+  upcloud-ccm:
+  - annotations:
+      artifacthub.io/category: integration-delivery
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: PodMonitor no longer emits an empty bearerTokenSecret; supply metrics.podMonitor.bearerTokenSecret to scrape the secure port.
+        - kind: fixed
+          description: helm test now runs under a dedicated least-privilege ServiceAccount + namespaced Role instead of the cluster-privileged CCM ServiceAccount.
+        - kind: fixed
+          description: Deployment honors serviceAccount.automountServiceAccountToken instead of hardcoding true.
+        - kind: fixed
+          description: --bind-address is forced to 0.0.0.0 when either ServiceMonitor or PodMonitor is enabled.
+        - kind: changed
+          description: README requirements/defaults corrected to reflect serviceAccount.create and rbac.create defaulting to true.
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/images: |
+        - name: cloud-controller-manager
+          image: ghcr.io/upcloudltd/cloud-controller-manager:v1.2.1
+        - name: kubectl-test-hook
+          image: registry.k8s.io/kubectl:v1.31.0
+          whitelisted: true
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Source
+          url: https://github.com/ankraio/ankra-charts
+        - name: Helm repo (helm repo add)
+          url: https://ankraio.github.io/ankra-charts
+        - name: Upstream image (GHCR)
+          url: https://ghcr.io/upcloudltd/cloud-controller-manager
+        - name: Chart (OCI)
+          url: oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm
+      artifacthub.io/maintainers: |
+        - name: Ankra AB
+          email: admin@ankra.io
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/ankra-charts/upcloud-csi
+      category: Infrastructure
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: v1.2.1
+    created: "2026-06-28T18:51:25.515468+02:00"
+    description: UpCloud Cloud Controller Manager for Kubernetes — leader-elected,
+      hardened, with built-in Prometheus alerts & Grafana dashboard.
+    digest: 16a0c141f6d019e21fa7948cf9bf063ef5e2b7658a4ceb1f0e081753aacb9510
+    home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm
+    icon: https://ankra.io/images/apple-touch-icon.png
+    keywords:
+    - upcloud
+    - ccm
+    - cloud-controller-manager
+    - cloud-provider
+    - load-balancer
+    - k3s
+    - observability
+    - prometheus
+    - grafana
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - email: admin@ankra.io
+      name: Ankra AB
+      url: https://ankra.io
+    name: upcloud-ccm
+    sources:
+    - https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm
+    - https://upcloud.com/community/tutorials/getting-started-upcloud-kubernetes-services
+    type: application
+    urls:
+    - https://ankraio.github.io/ankra-charts/upcloud-ccm-0.3.0.tgz
+    version: 0.3.0
+  upcloud-csi:
+  - annotations:
+      artifacthub.io/category: storage
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: Snapshot CronJob retention is now applied per source PVC (filtered on the upcloud-csi.ankra.io/source-pvc label) instead of namespace-wide, so retentionCount keeps N snapshots per volume.
+        - kind: fixed
+          description: PodMonitor now scrapes a real metrics port - enabling it wires the csi-provisioner sidecar --http-endpoint and a matching controller container port (the driver itself exposes no metrics).
+        - kind: fixed
+          description: Snapshot validation webhook ClusterRoleBinding now binds the controller ServiceAccount the Deployment actually runs as (was the unused node ServiceAccount).
+        - kind: changed
+          description: Added a chart icon, a helm repo add link, and the snapshot-validation-webhook/kubectl/busybox images to ArtifactHub metadata.
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/images: |
+        - name: upcloud-csi
+          image: ghcr.io/upcloudltd/upcloud-csi:v1.4.0
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v3.1.0
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v3.4.0
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.4.0
+        - name: csi-snapshotter
+          image: registry.k8s.io/sig-storage/csi-snapshotter:v4.2.1
+        - name: snapshot-controller
+          image: registry.k8s.io/sig-storage/snapshot-controller:v4.2.1
+        - name: csi-node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.5.0
+        - name: snapshot-validation-webhook
+          image: registry.k8s.io/sig-storage/snapshot-validation-webhook:v4.2.1
+        - name: kubectl
+          image: registry.k8s.io/kubectl:v1.31.0
+        - name: busybox-test-hook
+          image: registry.k8s.io/e2e-test-images/busybox:1.36.1-1
+          whitelisted: true
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Source
+          url: https://github.com/ankraio/ankra-charts
+        - name: Helm repo (helm repo add)
+          url: https://ankraio.github.io/ankra-charts
+        - name: Upstream project
+          url: https://github.com/UpCloudLtd/upcloud-csi
+        - name: Upstream image (GHCR)
+          url: https://ghcr.io/upcloudltd/upcloud-csi
+        - name: Chart (OCI)
+          url: oci://ghcr.io/ankraio/ankra-charts/upcloud-csi
+      artifacthub.io/maintainers: |
+        - name: Ankra AB
+          email: admin@ankra.io
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/ankra-charts/upcloud-ccm
+      category: Storage
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: v1.4.0
+    created: "2026-06-28T18:51:25.518134+02:00"
+    description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
+      v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
+      alerts & Grafana dashboard.
+    digest: 0b8db2a2c97d49ab1d52831d84fb0fd1edda9af11548101abf35b6c6d2791d80
+    home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
+    icon: https://ankra.io/images/apple-touch-icon.png
+    keywords:
+    - upcloud
+    - csi
+    - storage
+    - block-storage
+    - persistent-volumes
+    - snapshots
+    - backup
+    - observability
+    - prometheus
+    - grafana
+    - k3s
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - email: admin@ankra.io
+      name: Ankra AB
+      url: https://ankra.io
+    name: upcloud-csi
+    sources:
+    - https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
+    - https://github.com/UpCloudLtd/upcloud-csi
+    type: application
+    urls:
+    - https://ankraio.github.io/ankra-charts/upcloud-csi-0.3.0.tgz
+    version: 0.3.0
+generated: "2026-06-28T18:51:25.511612+02:00"

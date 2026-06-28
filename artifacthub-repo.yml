@@ -1,0 +1,7 @@
+# ArtifactHub repository metadata.
+# repositoryID is populated after the repo is registered on artifacthub.io and
+# is used by ArtifactHub to verify ownership of this Helm repository.
+repositoryID: ""
+owners:
+  - name: Ankra AB
+    email: admin@ankra.io
