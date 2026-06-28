@@ -63,12 +63,12 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: 0.13.1
-    created: "2026-06-28T18:51:25.513957+02:00"
+    created: "2026-06-28T16:51:59.512002407Z"
     description: 'Helm chart for the community Cloudflare Operator (adyanth/cloudflare-operator)
       that reconciles Tunnel, ClusterTunnel, AccessTunnel and TunnelBinding CRDs against
       Cloudflare Zero Trust / Cloudflare Tunnel. Optionally renders a ClusterOriginIssuer
       for use with the cert-manager origin-ca-issuer. '
-    digest: 9b503ce916901f7ce5c6b461f6ab14795a1ed1d38d0934709f9b94ea1961215c
+    digest: 41f6b23eaf62b2f5c3390387db8342799f3162e9f11197aeae751df8e6247e51
     home: https://github.com/ankraio/ankra-charts/tree/main/cloudflare-operator
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -134,10 +134,10 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.1
-    created: "2026-06-28T18:51:25.515468+02:00"
+    created: "2026-06-28T16:51:59.513345863Z"
     description: UpCloud Cloud Controller Manager for Kubernetes — leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
-    digest: 16a0c141f6d019e21fa7948cf9bf063ef5e2b7658a4ceb1f0e081753aacb9510
+    digest: ee3067e4340f114593e66cf63b2fc4cf1d89441af89bca6de7e67a043cd92d13
     home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -221,11 +221,11 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-06-28T18:51:25.518134+02:00"
+    created: "2026-06-28T16:51:59.516387837Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
-    digest: 0b8db2a2c97d49ab1d52831d84fb0fd1edda9af11548101abf35b6c6d2791d80
+    digest: b49ce20400ffbab2691b445ce136fd1987a56b90322c713ec1fac1e58c2780c7
     home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -253,4 +253,4 @@ entries:
     urls:
     - https://ankraio.github.io/ankra-charts/upcloud-csi-0.3.0.tgz
     version: 0.3.0
-generated: "2026-06-28T18:51:25.511612+02:00"
+generated: "2026-06-28T16:51:59.510418042Z"
