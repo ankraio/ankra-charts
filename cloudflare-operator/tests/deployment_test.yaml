@@ -134,3 +134,12 @@ tests:
             secret:
               secretName: my-byo-webhook-tls
               defaultMode: 420
+
+  - it: honors serviceAccount.automountServiceAccountToken on the pod
+    template: templates/deployment.yaml
+    set:
+      serviceAccount.automountServiceAccountToken: false
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false

@@ -57,7 +57,7 @@ metadata:
     {{- include "upcloud-csi.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.serviceAccount.nodeName }}
+    name: {{ .Values.serviceAccount.controllerName }}
     namespace: {{ include "upcloud-csi.namespace" . }}
 roleRef:
   kind: ClusterRole

@@ -13,5 +13,5 @@ spec:
     email: {{ required "sampleClusterTunnel.cloudflareEmail is required" .Values.sampleClusterTunnel.cloudflareEmail | quote }}
     domain: {{ required "sampleClusterTunnel.cloudflareDomain is required" .Values.sampleClusterTunnel.cloudflareDomain | quote }}
     secret: {{ include "cloudflare-operator.cloudflareSecretName" . | quote }}
-    accountId: {{ .Values.credentials.accountId | quote }}
+    accountId: {{ default .Values.credentials.accountId .Values.sampleClusterTunnel.accountId | quote }}
 {{- end }}

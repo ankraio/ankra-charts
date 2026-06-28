@@ -53,3 +53,14 @@ tests:
           content:
             name: RETENTION_COUNT
             value: "30"
+
+  - it: rotates snapshots per source PVC, not namespace-wide
+    set:
+      snapshotCronJob.enabled: true
+    documentSelector:
+      path: kind
+      value: CronJob
+    asserts:
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
+          pattern: "upcloud-csi.ankra.io/source-pvc=\\$pvc"

@@ -235,6 +235,13 @@ metrics:
     labels: {}
     relabelings: []
     metricRelabelings: []
+    # -- Optional bearer-token Secret for the HTTPS metrics endpoint. Leave
+    # `name` empty to scrape without a token. PodMonitor (unlike ServiceMonitor)
+    # cannot read the projected SA token file, so supply a Secret here if the
+    # secure port rejects anonymous scrapes.
+    bearerTokenSecret: {}
+      # name: ccm-metrics-token
+      # key: token
     tlsConfig:
       insecureSkipVerify: true
   # -- PrometheusRule containing recommended alerts (CCM down, leader election

@@ -119,3 +119,17 @@ tests:
       - equal:
           path: metadata.annotations["helm.sh/resource-policy"]
           value: keep
+
+  - it: omits the CA-injection annotation on the CRD when bring-your-own TLS is used
+    template: templates/crd-clustertunnels.yaml
+    set:
+      webhook.certManager.enabled: false
+      webhook.existingSecretName: my-byo-webhook-tls
+    asserts:
+      - isKind:
+          of: CustomResourceDefinition
+      - notExists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep

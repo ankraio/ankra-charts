@@ -7,6 +7,34 @@ and the chart version follows [SemVer 2.0.0](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-28
+
+### Fixed
+
+- **Bring-your-own webhook TLS**: the `cert-manager.io/inject-ca-from`
+  annotation is now only rendered on the CRDs when `webhook.certManager.enabled`
+  is `true`. Previously, disabling cert-manager and supplying
+  `webhook.existingSecretName` left the CRDs pointing at a Certificate that was
+  never created, breaking the `ClusterTunnel` conversion webhook. The gating is
+  applied in both the templates and `scripts/sync-upstream.sh` so it survives
+  re-vendoring.
+- **Sample ClusterTunnel `accountId`**: the optional sample now renders a real
+  account ID via `sampleClusterTunnel.accountId` (falling back to
+  `credentials.accountId`), and template validation fails fast when neither is
+  set instead of rendering an empty `accountId`.
+- **`automountServiceAccountToken`**: the Deployment now honors
+  `serviceAccount.automountServiceAccountToken` instead of hardcoding `true`.
+
+### Changed
+
+- Added a chart `icon` and brought ArtifactHub metadata to parity with the
+  sibling charts (`category`, `licenses`, `artifacthub.io/category`,
+  `prerelease`, `containsSecurityUpdates`, `images`, `recommendations`,
+  maintainer URL, `helm repo add` link).
+- Corrected the README and `NOTES.txt`: only `ClusterTunnel` registers a
+  conversion webhook, and the post-install check no longer references a
+  non-existent APIService.
+
 ## [0.1.0] - 2026-05-22
 
 ### Added

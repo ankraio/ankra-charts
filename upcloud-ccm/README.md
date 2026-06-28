@@ -28,8 +28,8 @@ match Kubernetes nodes to UpCloud infrastructure.
 | Requirement | Notes |
 |---|---|
 | Kubernetes | `>= 1.27` (enforced by `Chart.yaml`'s `kubeVersion`) |
-| Cluster role | A `system:cloud-controller-manager` ClusterRole must exist. K3s ships it; vanilla Kubernetes does too. |
-| Service account | K3s pre-creates `cloud-controller-manager` in `kube-system`. If you're not on K3s, set `serviceAccount.create=true` and `rbac.create=true`. |
+| Cluster role | The chart renders its own ClusterRole + ClusterRoleBinding by default (`rbac.create=true`), targeting the external-CCM setup (K3s `--disable-cloud-controller` / vanilla Kubernetes). Set `rbac.create=false` if your cluster already ships CCM RBAC. |
+| Service account | The chart creates the ServiceAccount by default (`serviceAccount.create=true`). Set `serviceAccount.create=false` if your cluster pre-creates the `cloud-controller-manager` SA. |
 | Credentials | UpCloud API username & password with Manage permission. |
 | Cluster ID | A stable, unique string (UUID recommended). Required. |
 
@@ -213,8 +213,8 @@ See [`values.yaml`](values.yaml) for the full list of values. Key knobs:
 | `ccmConfig.loadBalancerPlan` | `"development"` | Default plan for managed LBs. |
 | `credentials.create` | `true` | Create a Secret from `username`/`password`. |
 | `credentials.existingSecret` | `""` | Reference an externally-managed Secret. |
-| `serviceAccount.create` | `false` | K3s ships its own SA. |
-| `rbac.create` | `false` | K3s ships its own ClusterRoleBinding. |
+| `serviceAccount.create` | `true` | Set `false` if your cluster pre-creates the CCM SA. |
+| `rbac.create` | `true` | Renders ClusterRole + ClusterRoleBinding. Set `false` if your cluster ships CCM RBAC. |
 | `images.ccm.registry` | `ghcr.io` | Overridden by `global.imageRegistry`. |
 | `images.ccm.repository` | `upcloudltd/cloud-controller-manager` | |
 | `images.ccm.tag` | `""` | Falls back to `.Chart.AppVersion`. |

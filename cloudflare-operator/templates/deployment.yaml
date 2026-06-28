@@ -36,7 +36,7 @@ spec:
     spec:
       {{- include "cloudflare-operator.imagePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "cloudflare-operator.serviceAccountName" . }}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}

@@ -37,7 +37,7 @@ tests:
             alert: UpCloudCCMDown
           any: true
 
-  - it: renders PodMonitor when enabled
+  - it: renders PodMonitor when enabled without an empty bearerTokenSecret
     template: templates/podmonitor.yaml
     set:
       ccmConfig.clusterID: ci
@@ -53,6 +53,25 @@ tests:
       - equal:
           path: spec.podMetricsEndpoints[0].scheme
           value: https
+      - notExists:
+          path: spec.podMetricsEndpoints[0].bearerTokenSecret
+
+  - it: renders the bearerTokenSecret only when a Secret name is supplied
+    template: templates/podmonitor.yaml
+    set:
+      ccmConfig.clusterID: ci
+      credentials.username: u
+      credentials.password: p
+      metrics.podMonitor.enabled: true
+      metrics.podMonitor.bearerTokenSecret.name: ccm-metrics-token
+      metrics.podMonitor.bearerTokenSecret.key: token
+    asserts:
+      - equal:
+          path: spec.podMetricsEndpoints[0].bearerTokenSecret.name
+          value: ccm-metrics-token
+      - equal:
+          path: spec.podMetricsEndpoints[0].bearerTokenSecret.key
+          value: token
 
   - it: renders Grafana dashboard ConfigMap with the sidecar label
     template: templates/dashboard.yaml

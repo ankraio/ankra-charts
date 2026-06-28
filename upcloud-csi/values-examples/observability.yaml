@@ -19,6 +19,11 @@ snapshotController:
   replicaCount: 2
 
 metrics:
+  # Enabling podMonitor automatically wires the csi-provisioner sidecar's
+  # `--http-endpoint=:<metrics.port>` and the matching `metrics` container port
+  # on the controller pods. The UpCloud CSI driver exposes no metrics itself,
+  # so CSI operation metrics come from the provisioner sidecar.
+  port: 8080
   podMonitor:
     enabled: true
     interval: 30s

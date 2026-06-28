@@ -6,6 +6,32 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-28
+
+### Fixed
+
+- **PodMonitor scrape auth**: removed the invalid empty `bearerTokenSecret`
+  (`name: ""`, `key: ""`) that broke HTTPS scrapes. The block is now opt-in via
+  `metrics.podMonitor.bearerTokenSecret.{name,key}` and omitted by default.
+- **helm test RBAC**: the test pod now runs under a dedicated
+  `<release>-test` ServiceAccount bound to a namespaced Role granting only
+  `get/list/watch` on `deployments` and `pods`, instead of reusing the
+  cluster-privileged CCM ServiceAccount (which lacked those rights and made
+  `helm test` fail).
+- **`automountServiceAccountToken`**: the Deployment now honors
+  `serviceAccount.automountServiceAccountToken` instead of hardcoding `true`.
+- **Metrics bind address**: `--bind-address=0.0.0.0` is now forced when either
+  `serviceMonitor.enabled` or `podMonitor.enabled` is set (previously only
+  ServiceMonitor).
+
+### Changed
+
+- README requirements and the values reference now correctly document
+  `serviceAccount.create` and `rbac.create` defaulting to `true` (external-CCM
+  setup), matching `values.yaml`.
+- Added a chart `icon` and a `helm repo add` link for ArtifactHub; removed the
+  broken dashboard screenshot reference and the empty `signKey` annotation.
+
 ## [0.2.0] - 2026-05-22
 
 ### Added

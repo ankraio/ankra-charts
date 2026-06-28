@@ -45,7 +45,20 @@ tests:
       sampleClusterTunnel.cloudflareDomain: example.com
       sampleClusterTunnel.cloudflareEmail: admin@example.com
       sampleClusterTunnel.tunnelName: my-cf-tunnel
+      credentials.accountId: my-account-id
     asserts:
       - equal:
           path: spec.newTunnel.name
           value: my-cf-tunnel
+
+  - it: uses sampleClusterTunnel.accountId over credentials.accountId when set
+    set:
+      sampleClusterTunnel.enabled: true
+      sampleClusterTunnel.cloudflareDomain: example.com
+      sampleClusterTunnel.cloudflareEmail: admin@example.com
+      sampleClusterTunnel.accountId: sample-specific-account
+      credentials.accountId: creds-account
+    asserts:
+      - equal:
+          path: spec.cloudflare.accountId
+          value: sample-specific-account

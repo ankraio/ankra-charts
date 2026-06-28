@@ -11,10 +11,11 @@ metadata:
     {{- include "upcloud-ccm.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": test
+    "helm.sh/hook-weight": "0"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
-  serviceAccountName: {{ include "upcloud-ccm.serviceAccountName" . }}
+  serviceAccountName: {{ include "upcloud-ccm.fullname" . }}-test
   automountServiceAccountToken: true
   securityContext:
     runAsNonRoot: true

@@ -1,0 +1,100 @@
+name: charts-pages
+
+# Publish the charts as a classic HTTP Helm repository on GitHub Pages so that
+# `helm repo add ankra https://ankraio.github.io/ankra-charts` works, and so
+# ArtifactHub can index the repo and auto-track new versions.
+#
+# Hand-rolled (rather than helm/chart-releaser-action) because the charts live
+# at the repo root rather than under a single `charts/` directory. Idempotent:
+# re-running with an already-published chart+version is a no-op. The gh-pages
+# branch (with index.html + artifacthub-repo.yml) is bootstrapped out-of-band.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "upcloud-ccm/**"
+      - "upcloud-csi/**"
+      - "cloudflare-operator/**"
+      - ".github/workflows/charts-pages.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: charts-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  PAGES_URL: https://ankraio.github.io/ankra-charts
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Lint and package charts
+        run: |
+          set -euo pipefail
+          mkdir -p .cr-packages
+          for chart in upcloud-ccm upcloud-csi cloudflare-operator; do
+            if [[ "${chart}" == "upcloud-ccm" ]]; then
+              helm lint "${chart}" \
+                --set ccmConfig.clusterID=ci \
+                --set credentials.username=ci \
+                --set credentials.password=ci
+            else
+              helm lint "${chart}"
+            fi
+            helm package "${chart}" --destination .cr-packages
+          done
+
+      - name: Update the Pages Helm repo index
+        run: |
+          set -euo pipefail
+          # Copy the freshly packaged charts in alongside the existing ones.
+          cp -f .cr-packages/*.tgz gh-pages/
+          # Regenerate index.yaml across all packages, preserving prior metadata.
+          helm repo index gh-pages --url "${PAGES_URL}" --merge gh-pages/index.yaml
+
+      - name: Commit and push to gh-pages
+        run: |
+          set -euo pipefail
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet --exit-code; then
+            echo "No chart index changes to publish."
+            exit 0
+          fi
+          git add -A
+          git commit -m "chore(charts): publish to Pages Helm repo [skip ci]"
+          git push origin gh-pages
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Helm repo (GitHub Pages)"
+            echo
+            echo '```bash'
+            echo "helm repo add ankra ${PAGES_URL}"
+            echo "helm repo update"
+            echo "helm search repo ankra"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

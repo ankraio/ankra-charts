@@ -4,7 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     helm.sh/resource-policy: keep
+    {{- if .Values.webhook.certManager.enabled }}
     cert-manager.io/inject-ca-from: {{ include "cloudflare-operator.namespace" . }}/{{ include "cloudflare-operator.fullname" . }}-serving-cert
+    {{- end }}
     controller-gen.kubebuilder.io/version: v0.16.1
   labels:
     {{- include "cloudflare-operator.labels" . | nindent 4 }}

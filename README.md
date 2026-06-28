@@ -8,9 +8,35 @@ In-tree Helm charts maintained by the Ankra platform team.
 | [`upcloud-csi`](upcloud-csi/README.md) | UpCloud CSI block-storage driver — controller StatefulSet, snapshot-controller, node DaemonSet, three StorageClasses. | Vendored from upstream [`UpCloudLtd/upcloud-csi`](https://github.com/UpCloudLtd/upcloud-csi); auto-bumped daily. |
 | [`cloudflare-operator`](cloudflare-operator/README.md) | Cloudflare Tunnel operator (Tunnel / ClusterTunnel / TunnelBinding / AccessTunnel CRDs) — plus optional `ClusterOriginIssuer` for the cert-manager Origin CA external issuer. | Vendored from upstream [`adyanth/cloudflare-operator`](https://github.com/adyanth/cloudflare-operator); auto-bumped daily. |
 
+## Install via `helm repo add` (recommended)
+
+Charts are published as a classic HTTP Helm repository on GitHub Pages and
+indexed on [ArtifactHub](https://artifacthub.io/packages/search?repo=ankra-charts).
+
+```bash
+helm repo add ankra https://ankraio.github.io/ankra-charts
+helm repo update
+helm search repo ankra
+
+# UpCloud CCM
+helm install upcloud-ccm ankra/upcloud-ccm --version 0.3.0 -n kube-system \
+  --set ccmConfig.clusterID="$(uuidgen)" \
+  --set credentials.username="$UPCLOUD_USERNAME" \
+  --set credentials.password="$UPCLOUD_PASSWORD"
+
+# UpCloud CSI
+helm install upcloud-csi ankra/upcloud-csi --version 0.3.0 -n kube-system \
+  --set storageClasses.defaultClass=maxiops
+
+# Cloudflare operator
+helm install cloudflare-operator ankra/cloudflare-operator --version 0.2.0 \
+  -n cloudflare-operator-system --create-namespace \
+  -f cloudflare-operator/values-examples/minimal.yaml
+```
+
 ## Install from GHCR (OCI)
 
-Charts are published to GitHub Container Registry on every merge to `main`
+Charts are also published to GitHub Container Registry on every merge to `main`
 that touches a chart (or manually via **Actions → charts-publish → Run workflow**).
 
 Registry namespace: `oci://ghcr.io/ankraio/ankra-charts`
@@ -103,6 +129,7 @@ GitHub Actions workflows under `.github/workflows/`:
 | [`charts-cloudflare-operator-sync.yml`](.github/workflows/charts-cloudflare-operator-sync.yml) | Daily `27 6 * * *` cron + `workflow_dispatch` | Re-vendors upstream `cloudflare-operator.{crds,}yaml`, re-splits CRDs, bumps `appVersion`, opens a rolling PR. |
 | [`charts-cloudflare-operator-lint.yml`](.github/workflows/charts-cloudflare-operator-lint.yml) | PR / push under `cloudflare-operator/**` | `shellcheck`, `helm lint`, `helm template` (4 overlays), `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31 (cert-manager pre-installed). |
 | [`charts-publish.yml`](.github/workflows/charts-publish.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` + `helm push` each chart to `oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>`. |
+| [`charts-pages.yml`](.github/workflows/charts-pages.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` each chart and publish `index.yaml` + `.tgz` to the `gh-pages` branch (the `helm repo add` HTTP repo; auto-tracked by ArtifactHub). |
 
 The sync script (`scripts/sync-upstream.sh`) is idempotent — re-running it
 with the same upstream version produces zero git diff. Exit codes:

@@ -22,9 +22,12 @@ spec:
       path: /metrics
       interval: {{ .Values.metrics.podMonitor.interval }}
       scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+      {{- with .Values.metrics.podMonitor.bearerTokenSecret }}
+      {{- if .name }}
       bearerTokenSecret:
-        name: ""
-        key: ""
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       tlsConfig:
         {{- toYaml .Values.metrics.podMonitor.tlsConfig | nindent 8 }}
       {{- with .Values.metrics.podMonitor.relabelings }}

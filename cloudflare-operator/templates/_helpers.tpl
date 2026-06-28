@@ -189,6 +189,9 @@ Validate required values. Called from any template that depends on them.
 {{- if and .Values.sampleClusterTunnel.enabled (or (not .Values.sampleClusterTunnel.cloudflareDomain) (not .Values.sampleClusterTunnel.cloudflareEmail)) -}}
 {{- fail "sampleClusterTunnel.enabled=true requires sampleClusterTunnel.cloudflareDomain and sampleClusterTunnel.cloudflareEmail." -}}
 {{- end -}}
+{{- if and .Values.sampleClusterTunnel.enabled (not (default .Values.credentials.accountId .Values.sampleClusterTunnel.accountId)) -}}
+{{- fail "sampleClusterTunnel.enabled=true requires an account ID: set sampleClusterTunnel.accountId or credentials.accountId." -}}
+{{- end -}}
 {{- if and .Values.originIssuer.enabled .Values.originIssuer.secret.create (not .Values.originIssuer.secret.token) -}}
 {{- fail "originIssuer.secret.create=true requires originIssuer.secret.token." -}}
 {{- end -}}

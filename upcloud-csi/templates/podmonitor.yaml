@@ -1,8 +1,8 @@
 {{- /*
-PodMonitor — scrapes the csi-upcloud-plugin metrics port on both the
-controller StatefulSet pods and the node DaemonSet pods. The driver exposes
-its metrics on the loopback interface; we expose them with `--metrics-address`
-via `controller.extraArgs`/`node.extraArgs` to a known port.
+PodMonitor — scrapes CSI operation metrics from the csi-provisioner sidecar on
+the controller pods. The UpCloud CSI driver itself exposes no metrics endpoint,
+so the provisioner sidecar (`--http-endpoint=:<metrics.port>`) is the source.
+The sidecar port + container port are wired automatically when this is enabled.
 */ -}}
 {{- if .Values.metrics.podMonitor.enabled -}}
 apiVersion: monitoring.coreos.com/v1
@@ -23,7 +23,7 @@ spec:
         values: [{{ include "upcloud-csi.name" . }}]
       - key: app.kubernetes.io/component
         operator: In
-        values: [controller, node]
+        values: [controller]
   namespaceSelector:
     matchNames:
       - {{ include "upcloud-csi.namespace" . }}

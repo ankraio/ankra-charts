@@ -13,10 +13,11 @@ NEXT STEPS
        kubectl -n {{ include "cloudflare-operator.namespace" . }} logs \
          -l app.kubernetes.io/name={{ include "cloudflare-operator.name" . }} --tail=50
 
-2. Confirm the CRDs are installed and the conversion webhook is reachable:
+2. Confirm the CRDs are installed and the ClusterTunnel conversion webhook is wired:
 
        kubectl get crd | grep cfargotunnel.com
-       kubectl get apiservice | grep cfargotunnel.com
+       kubectl get crd clustertunnels.networking.cfargotunnel.com \
+         -o jsonpath='{.spec.conversion.strategy}{"\n"}'
 {{- if .Values.webhook.certManager.enabled }}
 
    The chart provisioned the webhook serving cert via cert-manager

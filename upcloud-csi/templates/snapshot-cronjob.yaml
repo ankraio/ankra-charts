@@ -149,18 +149,18 @@ spec:
                     source:
                       persistentVolumeClaimName: $pvc
                   EOF
+                      if [ "$RETENTION_COUNT" -gt 0 ]; then
+                        old="$(kubectl -n "$ns" get volumesnapshot \
+                          -l app.kubernetes.io/created-by={{ include "upcloud-csi.fullname" . }}-snapshot,upcloud-csi.ankra.io/source-pvc=$pvc \
+                          --sort-by=.metadata.creationTimestamp \
+                          -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' \
+                          | head -n -"$RETENTION_COUNT")"
+                        for snap in $old; do
+                          echo "Rotating out $ns/$snap (pvc=$pvc)"
+                          kubectl -n "$ns" delete volumesnapshot "$snap"
+                        done
+                      fi
                     done
-                    if [ "$RETENTION_COUNT" -gt 0 ] && [ "$DRY_RUN" != "true" ]; then
-                      old="$(kubectl -n "$ns" get volumesnapshot \
-                        -l app.kubernetes.io/created-by={{ include "upcloud-csi.fullname" . }}-snapshot \
-                        --sort-by=.metadata.creationTimestamp \
-                        -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' \
-                        | head -n -"$RETENTION_COUNT")"
-                      for snap in $old; do
-                        echo "Rotating out $ns/$snap"
-                        kubectl -n "$ns" delete volumesnapshot "$snap"
-                      done
-                    fi
                   done
               resources:
                 {{- toYaml .Values.snapshotCronJob.resources | nindent 16 }}

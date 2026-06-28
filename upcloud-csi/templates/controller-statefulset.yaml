@@ -92,9 +92,19 @@ spec:
             - "--v={{ .Values.controller.logVerbosity }}"
             - "--timeout=600s"
             - "--leader-election=true"
+            {{- if .Values.metrics.podMonitor.enabled }}
+            - "--http-endpoint=:{{ .Values.metrics.port }}"
+            - "--metrics-path=/metrics"
+            {{- end }}
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
+          {{- if .Values.metrics.podMonitor.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+          {{- end }}
           securityContext:
             {{- toYaml .Values.controller.securityContext | nindent 12 }}
           resources:

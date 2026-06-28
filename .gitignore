@@ -1,0 +1,8 @@
+# Helm package artifacts
+*.tgz
+.cr-packages/
+.cr-release-packages/
+
+# Stray atomic-symlink temp files from older sync-upstream.sh runs
+vendor/**/current.tmp.*
+**/vendor/**/current.tmp.*

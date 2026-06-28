@@ -37,7 +37,7 @@ spec:
     spec:
       {{- include "upcloud-ccm.imagePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "upcloud-ccm.serviceAccountName" . }}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
@@ -96,7 +96,7 @@ spec:
             - --leader-elect-resource-lock=leases
             - --use-service-account-credentials=true
             - --secure-port={{ .Values.metrics.port }}
-            {{- if .Values.metrics.serviceMonitor.enabled }}
+            {{- if or .Values.metrics.serviceMonitor.enabled .Values.metrics.podMonitor.enabled }}
             - --bind-address=0.0.0.0
             {{- else }}
             - --bind-address={{ .Values.metrics.bindAddress }}

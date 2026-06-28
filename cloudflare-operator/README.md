@@ -242,5 +242,10 @@ opens a pull request labelled `needs-review` for human approval.
 | `TunnelBinding` | `networking.cfargotunnel.com/v1alpha1` | Namespaced |
 | `AccessTunnel` | `networking.cfargotunnel.com/v1alpha1` | Namespaced |
 
-All four use a conversion webhook served by this chart at
-`<release-namespace>/<fullname>-webhook` with TLS provided by cert-manager.
+Only `ClusterTunnel` registers a conversion webhook (v1alpha1 to v1alpha2),
+served by this chart at `<release-namespace>/<fullname>-webhook` with TLS
+provided by cert-manager. The other CRDs are single-version or use the default
+`None` conversion strategy. When `webhook.certManager.enabled=false` (bring your
+own TLS), the `cert-manager.io/inject-ca-from` annotation is omitted from the
+CRDs and you must populate `spec.conversion.webhook.clientConfig.caBundle`
+yourself.

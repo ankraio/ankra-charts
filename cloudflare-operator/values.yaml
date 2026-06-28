@@ -348,6 +348,10 @@ sampleClusterTunnel:
   cloudflareEmail: ""
   # -- Tunnel name shown in the Cloudflare dashboard. Defaults to `name`.
   tunnelName: ""
+  # -- Cloudflare account ID for the tunnel. Falls back to
+  # `credentials.accountId` when empty. One of the two must be set when
+  # `sampleClusterTunnel.enabled` is true (validated at template time).
+  accountId: ""
 
 originIssuer:
   # -- Render a `ClusterOriginIssuer` custom resource (from the official

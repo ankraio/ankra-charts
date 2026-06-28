@@ -12,6 +12,30 @@ auto-bumps these.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-28
+
+### Fixed
+
+- **Per-PVC snapshot retention**: the backup CronJob now rotates snapshots per
+  source PVC (filtering on the `upcloud-csi.ankra.io/source-pvc` label) instead
+  of namespace-wide. Previously `retentionCount` kept N snapshots across the
+  whole namespace, so with multiple PVCs each volume could be pruned down to
+  almost nothing.
+- **PodMonitor metrics target**: enabling `metrics.podMonitor.enabled` now wires
+  the csi-provisioner sidecar `--http-endpoint=:<metrics.port>` and a matching
+  `metrics` container port on the controller pods, and scopes the PodMonitor to
+  the controller. The UpCloud CSI driver exposes no metrics endpoint itself, so
+  the previous PodMonitor scraped a port nothing served.
+- **Snapshot webhook RBAC**: the snapshot-validation webhook ClusterRoleBinding
+  now binds the controller ServiceAccount the Deployment actually runs as
+  (previously bound the unused node ServiceAccount).
+
+### Changed
+
+- Added a chart `icon`, a `helm repo add` link, and the
+  `snapshot-validation-webhook` / `kubectl` / `busybox` images to ArtifactHub
+  metadata.
+
 ## [0.2.0] - 2026-05-22
 
 ### Added

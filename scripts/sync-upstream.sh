@@ -454,7 +454,9 @@ for d in docs:
     body = d
     body = body.replace(
         "cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)",
-        'cert-manager.io/inject-ca-from: {{ include "cloudflare-operator.namespace" . }}/{{ include "cloudflare-operator.fullname" . }}-serving-cert',
+        '{{- if .Values.webhook.certManager.enabled }}\n'
+        '    cert-manager.io/inject-ca-from: {{ include "cloudflare-operator.namespace" . }}/{{ include "cloudflare-operator.fullname" . }}-serving-cert\n'
+        '{{- end }}',
     )
     body = re.sub(
         r'(        service:\n          name: )webhook-service\n          namespace: system',
