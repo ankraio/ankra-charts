@@ -8,7 +8,7 @@ CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator psono
 HELM     ?= helm
 KCONFORM ?= kubeconform
 
-.PHONY: help lint template unittest test \
+.PHONY: help lint template unittest test secret-scan \
         sync sync-ccm sync-csi sync-cloudflare check docs
 
 help:
@@ -59,6 +59,13 @@ unittest:
 	done
 
 test: lint template unittest
+
+secret-scan:
+	@command -v gitleaks >/dev/null 2>&1 || { echo "install gitleaks: https://github.com/gitleaks/gitleaks#installing"; exit 1; }
+	@echo "==> gitleaks dir (working tree — tracked, staged & untracked)"
+	@gitleaks dir . --redact --verbose --no-banner
+	@echo "==> gitleaks git (full history — same as CI)"
+	@gitleaks git . --redact --no-banner
 
 sync:
 	@./scripts/sync-upstream.sh ccm

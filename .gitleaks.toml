@@ -1,0 +1,26 @@
+# gitleaks configuration for ankra-charts.
+#
+# Extends the upstream default ruleset that ships with the pinned gitleaks
+# release, then layers on a deliberately narrow allowlist for the
+# placeholder values this repo wires into CI renders, examples and docs.
+#
+# Run locally:              gitleaks git . --redact --verbose
+# Ignore a false positive:  add its printed Fingerprint to .gitleaksignore
+#                           (preferred over broadening the allowlist below).
+
+title = "ankra-charts gitleaks config"
+
+[extend]
+# Always start from the maintained upstream ruleset so new detectors ship
+# with every gitleaks version bump.
+useDefault = true
+
+[allowlist]
+description = "Repo-wide placeholders that are safe by construction."
+# RFC 2606 example domains plus the literal CI placeholder credentials
+# wired into the helm lint/template steps (Makefile + workflows). These are
+# never real secrets.
+regexes = [
+  '''example\.(com|org|net)''',
+  '''\bci-(test|token|account|origin-token|placeholder)\b''',
+]

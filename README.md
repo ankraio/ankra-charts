@@ -148,6 +148,7 @@ GitHub Actions workflows under `.github/workflows/`:
 | [`charts-cloudflare-operator-lint.yml`](.github/workflows/charts-cloudflare-operator-lint.yml) | PR / push under `cloudflare-operator/**` | `shellcheck`, `helm lint`, `helm template` (4 overlays), `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31 (cert-manager pre-installed). |
 | [`charts-publish.yml`](.github/workflows/charts-publish.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` + `helm push` each chart to `oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>`. |
 | [`charts-pages.yml`](.github/workflows/charts-pages.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` each chart and publish `index.yaml` + `.tgz` to the `gh-pages` branch (the `helm repo add` HTTP repo; auto-tracked by ArtifactHub). |
+| [`secret-scan.yml`](.github/workflows/secret-scan.yml) | Every PR / push to `main` + weekly cron + `workflow_dispatch` | Scans the full git history and working tree for committed secrets with the pinned [`gitleaks`](https://github.com/gitleaks/gitleaks) binary. Config: [`.gitleaks.toml`](.gitleaks.toml); false positives: [`.gitleaksignore`](.gitleaksignore). |
 
 The sync script (`scripts/sync-upstream.sh`) is idempotent — re-running it
 with the same upstream version produces zero git diff. Exit codes:
@@ -187,6 +188,9 @@ helm unittest psono
 
 # Or simply `make test` from this repo root.
 make test
+
+# Scan for committed secrets (needs gitleaks: https://github.com/gitleaks/gitleaks).
+make secret-scan
 ```
 
 ## Layout
