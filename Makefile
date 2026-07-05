@@ -4,7 +4,7 @@
 # working directory. Both `cd charts && make lint` and
 # `make -C charts lint` (from the repo root) work.
 
-CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator
+CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator psono
 HELM     ?= helm
 KCONFORM ?= kubeconform
 
@@ -24,6 +24,10 @@ lint:
 	@$(HELM) lint upcloud-csi
 	@echo "==> helm lint cloudflare-operator"
 	@$(HELM) lint cloudflare-operator
+	@echo "==> helm lint psono"
+	@$(HELM) lint psono \
+		--set base_url=https://psono.example.com \
+		--set domain=example.com
 
 template:
 	@mkdir -p /tmp/rendered
@@ -35,12 +39,23 @@ template:
 	@$(HELM) template cf  cloudflare-operator \
 		--namespace cloudflare-operator-system \
 		> /tmp/rendered/cloudflare-operator.yaml
-	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator}.yaml"
+	@$(HELM) template psono psono \
+		--namespace psono \
+		--set base_url=https://psono.example.com \
+		--set domain=example.com \
+		--set ingress.enabled=true \
+		--set adminClient.enabled=true \
+		> /tmp/rendered/psono.yaml
+	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,psono}.yaml"
 
 unittest:
 	@for c in $(CHARTS); do \
-		echo "==> helm unittest $$c"; \
-		$(HELM) unittest $$c; \
+		if [ -d "$$c/tests" ]; then \
+			echo "==> helm unittest $$c"; \
+			$(HELM) unittest $$c; \
+		else \
+			echo "==> skipping $$c (no tests/ directory)"; \
+		fi; \
 	done
 
 test: lint template unittest

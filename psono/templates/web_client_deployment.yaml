@@ -1,0 +1,80 @@
+{{- if .Values.webclient.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "webclient.fullname" . }}
+  labels:
+    {{- include "webclient.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.webclient.replicas }}
+  selector:
+    matchLabels:
+      {{- include "webclient.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/web_client_configmap.yaml") . | sha256sum }}
+        {{- with .Values.webclient.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "webclient.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with (default .Values.imagePullSecrets .Values.webclient.imagePullSecrets) }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "webclient.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.webclient.podSecurityContext | nindent 8 }}
+      containers:
+        - name: webclient
+          securityContext:
+            {{- toYaml .Values.webclient.securityContext | nindent 12 }}
+          image: "{{ .Values.webclient.image.repository }}:{{ .Values.webclient.image.tag }}"
+          imagePullPolicy: {{ .Values.webclient.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {{- toYaml .Values.webclient.resources | nindent 12 }}
+          env:
+            - name: PSONO_WEBCLIENT_CONFIG_JSON
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "webclient.fullname" . }}
+                  key: config.json
+            {{- range $key, $val := .Values.webclient.env }}
+            - name: {{ $key | quote }}
+              value: {{ $val | quote }}
+            {{- end }}
+          {{- with .Values.webclient.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.webclient.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webclient.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webclient.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.webclient.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

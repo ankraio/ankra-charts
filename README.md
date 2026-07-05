@@ -7,6 +7,7 @@ In-tree Helm charts maintained by the Ankra platform team.
 | [`upcloud-ccm`](upcloud-ccm/README.md) | UpCloud Cloud Controller Manager — provisions LoadBalancers, manages node labels, clears the `uninitialized` cloud-provider taint. | Hand-written from UpCloud docs; image `ghcr.io/upcloudltd/cloud-controller-manager`. |
 | [`upcloud-csi`](upcloud-csi/README.md) | UpCloud CSI block-storage driver — controller StatefulSet, snapshot-controller, node DaemonSet, three StorageClasses. | Vendored from upstream [`UpCloudLtd/upcloud-csi`](https://github.com/UpCloudLtd/upcloud-csi); auto-bumped daily. |
 | [`cloudflare-operator`](cloudflare-operator/README.md) | Cloudflare Tunnel operator (Tunnel / ClusterTunnel / TunnelBinding / AccessTunnel CRDs) — plus optional `ClusterOriginIssuer` for the cert-manager Origin CA external issuer. | Vendored from upstream [`adyanth/cloudflare-operator`](https://github.com/adyanth/cloudflare-operator); auto-bumped daily. |
+| [`psono`](psono/README.md) | Self-hosted [Psono](https://psono.com/) password manager — server, web client and optional admin client behind a single nginx Ingress. Bring your own PostgreSQL + Secrets. | Hand-written from Psono [server install docs](https://doc.psono.com/admin/installation/install-server-ce.html); images `psono/psono-{server,client,admin-client}`. |
 
 ## Install via `helm repo add` (recommended)
 
@@ -59,6 +60,15 @@ helm install upcloud-csi oci://ghcr.io/ankraio/ankra-charts/upcloud-csi \
 helm install cloudflare-operator oci://ghcr.io/ankraio/ankra-charts/cloudflare-operator \
   --version 0.1.0 -n cloudflare-operator-system --create-namespace \
   -f cloudflare-operator/values-examples/minimal.yaml
+
+# Psono (self-hosted password manager) — requires the BYO Secrets described
+# in psono/README.md to already exist in the target namespace.
+helm install psono oci://ghcr.io/ankraio/ankra-charts/psono \
+  --version 1.1.0 -n psono --create-namespace \
+  --set base_url=https://psono.example.com \
+  --set domain=example.com \
+  --set ingress.enabled=true \
+  --set ingress.tls.enabled=true
 ```
 
 ### UpCloud — observability overlays
@@ -116,6 +126,14 @@ helm install upcloud-csi ./upcloud-csi -n kube-system \
 helm install cloudflare-operator ./cloudflare-operator \
   -n cloudflare-operator-system --create-namespace \
   -f ./cloudflare-operator/values-examples/minimal.yaml
+
+# 4. Psono — independent of the above, assumes a PostgreSQL + psono-secret
+#    / psono-database-secret Secret already exist in the namespace.
+helm install psono ./psono -n psono --create-namespace \
+  --set base_url=https://psono.example.com \
+  --set domain=example.com \
+  --set ingress.enabled=true \
+  --set ingress.tls.enabled=true
 ```
 
 ## Automation
@@ -152,12 +170,15 @@ helm template ccm ./upcloud-ccm -n kube-system \
   --set credentials.username=u --set credentials.password=p
 helm template csi ./upcloud-csi -n kube-system
 helm template cf ./cloudflare-operator -n cloudflare-operator-system
+helm template psono ./psono -n psono \
+  --set base_url=https://psono.example.com --set domain=example.com
 
 # Run helm-unittest suites.
 helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.2
 helm unittest upcloud-ccm
 helm unittest upcloud-csi
 helm unittest cloudflare-operator
+helm unittest psono
 
 # Sync a chart to a specific upstream version.
 ./scripts/sync-upstream.sh csi v1.5.0
@@ -178,7 +199,8 @@ ankra-charts/                        (this repo root)
 ├── scripts/sync-upstream.sh
 ├── upcloud-ccm/
 ├── upcloud-csi/
-└── cloudflare-operator/
+├── cloudflare-operator/
+└── psono/                           (hand-written, no upstream sync)
 ```
 
 ## License

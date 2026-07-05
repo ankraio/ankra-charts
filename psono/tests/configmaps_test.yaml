@@ -1,0 +1,68 @@
+suite: client configmaps
+templates:
+  - templates/web_client_configmap.yaml
+  - templates/admin_configmap.yaml
+release:
+  name: psono
+set:
+  base_url: https://psono.example.com/
+  domain: example.com
+tests:
+  - it: wires webclient values into the web client config.json
+    template: templates/web_client_configmap.yaml
+    set:
+      webclient.title: My Vault
+      webclient.allow_custom_server: false
+      webclient.allow_registration: true
+      webclient.allow_lost_password: false
+      webclient.disable_download_bar: true
+      webclient.authentication_methods:
+        - AUTHKEY
+        - SAML
+    asserts:
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"title": "My Vault"'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"url": "https://psono.example.com/server"'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"allow_custom_server": false'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"allow_registration": true'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"allow_lost_password": false'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"disable_download_bar": true'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"authentication_methods": \["AUTHKEY","SAML"\]'
+
+  - it: renders the admin client config.json from the same webclient values
+    template: templates/admin_configmap.yaml
+    set:
+      adminClient.enabled: true
+      webclient.allow_registration: true
+      webclient.authentication_methods:
+        - AUTHKEY
+        - LDAP
+    asserts:
+      - equal:
+          path: metadata.name
+          value: psono-admin
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"allow_registration": true'
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '"authentication_methods": \["AUTHKEY","LDAP"\]'
+
+  - it: does not render the admin configmap by default
+    template: templates/admin_configmap.yaml
+    asserts:
+      - hasDocuments:
+          count: 0

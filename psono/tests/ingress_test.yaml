@@ -1,0 +1,88 @@
+suite: ingress
+templates:
+  - templates/ingress.yaml
+release:
+  name: psono
+set:
+  base_url: https://psono.example.com
+  domain: example.com
+tests:
+  - it: is disabled by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders a networking.k8s.io/v1 Ingress with the host derived from base_url
+    set:
+      ingress.enabled: true
+    asserts:
+      - isAPIVersion:
+          of: networking.k8s.io/v1
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.rules[0].host
+          value: psono.example.com
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  - it: routes server and webclient by default, without the admin portal
+    set:
+      ingress.enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 2
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /server/(.*)
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: psono-server
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: /(.*)
+      - equal:
+          path: spec.rules[0].http.paths[1].backend.service.name
+          value: psono-webclient
+
+  - it: registers the admin portal path before the webclient catch-all when enabled
+    set:
+      ingress.enabled: true
+      adminClient.enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 3
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: /(portal.*)
+      - equal:
+          path: spec.rules[0].http.paths[1].backend.service.name
+          value: psono-admin
+      - equal:
+          path: spec.rules[0].http.paths[2].path
+          value: /(.*)
+
+  - it: derives the TLS secret name from the host by default
+    set:
+      ingress.enabled: true
+      ingress.tls.enabled: true
+    asserts:
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: psono.example.com
+      - equal:
+          path: spec.tls[0].secretName
+          value: psono.example.com
+
+  - it: honors ingress.tls.secretName
+    set:
+      ingress.enabled: true
+      ingress.tls.enabled: true
+      ingress.tls.secretName: psono-tls
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: psono-tls

@@ -1,0 +1,33 @@
+suite: services
+templates:
+  - templates/server_service.yaml
+  - templates/web_client_service.yaml
+  - templates/admin_client_service.yaml
+release:
+  name: psono
+set:
+  base_url: https://psono.example.com
+  adminClient.enabled: true
+tests:
+  - it: renders ClusterIP services by default
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: exposes the configured ports
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 10100
+        template: templates/server_service.yaml
+      - equal:
+          path: spec.ports[0].port
+          value: 10101
+        template: templates/web_client_service.yaml
+      - equal:
+          path: spec.ports[0].port
+          value: 10102
+        template: templates/admin_client_service.yaml

@@ -1,0 +1,23 @@
+{{- if .Values.adminClient.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "adminClient.fullname" . }}
+  labels:
+    {{- include "adminClient.labels" . | nindent 4 }}
+data:
+  config.json: |
+    {
+      "backend_servers": [{
+        "title": {{ .Values.webclient.title | quote }},
+        "domain": {{ .Values.domain | quote }},
+        "url": {{ printf "%s/server" (trimSuffix "/" .Values.base_url) | quote }}
+      }],
+      "base_url": {{ .Values.base_url | quote }},
+      "allow_custom_server": {{ .Values.webclient.allow_custom_server }},
+      "allow_registration": {{ .Values.webclient.allow_registration }},
+      "allow_lost_password": {{ .Values.webclient.allow_lost_password }},
+      "disable_download_bar": {{ .Values.webclient.disable_download_bar }},
+      "authentication_methods": {{ toJson .Values.webclient.authentication_methods }}
+    }
+{{- end }}
