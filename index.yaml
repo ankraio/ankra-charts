@@ -63,12 +63,12 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: 0.13.1
-    created: "2026-06-28T16:51:59.512002407Z"
+    created: "2026-07-06T17:52:21.309396365Z"
     description: 'Helm chart for the community Cloudflare Operator (adyanth/cloudflare-operator)
       that reconciles Tunnel, ClusterTunnel, AccessTunnel and TunnelBinding CRDs against
       Cloudflare Zero Trust / Cloudflare Tunnel. Optionally renders a ClusterOriginIssuer
       for use with the cert-manager origin-ca-issuer. '
-    digest: 41f6b23eaf62b2f5c3390387db8342799f3162e9f11197aeae751df8e6247e51
+    digest: c0a11faed1fe7b68c8761c62f0c4f7664b3df548cc57b33e899550f6158e42bd
     home: https://github.com/ankraio/ankra-charts/tree/main/cloudflare-operator
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -92,6 +92,216 @@ entries:
     urls:
     - https://ankraio.github.io/ankra-charts/cloudflare-operator-0.2.0.tgz
     version: 0.2.0
+  digitalocean-ccm:
+  - annotations:
+      artifacthub.io/category: integration-delivery
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial chart, vendored from the upstream v0.1.67 release manifest.
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/images: |
+        - name: digitalocean-cloud-controller-manager
+          image: docker.io/digitalocean/digitalocean-cloud-controller-manager:v0.1.67
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Source
+          url: https://github.com/ankraio/ankra-charts
+        - name: Helm repo (helm repo add)
+          url: https://ankraio.github.io/ankra-charts
+        - name: Upstream project
+          url: https://github.com/digitalocean/digitalocean-cloud-controller-manager
+        - name: Chart (OCI)
+          url: oci://ghcr.io/ankraio/ankra-charts/digitalocean-ccm
+      artifacthub.io/maintainers: |
+        - name: Ankra AB
+          email: admin@ankra.io
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/ankra-charts/digitalocean-csi
+      category: Infrastructure
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: v0.1.67
+    created: "2026-07-06T17:52:21.310153394Z"
+    description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified
+      from the upstream release manifests, with LoadBalancer provisioning, node lifecycle
+      management, and uninitialized-taint clearing.
+    digest: 099fc9e68e28bbc22fe95d61a8e750c09ba58e3442907e6221170a104694baa7
+    home: https://github.com/ankraio/ankra-charts/tree/main/digitalocean-ccm
+    icon: https://ankra.io/images/apple-touch-icon.png
+    keywords:
+    - digitalocean
+    - ccm
+    - cloud-controller-manager
+    - cloud-provider
+    - load-balancer
+    - k3s
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - email: admin@ankra.io
+      name: Ankra AB
+      url: https://ankra.io
+    name: digitalocean-ccm
+    sources:
+    - https://github.com/ankraio/ankra-charts/tree/main/digitalocean-ccm
+    - https://github.com/digitalocean/digitalocean-cloud-controller-manager
+    type: application
+    urls:
+    - https://ankraio.github.io/ankra-charts/digitalocean-ccm-0.1.0.tgz
+    version: 0.1.0
+  digitalocean-csi:
+  - annotations:
+      artifacthub.io/category: storage
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial chart, vendored from the upstream v4.17.0 release manifests.
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/crds: |
+        - kind: VolumeSnapshotClass
+          version: snapshot.storage.k8s.io/v1
+          name: volumesnapshotclasses.snapshot.storage.k8s.io
+          description: Snapshot classes for the external-snapshotter.
+        - kind: VolumeSnapshotContent
+          version: snapshot.storage.k8s.io/v1
+          name: volumesnapshotcontents.snapshot.storage.k8s.io
+          description: Snapshot content objects bound to VolumeSnapshots.
+        - kind: VolumeSnapshot
+          version: snapshot.storage.k8s.io/v1
+          name: volumesnapshots.snapshot.storage.k8s.io
+          description: User-requested snapshots of PersistentVolumeClaims.
+      artifacthub.io/images: |
+        - name: do-csi-plugin
+          image: docker.io/digitalocean/do-csi-plugin:v4.17.0
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v6.2.0
+          whitelisted: true
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.11.0
+          whitelisted: true
+        - name: csi-snapshotter
+          image: registry.k8s.io/sig-storage/csi-snapshotter:v8.5.0
+          whitelisted: true
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v2.1.0
+          whitelisted: true
+        - name: csi-node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.16.0
+          whitelisted: true
+        - name: snapshot-controller
+          image: registry.k8s.io/sig-storage/snapshot-controller:v8.5.0
+          whitelisted: true
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Source
+          url: https://github.com/ankraio/ankra-charts
+        - name: Helm repo (helm repo add)
+          url: https://ankraio.github.io/ankra-charts
+        - name: Upstream project
+          url: https://github.com/digitalocean/csi-digitalocean
+        - name: Chart (OCI)
+          url: oci://ghcr.io/ankraio/ankra-charts/digitalocean-csi
+      artifacthub.io/maintainers: |
+        - name: Ankra AB
+          email: admin@ankra.io
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/ankra-charts/digitalocean-ccm
+      category: Storage
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: v4.17.0
+    created: "2026-07-06T17:52:21.311597104Z"
+    description: DigitalOcean CSI block-storage driver - controller StatefulSet, node
+      DaemonSet, snapshot controller, snapshot CRDs, and the do-block-storage StorageClasses,
+      chart-ified from the upstream release manifests.
+    digest: 18751ac87053c99e5f98de8346c971eff2a661c27fbab352268802db9bf1c69c
+    home: https://github.com/ankraio/ankra-charts/tree/main/digitalocean-csi
+    icon: https://ankra.io/images/apple-touch-icon.png
+    keywords:
+    - digitalocean
+    - csi
+    - block-storage
+    - storage
+    - snapshots
+    - k3s
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - email: admin@ankra.io
+      name: Ankra AB
+      url: https://ankra.io
+    name: digitalocean-csi
+    sources:
+    - https://github.com/ankraio/ankra-charts/tree/main/digitalocean-csi
+    - https://github.com/digitalocean/csi-digitalocean
+    type: application
+    urls:
+    - https://ankraio.github.io/ankra-charts/digitalocean-csi-0.1.0.tgz
+    version: 0.1.0
+  psono:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: server.env, webclient.env, adminClient.env and server.extraSecretEnvironmentVars rendered invalid YAML and broke helm template
+        - kind: fixed
+          description: webclient/adminClient replicas, podAnnotations, security contexts and imagePullSecrets were read from the wrong values scope and silently ignored
+        - kind: fixed
+          description: PSONO_ALLOWED_DOMAINS now renders as a comma-separated list instead of Go slice syntax
+        - kind: changed
+          description: web client and admin client config options (allow_custom_server, allow_registration, allow_lost_password, disable_download_bar, authentication_methods) are now wired to webclient values instead of hardcoded
+        - kind: added
+          description: server liveness/readiness probes against /healthcheck/, checksum/config rollout annotations for client ConfigMaps, ingress.tls.secretName override, chart icon and a helm-unittest suite
+        - kind: changed
+          description: ingress always renders networking.k8s.io/v1 (chart requires Kubernetes >= 1.20); admin client path is registered before the web client catch-all
+        - kind: removed
+          description: unused server.envFiles value
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Upstream project
+          url: https://psono.com/
+        - name: Upstream server
+          url: https://gitlab.com/psono/psono-server
+        - name: Upstream web client
+          url: https://gitlab.com/psono/psono-client
+        - name: Upstream admin client
+          url: https://gitlab.com/psono/psono-admin-client
+        - name: Server install docs
+          url: https://doc.psono.com/admin/installation/install-server-ce.html
+        - name: Chart (OCI)
+          url: oci://ghcr.io/ankraio/ankra-charts/psono
+      artifacthub.io/maintainers: |
+        - name: Ankra AB
+          email: admin@ankra.io
+    apiVersion: v2
+    appVersion: 5.0.0
+    created: "2026-07-06T17:52:21.312772894Z"
+    description: 'Helm chart for Psono — self-hosted password manager. Packages the
+      Psono server, web client and (optional) admin client. Brings your own PostgreSQL,
+      secret-keys Secret and (optional) ingress. '
+    digest: e3207a73338c21a2e83d303dbcb01b8013f8b0eb2829729ef8adc883dc6426cc
+    home: https://github.com/ankraio/ankra-charts/tree/main/psono
+    icon: https://gitlab.com/esaqa/psono/psono-client/-/raw/master/src/common/data/img/icon-128.png
+    keywords:
+    - psono
+    - password-manager
+    - secrets
+    - security
+    - vault
+    kubeVersion: '>=1.20.0-0'
+    maintainers:
+    - email: admin@ankra.io
+      name: Ankra AB
+    name: psono
+    sources:
+    - https://github.com/ankraio/ankra-charts/tree/main/psono
+    - https://gitlab.com/psono/psono-server
+    - https://gitlab.com/psono/psono-client
+    - https://gitlab.com/psono/psono-admin-client
+    type: application
+    urls:
+    - https://ankraio.github.io/ankra-charts/psono-1.1.0.tgz
+    version: 1.1.0
   upcloud-ccm:
   - annotations:
       artifacthub.io/category: integration-delivery
@@ -134,10 +344,10 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.1
-    created: "2026-06-28T16:51:59.513345863Z"
-    description: UpCloud Cloud Controller Manager for Kubernetes — leader-elected,
+    created: "2026-07-06T17:52:21.314697636Z"
+    description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
-    digest: ee3067e4340f114593e66cf63b2fc4cf1d89441af89bca6de7e67a043cd92d13
+    digest: 076532710c696025fb65dd5153d6e9ec8feb2664a0dd3df4565aec070eaf7da2
     home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -221,11 +431,11 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-06-28T16:51:59.516387837Z"
+    created: "2026-07-06T17:52:21.316988052Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
-    digest: b49ce20400ffbab2691b445ce136fd1987a56b90322c713ec1fac1e58c2780c7
+    digest: 5a43acd6026bac360cf7ce9f6aea80e14dde453cd0aefb6e4f345548fab05454
     home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -253,4 +463,4 @@ entries:
     urls:
     - https://ankraio.github.io/ankra-charts/upcloud-csi-0.3.0.tgz
     version: 0.3.0
-generated: "2026-06-28T16:51:59.510418042Z"
+generated: "2026-07-06T17:52:21.30785257Z"
