@@ -1,0 +1,54 @@
+{{- if .Values.ingress.enabled -}}
+{{- $host := include "psono.ingressHost" . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "psono.fullname" . }}
+  labels:
+    {{- include "psono.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.ingressClassName | quote }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | default $host | quote }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+        {{- if .Values.server.enabled }}
+          - path: /server/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "server.fullname" . }}
+                port:
+                  number: {{ .Values.server.service.port }}
+        {{- end }}
+        {{- if .Values.adminClient.enabled }}
+          - path: /(portal.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "adminClient.fullname" . }}
+                port:
+                  number: {{ .Values.adminClient.service.port }}
+        {{- end }}
+        {{- if .Values.webclient.enabled }}
+          - path: /(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "webclient.fullname" . }}
+                port:
+                  number: {{ .Values.webclient.service.port }}
+        {{- end }}
+{{- end }}

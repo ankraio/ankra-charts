@@ -1,0 +1,115 @@
+suite: server deployment
+templates:
+  - templates/server_deployment.yaml
+release:
+  name: psono
+set:
+  base_url: https://psono.example.com
+  domain: example.com
+tests:
+  - it: renders a Deployment with defaults
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: psono-server
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: psono/psono-server:5.0.0
+      - notExists:
+          path: spec.template.spec.containers[0].command
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PSONO_HOST_URL
+            value: https://psono.example.com/server
+
+  - it: probes the /healthcheck/ endpoint
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthcheck/
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /healthcheck/
+
+  - it: allows disabling the probes
+    set:
+      server.livenessProbe: null
+      server.readinessProbe: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: wires server.replicas
+    set:
+      server.replicas: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: renders server.env entries
+    set:
+      server.env:
+        PSONO_LOGGING_AUDIT: "True"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PSONO_LOGGING_AUDIT
+            value: "True"
+
+  - it: renders extraSecretEnvironmentVars entries
+    set:
+      server.extraSecretEnvironmentVars:
+        - envName: PSONO_EMAIL_HOST_PASSWORD
+          secretName: psono-email-secret
+          secretKey: password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PSONO_EMAIL_HOST_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: psono-email-secret
+                key: password
+
+  - it: joins allowed_domains into a comma-separated list
+    set:
+      server.allowed_domains:
+        - example.com
+        - example.org
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PSONO_ALLOWED_DOMAINS
+            value: example.com,example.org
+
+  - it: uses top-level imagePullSecrets
+    set:
+      imagePullSecrets:
+        - name: regcred
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: regcred
+
+  - it: reads database username from the username key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PSONO_DATABASES_DEFAULT_USER
+            valueFrom:
+              secretKeyRef:
+                name: psono-database-secret
+                key: username

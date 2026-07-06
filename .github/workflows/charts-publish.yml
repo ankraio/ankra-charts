@@ -113,14 +113,22 @@ jobs:
         if: steps.exists.outputs.skip == 'false'
         run: |
           set -euo pipefail
-          if [[ "${{ matrix.chart }}" == "upcloud-ccm" ]]; then
-            helm lint "${{ matrix.chart }}" \
-              --set ccmConfig.clusterID=ci-test \
-              --set credentials.username=ci \
-              --set credentials.password=ci
-          else
-            helm lint "${{ matrix.chart }}"
-          fi
+          case "${{ matrix.chart }}" in
+            upcloud-ccm)
+              helm lint "${{ matrix.chart }}" \
+                --set ccmConfig.clusterID=ci-test \
+                --set credentials.username=ci \
+                --set credentials.password=ci
+              ;;
+            psono)
+              helm lint "${{ matrix.chart }}" \
+                --set base_url=https://psono.example.com \
+                --set domain=example.com
+              ;;
+            *)
+              helm lint "${{ matrix.chart }}"
+              ;;
+          esac
 
       - name: Package and push to GHCR (OCI)
         if: steps.exists.outputs.skip == 'false'

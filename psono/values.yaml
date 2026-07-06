@@ -1,0 +1,295 @@
+# @param imagePullSecrets: Image pull secrets applied to all components.
+# Individual components can override this with e.g. server.imagePullSecrets.
+imagePullSecrets: [ ]
+nameOverride: ""
+fullnameOverride: ""
+
+# @param base_url: The base URL for the Psono installation.
+# Example: https://psono.example.com
+base_url: ""
+
+# @param domain: The default user domain for Psono.
+domain: ""
+
+# @param ingress: Enable ingress for Psono.
+# This will create an Ingress object that routes traffic to the server and webclient services.
+# host will be set to base_url.
+ingress:
+  enabled: false
+  ingressClassName: "nginx"
+  annotations: { }
+  tls:
+    enabled: false
+    # @param ingress.tls.secretName: Name of the TLS secret.
+    # Defaults to the host derived from base_url.
+    secretName: ""
+
+server:
+  enabled: true
+
+  # @param server.replicas: Number of server replicas.
+  replicas: 1
+
+  image:
+    repository: psono/psono-server
+    pullPolicy: IfNotPresent
+    tag: 5.0.0
+
+  service:
+    type: ClusterIP
+    port: 10100
+
+  serviceAccount:
+    create: true
+    annotations: { }
+    name: ""
+
+  podAnnotations: { }
+
+  # @param server.podSecurityContext: Security context for the server pod.
+  podSecurityContext: { }
+
+  # @param server.securityContext: Security context for the server container.
+  securityContext: { }
+
+  # @param server.livenessProbe: Liveness probe for the server container.
+  # Set to null to disable.
+  livenessProbe:
+    httpGet:
+      path: /healthcheck/
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+
+  # @param server.readinessProbe: Readiness probe for the server container.
+  # Set to null to disable.
+  readinessProbe:
+    httpGet:
+      path: /healthcheck/
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+
+  # @param server.resources: Resource requests and limits for the server.
+  resources: { }
+
+  # @param server.nodeSelector: Node labels for pod assignment.
+  nodeSelector: { }
+
+  # @param server.tolerations: Tolerations for pod assignment.
+  tolerations: [ ]
+
+  # @param server.affinity: Affinity for pod assignment.
+  affinity: { }
+
+  # @param server.debug: Enable debug mode (True/False). Default is False.
+  debug: False
+
+  # @param server.allowed_hosts: Allowed hosts for the Psono server.
+  # Use "*" to allow all hosts.
+  # For multiple hosts, use a comma-separated list. Example: "psono.example.com,example.com"
+  allowed_hosts: "*"
+
+  # @param server.allowed_domains: Allowed domains for the Psono server.
+  # Example: ["example.com", "example.org"]
+  allowed_domains: [ ]
+
+  # @param server.management_enabled: Enable management interface (True/False).
+  management_enabled: True
+
+  # @param server.allow_registration: Allow user registration (True/False).
+  allow_registration: False
+
+  # @param server.files_enabled: Enable file storage (True/False).
+  files_enabled: True
+
+  # @param server.fileserver_handler_enabled: Enables the fileserver API, required for the psono-fileserver. Default is False.
+  fileserver_handler_enabled: False
+
+  # @param server.multifactor_enabled: Enable multi-factor authentication (True/False).
+  multifactor_enabled: True
+
+  # @param server.allowed_second_factors: Allowed second factors for multi-factor authentication.
+  # Valid values: "google_authenticator", "yubikey_otp", "duo", "webauthn"
+  allowed_second_factors: "google_authenticator"
+
+  # @param server.allow_user_search_by_username_partial: Allow user search by username partial (True/False).
+  allow_user_search_by_username_partial: False
+
+  # @param server.allow_user_search_by_email: Allow user search by email (True/False).
+  allow_user_search_by_email: True
+
+  # @param server.enforce_matching_username_and_email: Enforce matching username and email (True/False).
+  enforce_matching_username_and_email: False
+
+  # @param server.secret_keys_secret_name: The name of the secret containing the secret keys.
+  # The secret must contain the following keys:
+  # - secret_key
+  # - activation_link_secret
+  # - db_secret
+  # - email_secret_salt
+  # - public_key
+  # - private_key
+  secret_keys_secret_name: psono-secret
+
+  # @param server.database_secret_name: The name of the secret containing the database credentials.
+  # The secret must contain the following keys:
+  # - name
+  # - username
+  # - password
+  # - host
+  # - port
+  # - engine
+  database_secret_name: psono-database-secret
+
+  # @param server.email_secret_name: The name of the secret containing the email configuration.
+  # The secret must contain the following keys:
+  # - from
+  # - host
+  # - port
+  # - use_tls
+  # - use_ssl
+  # - user
+  # - password
+  # - backend
+  email_secret_name: psono-email-secret
+
+  # Configuring the server is done via env variables. You can add PSONO_var_name to specify
+  # the variables listed here: https://doc.psono.com/admin/installation/install-server-ce.html#installation-with-docker
+
+  # @param server.env: Additional environment variables for the server.
+  env: { }
+
+  # @param server.extraSecretEnvironmentVars: Additional environment variables sourced
+  # from existing Secrets. Example:
+  # extraSecretEnvironmentVars:
+  #   - envName: PSONO_EMAIL_HOST_PASSWORD
+  #     secretName: psono-email-secret
+  #     secretKey: password
+  extraSecretEnvironmentVars: [ ]
+
+  # @param server.extraVolumeMounts: Additional volume mounts for the server.
+  extraVolumeMounts: [ ]
+
+  # @param server.extraVolumes: Additional volumes for the server.
+  extraVolumes: [ ]
+
+webclient:
+  enabled: true
+
+  # @param webclient.replicas: Number of webclient replicas.
+  replicas: 1
+
+  image:
+    repository: psono/psono-client
+    pullPolicy: IfNotPresent
+    tag: 3.6.2
+
+  service:
+    type: ClusterIP
+    port: 10101
+
+  serviceAccount:
+    create: true
+    annotations: { }
+    name: ""
+
+  podAnnotations: { }
+
+  # @param webclient.podSecurityContext: Security context for the webclient pod.
+  podSecurityContext: { }
+
+  # @param webclient.securityContext: Security context for the webclient container.
+  securityContext: { }
+
+  # @param webclient.resources: Resource requests and limits for the webclient.
+  resources: { }
+
+  # @param webclient.nodeSelector: Node labels for pod assignment.
+  nodeSelector: { }
+
+  # @param webclient.tolerations: Tolerations for pod assignment.
+  tolerations: [ ]
+
+  # @param webclient.affinity: Affinity for pod assignment.
+  affinity: { }
+
+  # @param webclient.title: Title of the backend server shown in the client.
+  title: "Password Manager"
+
+  # @param webclient.allow_custom_server: Allow users to pick a custom backend server in the client.
+  allow_custom_server: true
+
+  # @param webclient.allow_registration: Allow user registration in the client.
+  allow_registration: false
+
+  # @param webclient.allow_lost_password: Allow lost-password recovery in the client.
+  allow_lost_password: true
+
+  # @param webclient.disable_download_bar: Disable the download bar in the client.
+  disable_download_bar: false
+
+  # @param webclient.authentication_methods: Authentication methods exposed in the client.
+  # Valid values: "AUTHKEY", "LDAP", "SAML", "OIDC"
+  authentication_methods:
+    - "AUTHKEY"
+
+  # @param webclient.env: Additional environment variables for the webclient.
+  env: { }
+
+  # @param webclient.extraVolumeMounts: Additional volume mounts for the webclient.
+  extraVolumeMounts: [ ]
+
+  # @param webclient.extraVolumes: Additional volumes for the webclient.
+  extraVolumes: [ ]
+
+adminClient:
+  enabled: false
+
+  # @param adminClient.replicas: Number of admin client replicas.
+  replicas: 1
+
+  image:
+    repository: psono/psono-admin-client
+    pullPolicy: IfNotPresent
+    tag: 1.7.12
+
+  service:
+    type: ClusterIP
+    port: 10102
+
+  serviceAccount:
+    create: true
+    annotations: { }
+    name: ""
+
+  podAnnotations: { }
+
+  # @param adminClient.podSecurityContext: Security context for the admin client pod.
+  podSecurityContext: { }
+
+  # @param adminClient.securityContext: Security context for the admin client container.
+  securityContext: { }
+
+  # @param adminClient.resources: Resource requests and limits for the admin client.
+  resources: { }
+
+  # @param adminClient.nodeSelector: Node labels for pod assignment.
+  nodeSelector: { }
+
+  # @param adminClient.tolerations: Tolerations for pod assignment.
+  tolerations: [ ]
+
+  # @param adminClient.affinity: Affinity for pod assignment.
+  affinity: { }
+
+  # @param adminClient.env: Additional environment variables for the admin client.
+  env: { }
+
+  # @param adminClient.extraVolumeMounts: Additional volume mounts for the admin client.
+  extraVolumeMounts: [ ]
+
+  # @param adminClient.extraVolumes: Additional volumes for the admin client.
+  extraVolumes: [ ]

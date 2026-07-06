@@ -4,11 +4,12 @@ In-tree Helm charts maintained by the Ankra platform team.
 
 | Chart | Description | Source of truth |
 |---|---|---|
-| [`upcloud-ccm`](upcloud-ccm/README.md) | UpCloud Cloud Controller Manager - provisions LoadBalancers, manages node labels, clears the `uninitialized` cloud-provider taint. | Hand-written from UpCloud docs; image `ghcr.io/upcloudltd/cloud-controller-manager`. |
-| [`upcloud-csi`](upcloud-csi/README.md) | UpCloud CSI block-storage driver - controller StatefulSet, snapshot-controller, node DaemonSet, three StorageClasses. | Vendored from upstream [`UpCloudLtd/upcloud-csi`](https://github.com/UpCloudLtd/upcloud-csi); auto-bumped daily. |
-| [`cloudflare-operator`](cloudflare-operator/README.md) | Cloudflare Tunnel operator (Tunnel / ClusterTunnel / TunnelBinding / AccessTunnel CRDs) - plus optional `ClusterOriginIssuer` for the cert-manager Origin CA external issuer. | Vendored from upstream [`adyanth/cloudflare-operator`](https://github.com/adyanth/cloudflare-operator); auto-bumped daily. |
+| [`upcloud-ccm`](upcloud-ccm/README.md) | UpCloud Cloud Controller Manager — provisions LoadBalancers, manages node labels, clears the `uninitialized` cloud-provider taint. | Hand-written from UpCloud docs; image `ghcr.io/upcloudltd/cloud-controller-manager`. |
+| [`upcloud-csi`](upcloud-csi/README.md) | UpCloud CSI block-storage driver — controller StatefulSet, snapshot-controller, node DaemonSet, three StorageClasses. | Vendored from upstream [`UpCloudLtd/upcloud-csi`](https://github.com/UpCloudLtd/upcloud-csi); auto-bumped daily. |
+| [`cloudflare-operator`](cloudflare-operator/README.md) | Cloudflare Tunnel operator (Tunnel / ClusterTunnel / TunnelBinding / AccessTunnel CRDs) — plus optional `ClusterOriginIssuer` for the cert-manager Origin CA external issuer. | Vendored from upstream [`adyanth/cloudflare-operator`](https://github.com/adyanth/cloudflare-operator); auto-bumped daily. |
 | [`digitalocean-ccm`](digitalocean-ccm/README.md) | DigitalOcean Cloud Controller Manager - provisions DO Load Balancers, manages node lifecycle, clears the `uninitialized` cloud-provider taint. | Vendored from upstream [`digitalocean/digitalocean-cloud-controller-manager`](https://github.com/digitalocean/digitalocean-cloud-controller-manager) release manifests (no upstream chart exists); auto-bumped daily. |
 | [`digitalocean-csi`](digitalocean-csi/README.md) | DigitalOcean CSI block-storage driver - controller StatefulSet, node DaemonSet, snapshot-controller, snapshot CRDs, four `do-block-storage*` StorageClasses. | Vendored from upstream [`digitalocean/csi-digitalocean`](https://github.com/digitalocean/csi-digitalocean) release manifests (no upstream chart exists); auto-bumped daily. |
+| [`psono`](psono/README.md) | Self-hosted [Psono](https://psono.com/) password manager — server, web client and optional admin client behind a single nginx Ingress. Bring your own PostgreSQL + Secrets. | Hand-written from Psono [server install docs](https://doc.psono.com/admin/installation/install-server-ce.html); images `psono/psono-{server,client,admin-client}`. |
 
 ## Install via `helm repo add` (recommended)
 
@@ -80,6 +81,15 @@ helm install digitalocean-csi oci://ghcr.io/ankraio/ankra-charts/digitalocean-cs
   --version 0.1.0 -n kube-system \
   --set credentials.create=false \
   --set credentials.existingSecret=digitalocean-ccm-credentials
+
+# Psono (self-hosted password manager) — requires the BYO Secrets described
+# in psono/README.md to already exist in the target namespace.
+helm install psono oci://ghcr.io/ankraio/ankra-charts/psono \
+  --version 1.1.0 -n psono --create-namespace \
+  --set base_url=https://psono.example.com \
+  --set domain=example.com \
+  --set ingress.enabled=true \
+  --set ingress.tls.enabled=true
 ```
 
 ### UpCloud - observability overlays
@@ -137,6 +147,14 @@ helm install upcloud-csi ./upcloud-csi -n kube-system \
 helm install cloudflare-operator ./cloudflare-operator \
   -n cloudflare-operator-system --create-namespace \
   -f ./cloudflare-operator/values-examples/minimal.yaml
+
+# 4. Psono — independent of the above, assumes a PostgreSQL + psono-secret
+#    / psono-database-secret Secret already exist in the namespace.
+helm install psono ./psono -n psono --create-namespace \
+  --set base_url=https://psono.example.com \
+  --set domain=example.com \
+  --set ingress.enabled=true \
+  --set ingress.tls.enabled=true
 ```
 
 ## Automation
@@ -152,7 +170,8 @@ GitHub Actions workflows under `.github/workflows/`:
 | [`charts-digitalocean-sync.yml`](.github/workflows/charts-digitalocean-sync.yml) | Daily `37 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-upstream.sh do-ccm` / `do-csi` against the upstream DigitalOcean release feeds and opens a rolling PR. |
 | [`charts-digitalocean-lint.yml`](.github/workflows/charts-digitalocean-lint.yml) | PR / push under `digitalocean-{ccm,csi}/**` | `shellcheck`, `helm lint`, `helm template`, `kubeconform`, `helm-unittest`, `helm install --dry-run=server` on Kind across K8s 1.27 / 1.29 / 1.31. |
 | [`charts-publish.yml`](.github/workflows/charts-publish.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` + `helm push` each chart to `oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>`. |
-| [`charts-pages.yml`](.github/workflows/charts-pages.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` each chart and publish `index.yaml` + `.tgz` to the `gh-pages` branch (the `helm repo add` HTTP repo). Auto-registers on ArtifactHub when API secrets are configured. |
+| [`charts-pages.yml`](.github/workflows/charts-pages.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` each chart and publish `index.yaml` + `.tgz` to the `gh-pages` branch (the `helm repo add` HTTP repo; auto-tracked by ArtifactHub). |
+| [`secret-scan.yml`](.github/workflows/secret-scan.yml) | Every PR / push to `main` + weekly cron + `workflow_dispatch` | Scans the full git history and working tree for committed secrets with the pinned [`gitleaks`](https://github.com/gitleaks/gitleaks) binary. Config: [`.gitleaks.toml`](.gitleaks.toml); false positives: [`.gitleaksignore`](.gitleaksignore). |
 
 ### ArtifactHub (automated)
 
@@ -193,6 +212,8 @@ helm template ccm ./upcloud-ccm -n kube-system \
   --set credentials.username=u --set credentials.password=p
 helm template csi ./upcloud-csi -n kube-system
 helm template cf ./cloudflare-operator -n cloudflare-operator-system
+helm template psono ./psono -n psono \
+  --set base_url=https://psono.example.com --set domain=example.com
 
 # Run helm-unittest suites.
 helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.2
@@ -201,6 +222,7 @@ helm unittest upcloud-csi
 helm unittest cloudflare-operator
 helm unittest digitalocean-ccm
 helm unittest digitalocean-csi
+helm unittest psono
 
 # Sync a chart to a specific upstream version.
 ./scripts/sync-upstream.sh csi v1.5.0
@@ -211,6 +233,9 @@ helm unittest digitalocean-csi
 
 # Or simply `make test` from this repo root.
 make test
+
+# Scan for committed secrets (needs gitleaks: https://github.com/gitleaks/gitleaks).
+make secret-scan
 ```
 
 ## Layout
@@ -225,7 +250,8 @@ ankra-charts/                        (this repo root)
 ├── upcloud-csi/
 ├── cloudflare-operator/
 ├── digitalocean-ccm/
-└── digitalocean-csi/
+├── digitalocean-csi/
+└── psono/                           (hand-written, no upstream sync)
 ```
 
 ## License

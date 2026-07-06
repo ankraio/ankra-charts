@@ -1,0 +1,48 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release "{{ .Release.Name }}" has been deployed to namespace "{{ .Release.Namespace }}".
+
+----------------------------------------------------------------------------------
+
+1. URLs
+{{- if .Values.base_url }}
+
+   Web client: {{ .Values.base_url }}
+   Server API: {{ printf "%s/server" (trimSuffix "/" .Values.base_url) }}
+   {{- if .Values.adminClient.enabled }}
+   Admin portal: {{ printf "%s/portal" (trimSuffix "/" .Values.base_url) }}
+   {{- end }}
+   {{- if not .Values.ingress.enabled }}
+
+   Note: ingress.enabled is false — expose the services yourself, or port-forward:
+     kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "webclient.fullname" . }} 8080:{{ .Values.webclient.service.port }}
+   {{- end }}
+{{- else }}
+
+   WARNING: base_url is not set. Set it to the public URL of your installation,
+   e.g. --set base_url=https://psono.example.com
+{{- end }}
+
+2. Backend server (web client config)
+
+   Title:  {{ .Values.webclient.title }}
+   Domain: {{ .Values.domain | default "(not set)" }}
+   URL:    {{ printf "%s/server" (trimSuffix "/" .Values.base_url) }}
+
+3. Web client options
+
+   Allow custom server:    {{ .Values.webclient.allow_custom_server }}
+   Allow registration:     {{ .Values.webclient.allow_registration }}
+   Allow lost password:    {{ .Values.webclient.allow_lost_password }}
+   Disable download bar:   {{ .Values.webclient.disable_download_bar }}
+   Authentication methods: {{ join ", " .Values.webclient.authentication_methods }}
+
+----------------------------------------------------------------------------------
+
+Upgrade:
+  helm upgrade {{ .Release.Name }} oci://ghcr.io/ankraio/ankra-charts/{{ .Chart.Name }} --version {{ .Chart.Version }} -n {{ .Release.Namespace }} -f values.yaml
+
+Uninstall:
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+For all configuration options see values.yaml or the chart README.

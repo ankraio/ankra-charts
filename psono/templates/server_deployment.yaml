@@ -1,0 +1,211 @@
+{{- if .Values.server.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "server.fullname" . }}
+  labels:
+    {{- include "server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.server.replicas }}
+  selector:
+    matchLabels:
+      {{- include "server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.server.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "server.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with (default .Values.imagePullSecrets .Values.server.imagePullSecrets) }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "server.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.server.podSecurityContext | nindent 8 }}
+      containers:
+        - name: server
+          securityContext:
+            {{- toYaml .Values.server.securityContext | nindent 12 }}
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          {{- with .Values.server.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.server.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          env:
+            - name: PSONO_DEBUG
+              value: {{ .Values.server.debug | quote }}
+            - name: PSONO_HOST_URL
+              value: {{ printf "%s/server" (trimSuffix "/" .Values.base_url) | quote }}
+            - name: PSONO_ALLOWED_HOSTS
+              value: {{ .Values.server.allowed_hosts | quote }}
+            - name: PSONO_ALLOWED_DOMAINS
+              value: {{ join "," .Values.server.allowed_domains | quote }}
+            - name: PSONO_MANAGEMENT_ENABLED
+              value: {{ .Values.server.management_enabled | quote }}
+            - name: PSONO_ALLOW_REGISTRATION
+              value: {{ .Values.server.allow_registration | quote }}
+            - name: PSONO_FILES_ENABLED
+              value: {{ .Values.server.files_enabled | quote }}
+            - name: PSONO_FILESERVER_HANDLER_ENABLED
+              value: {{ .Values.server.fileserver_handler_enabled | quote }}
+            - name: PSONO_MULTIFACTOR_ENABLED
+              value: {{ .Values.server.multifactor_enabled | quote }}
+            - name: PSONO_ALLOWED_SECOND_FACTORS
+              value: {{ .Values.server.allowed_second_factors | quote }}
+            - name: PSONO_ALLOW_USER_SEARCH_BY_USERNAME_PARTIAL
+              value: {{ .Values.server.allow_user_search_by_username_partial | quote }}
+            - name: PSONO_ALLOW_USER_SEARCH_BY_EMAIL
+              value: {{ .Values.server.allow_user_search_by_email | quote }}
+            - name: PSONO_ENFORCE_MATCHING_USERNAME_AND_EMAIL
+              value: {{ .Values.server.enforce_matching_username_and_email | quote }}
+            - name: PSONO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.secret_keys_secret_name }}
+                  key: secret_key
+            - name: PSONO_ACTIVATION_LINK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.secret_keys_secret_name }}
+                  key: activation_link_secret
+            - name: PSONO_DB_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.secret_keys_secret_name }}
+                  key: db_secret
+            - name: PSONO_EMAIL_SECRET_SALT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.secret_keys_secret_name }}
+                  key: email_secret_salt
+            - name: PSONO_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.secret_keys_secret_name }}
+                  key: public_key
+            - name: PSONO_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.secret_keys_secret_name }}
+                  key: private_key
+            - name: PSONO_DATABASES_DEFAULT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.database_secret_name }}
+                  key: name
+            - name: PSONO_DATABASES_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.database_secret_name }}
+                  key: username
+            - name: PSONO_DATABASES_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.database_secret_name }}
+                  key: password
+            - name: PSONO_DATABASES_DEFAULT_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.database_secret_name }}
+                  key: host
+            - name: PSONO_DATABASES_DEFAULT_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.database_secret_name }}
+                  key: port
+            - name: PSONO_DATABASES_DEFAULT_ENGINE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.database_secret_name }}
+                  key: engine
+#            - name: PSONO_EMAIL_FROM
+#              valueFrom:
+#                secretKeyRef:
+#                  name: {{ .Values.server.email_secret_name }}
+#                  key: from
+#            - name: PSONO_EMAIL_HOST
+#              valueFrom:
+#                secretKeyRef:
+#                  name: {{ .Values.server.email_secret_name }}
+#                  key: host
+#            - name: PSONO_EMAIL_PORT
+#              valueFrom:
+#                secretKeyRef:
+#                  name: {{ .Values.server.email_secret_name }}
+#                  key: port
+#            - name: PSONO_EMAIL_USE_TLS
+#              valueFrom:
+#                secretKeyRef:
+#                  name: {{ .Values.server.email_secret_name }}
+#                  key: use_tls
+#            - name: PSONO_EMAIL_USE_SSL
+#              valueFrom:
+#                secretKeyRef:
+#                  name: {{ .Values.server.email_secret_name }}
+#                  key: use_ssl
+#            - name: PSONO_EMAIL_HOST_USER
+#              valueFrom:
+#                secretKeyRef:
+#                  name: {{ .Values.server.email_secret_name }}
+#                  key: user
+#            - name: PSONO_EMAIL_HOST_PASSWORD
+#              valueFrom:
+#                secretKeyRef:
+#                  name: {{ .Values.server.email_secret_name }}
+#                  key: password
+#            - name: PSONO_EMAIL_BACKEND
+#              valueFrom:
+#                secretKeyRef:
+#                  name: {{ .Values.server.email_secret_name }}
+#                  key: backend
+            {{- range $key, $val := .Values.server.env }}
+            - name: {{ $key | quote }}
+              value: {{ $val | quote }}
+            {{- end }}
+            {{- range .Values.server.extraSecretEnvironmentVars }}
+            - name: {{ .envName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .secretKey }}
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/html
+            {{- with .Values.server.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        {{- with .Values.server.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

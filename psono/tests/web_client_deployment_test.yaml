@@ -1,0 +1,92 @@
+suite: web client deployment
+templates:
+  - templates/web_client_deployment.yaml
+  # Loaded for the checksum/config include; assertions target the deployment.
+  - templates/web_client_configmap.yaml
+release:
+  name: psono
+set:
+  base_url: https://psono.example.com
+  domain: example.com
+tests:
+  - it: renders a Deployment with defaults
+    template: templates/web_client_deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: psono-webclient
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: webclient
+
+  - it: wires webclient.replicas
+    template: templates/web_client_deployment.yaml
+    set:
+      webclient.replicas: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: has a checksum/config annotation that rolls pods on config changes
+    template: templates/web_client_deployment.yaml
+    set:
+      webclient.title: Title A
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: ^[a-f0-9]{64}$
+
+  - it: merges podAnnotations with the checksum annotation
+    template: templates/web_client_deployment.yaml
+    set:
+      webclient.podAnnotations:
+        example.com/scrape: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["example.com/scrape"]
+          value: "true"
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: wires webclient security contexts
+    template: templates/web_client_deployment.yaml
+    set:
+      webclient.podSecurityContext:
+        fsGroup: 1000
+      webclient.securityContext:
+        runAsUser: 1000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 1000
+
+  - it: renders webclient.env entries
+    template: templates/web_client_deployment.yaml
+    set:
+      webclient.env:
+        SOME_FLAG: "yes"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SOME_FLAG
+            value: "yes"
+
+  - it: uses top-level imagePullSecrets
+    template: templates/web_client_deployment.yaml
+    set:
+      imagePullSecrets:
+        - name: regcred
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: regcred

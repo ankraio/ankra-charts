@@ -1,0 +1,11 @@
+# gitleaks fingerprint ignore-list.
+#
+# Add one gitleaks "Fingerprint" per line to permanently ignore a specific
+# finding that is a confirmed false positive (test fixture, example value,
+# or an already-rotated credential). Fingerprints are printed by gitleaks
+# and look like:
+#
+#   <commit-sha>:<file-path>:<rule-id>:<line-number>
+#
+# Prefer this over disabling rules or broadening the .gitleaks.toml
+# allowlist, because it scopes the exception to a single finding.

@@ -1,0 +1,80 @@
+{{- if .Values.adminClient.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "adminClient.fullname" . }}
+  labels:
+    {{- include "adminClient.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.adminClient.replicas }}
+  selector:
+    matchLabels:
+      {{- include "adminClient.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/admin_configmap.yaml") . | sha256sum }}
+        {{- with .Values.adminClient.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "adminClient.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with (default .Values.imagePullSecrets .Values.adminClient.imagePullSecrets) }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "adminClient.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.adminClient.podSecurityContext | nindent 8 }}
+      containers:
+        - name: admin-client
+          securityContext:
+            {{- toYaml .Values.adminClient.securityContext | nindent 12 }}
+          image: "{{ .Values.adminClient.image.repository }}:{{ .Values.adminClient.image.tag }}"
+          imagePullPolicy: {{ .Values.adminClient.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {{- toYaml .Values.adminClient.resources | nindent 12 }}
+          env:
+            - name: PSONO_PORTAL_CONFIG_JSON
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "adminClient.fullname" . }}
+                  key: config.json
+            {{- range $key, $val := .Values.adminClient.env }}
+            - name: {{ $key | quote }}
+              value: {{ $val | quote }}
+            {{- end }}
+          {{- with .Values.adminClient.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.adminClient.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.adminClient.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.adminClient.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.adminClient.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
