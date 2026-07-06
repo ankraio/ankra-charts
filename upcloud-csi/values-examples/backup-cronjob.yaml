@@ -1,4 +1,4 @@
-# values-examples/backup-cronjob.yaml — periodic VolumeSnapshot CronJob.
+# values-examples/backup-cronjob.yaml - periodic VolumeSnapshot CronJob.
 #
 # Snapshots every UpCloud-backed PVC every day at 02:00 UTC and rotates
 # old snapshots, keeping the 7 most recent per PVC. Snapshots use the

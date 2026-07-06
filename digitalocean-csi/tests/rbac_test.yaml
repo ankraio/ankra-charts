@@ -1,0 +1,51 @@
+suite: rbac
+templates:
+  - templates/rbac.yaml
+  - templates/snapshot-controller.yaml
+release:
+  name: ut
+  namespace: kube-system
+set:
+  credentials.token: dop_v1_test
+
+tests:
+  - it: renders three ServiceAccounts and six role pairs by default
+    template: templates/rbac.yaml
+    asserts:
+      - hasDocuments:
+          count: 15
+
+  - it: skips the snapshot-controller SA and roles when disabled
+    template: templates/rbac.yaml
+    set:
+      snapshotController.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 12
+
+  - it: renders only the ServiceAccounts when rbac.create is false
+    template: templates/rbac.yaml
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 3
+      - isKind:
+          of: ServiceAccount
+
+  - it: deploys the snapshot controller StatefulSet by default
+    template: templates/snapshot-controller.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: ut-digitalocean-csi-snapshot-controller
+
+  - it: skips the snapshot controller when disabled
+    template: templates/snapshot-controller.yaml
+    set:
+      snapshotController.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

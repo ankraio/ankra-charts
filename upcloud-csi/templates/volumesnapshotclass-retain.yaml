@@ -1,6 +1,6 @@
 {{- if and .Values.snapshotController.enabled .Values.snapshotClasses.retain.enabled -}}
 {{- /*
-A secondary VolumeSnapshotClass with `deletionPolicy: Retain` — when the
+A secondary VolumeSnapshotClass with `deletionPolicy: Retain` - when the
 VolumeSnapshot Kubernetes object is deleted the underlying UpCloud snapshot
 is kept. Use for compliance / before destructive migrations.
 */}}

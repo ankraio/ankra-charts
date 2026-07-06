@@ -1,4 +1,4 @@
-# values-examples/multi-zone.yaml — restrict each StorageClass to a single
+# values-examples/multi-zone.yaml - restrict each StorageClass to a single
 # UpCloud zone and have the scheduler co-locate pods with their PVs.
 #
 # UpCloud block storage volumes are zone-bound: a `fi-hel1` volume cannot be
@@ -7,7 +7,7 @@
 # node in a zone where the volume can actually be created.
 #
 # This overlay assumes nodes are labelled with
-# `topology.kubernetes.io/zone=<fi-hel1|fi-hel2|...>` — set this via the CCM
+# `topology.kubernetes.io/zone=<fi-hel1|fi-hel2|...>` - set this via the CCM
 # (when running) or kubectl label.
 
 storageClasses:
@@ -15,7 +15,7 @@ storageClasses:
   # WFC is recommended whenever allowedTopologies is set.
   volumeBindingMode: WaitForFirstConsumer
   reclaimPolicy: Retain
-  # Chart-wide allowedTopologies — applied to every tier unless that tier
+  # Chart-wide allowedTopologies - applied to every tier unless that tier
   # overrides it.
   allowedTopologies:
     - matchLabelExpressions:

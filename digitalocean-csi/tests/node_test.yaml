@@ -1,0 +1,69 @@
+suite: node
+templates:
+  - templates/node-daemonset.yaml
+release:
+  name: ut
+  namespace: kube-system
+chart:
+  version: 0.1.0
+  appVersion: v4.17.0
+set:
+  credentials.token: dop_v1_test
+
+tests:
+  - it: renders a DaemonSet on the host network
+    asserts:
+      - isKind:
+          of: DaemonSet
+      - equal:
+          path: metadata.name
+          value: ut-digitalocean-csi-node
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+
+  - it: runs the automount udev deleter init container by default
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: automount-udev-deleter
+
+  - it: omits the udev deleter when disabled
+    set:
+      node.automountUdevDeleter.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: runs the plugin privileged with SYS_ADMIN for mounts
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.privileged
+          value: true
+      - contains:
+          path: spec.template.spec.containers[1].securityContext.capabilities.add
+          content: SYS_ADMIN
+
+  - it: propagates kubelet mounts bidirectionally
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].volumeMounts[1].mountPropagation
+          value: Bidirectional
+
+  - it: honours a custom kubelet directory
+    set:
+      node.kubeletDir: /var/lib/k0s/kubelet
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[1].value
+          value: /var/lib/k0s/kubelet/plugins/dobs.csi.digitalocean.com/csi.sock
+      - equal:
+          path: spec.template.spec.volumes[2].hostPath.path
+          value: /var/lib/k0s/kubelet
+
+  - it: tolerates everything so storage detaches from cordoned nodes
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            operator: Exists

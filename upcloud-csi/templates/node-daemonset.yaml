@@ -1,6 +1,6 @@
 {{- include "upcloud-csi.validate" . -}}
 {{/*
-csi-upcloud-node DaemonSet — vendored from UpCloud CSI v1.4.0 setup-upcloud-csi.yaml.
+csi-upcloud-node DaemonSet - vendored from UpCloud CSI v1.4.0 setup-upcloud-csi.yaml.
 Runs on every node and exposes the CSI driver socket to the local kubelet.
 The csi-upcloud-plugin container MUST run privileged for mount syscalls.
 */}}

@@ -1,4 +1,4 @@
-# values-examples/observability.yaml — Full observability stack overlay.
+# values-examples/observability.yaml - Full observability stack overlay.
 #
 # Assumes kube-prometheus-stack is installed in the cluster (Prometheus
 # Operator + Grafana sidecar with the default `grafana_dashboard: "1"`

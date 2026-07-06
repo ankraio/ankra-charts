@@ -1,0 +1,168 @@
+name: charts-digitalocean-lint
+
+# Lint, render, kubeconform-validate, helm-unittest, and a server-side
+# dry-run install on kind for every PR touching digitalocean-{ccm,csi}/**
+# or the shared sync script.
+
+on:
+  pull_request:
+    paths:
+      - "digitalocean-ccm/**"
+      - "digitalocean-csi/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-digitalocean-lint.yml"
+      - ".github/workflows/charts-digitalocean-sync.yml"
+  push:
+    paths:
+      - "digitalocean-ccm/**"
+      - "digitalocean-csi/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-digitalocean-lint.yml"
+      - ".github/workflows/charts-digitalocean-sync.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: charts-digitalocean-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: shellcheck sync script
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+
+  lint:
+    name: helm lint / template / kubeconform / unittest (${{ matrix.chart }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: [digitalocean-ccm, digitalocean-csi]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.2
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          KC_VERSION=v0.6.7
+          curl -fsSL -o /tmp/kc.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KC_VERSION}/kubeconform-linux-amd64.tar.gz"
+          sudo tar -xzf /tmp/kc.tar.gz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: helm lint
+        run: |
+          set -euo pipefail
+          helm lint ${{ matrix.chart }} \
+            --set credentials.token=ci
+
+      - name: helm template
+        id: render
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rendered
+          helm template ci ${{ matrix.chart }} \
+            --namespace kube-system \
+            --set credentials.token=ci \
+            > /tmp/rendered/${{ matrix.chart }}.yaml
+          wc -l /tmp/rendered/${{ matrix.chart }}.yaml
+
+      - name: kubeconform
+        run: |
+          set -euo pipefail
+          kubeconform \
+            -strict -summary -verbose \
+            -kubernetes-version 1.31.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{ .Group }}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \
+            -ignore-missing-schemas \
+            /tmp/rendered/${{ matrix.chart }}.yaml
+
+      - name: helm unittest
+        run: |
+          set -euo pipefail
+          helm unittest ${{ matrix.chart }}
+
+  install-dry-run:
+    # `ct install` performs a `helm install --wait` and fails because both
+    # charts talk to the real DigitalOcean API before their pods report
+    # Ready. We validate the manifests against a real apiserver
+    # (server-side dry-run) instead - this catches admission webhooks,
+    # schema errors, RBAC validation, and CRD presence without
+    # false-failing on missing cloud infra.
+    name: helm install --dry-run=server (kind ${{ matrix.k8s }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - k8s: "1.27"
+            node: "kindest/node:v1.27.16@sha256:2d21a61643eafc439905e18705b8186f3296384750a835ad7a005dceb9546d20"
+          - k8s: "1.29"
+            node: "kindest/node:v1.29.14@sha256:8703bd94ee24e51b778d5556ae310c6c0fa67d761fae6379c8e0bb480e6fea29"
+          - k8s: "1.31"
+            node: "kindest/node:v1.31.6@sha256:28b7cbb993dfe093c76641a0c95807637213c9109b761f1d422c2400e22b8e87"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          node_image: ${{ matrix.node }}
+          cluster_name: ct
+
+      - name: helm install --dry-run=server (digitalocean-ccm)
+        run: |
+          set -euo pipefail
+          kubectl create namespace ccm-ci --dry-run=client -o yaml | kubectl apply -f -
+          helm install ccm digitalocean-ccm \
+            --namespace ccm-ci \
+            --dry-run=server \
+            --set credentials.token=ci
+
+      - name: Pre-install digitalocean-csi CRDs
+        # Helm only auto-installs the `crds/` directory on real installs; with
+        # `--dry-run=server` the apiserver rejects VolumeSnapshotClass etc.
+        # unless the CRDs are already present. Apply them up front.
+        run: |
+          set -euo pipefail
+          kubectl apply --server-side --force-conflicts \
+            -f digitalocean-csi/crds/
+          kubectl wait --for=condition=Established --timeout=60s \
+            crd/volumesnapshotclasses.snapshot.storage.k8s.io \
+            crd/volumesnapshots.snapshot.storage.k8s.io \
+            crd/volumesnapshotcontents.snapshot.storage.k8s.io
+
+      - name: helm install --dry-run=server (digitalocean-csi)
+        run: |
+          set -euo pipefail
+          kubectl create namespace csi-ci --dry-run=client -o yaml | kubectl apply -f -
+          helm install csi digitalocean-csi \
+            --namespace csi-ci \
+            --dry-run=server \
+            --set credentials.token=ci

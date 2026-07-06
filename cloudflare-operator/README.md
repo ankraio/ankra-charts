@@ -96,8 +96,8 @@ EOF
 
 ## Sharing the Cloudflare Secret with other workloads
 
-The default reuses `cloudflare-secrets` — created/rotated outside this
-release — so the same token can be referenced from `ClusterTunnel.spec` and
+The default reuses `cloudflare-secrets` - created/rotated outside this
+release - so the same token can be referenced from `ClusterTunnel.spec` and
 from any other workload in the same namespace (cluster-tunnel pods load it
 via the `secret:` field).
 
@@ -174,14 +174,14 @@ digests into your mirror. See
 
 ## Upgrade / uninstall
 
-- **Upgrade** with `helm upgrade --install` — CRDs are templatized (with
+- **Upgrade** with `helm upgrade --install` - CRDs are templatized (with
   `helm.sh/resource-policy: keep`) so they are reconciled on every release,
   but **never deleted** by `helm uninstall`. Your `ClusterTunnel` / `Tunnel`
   CRs survive a `helm uninstall`.
 - The chart bumps a `checksum/cloudflare-secret` pod annotation when the
   in-release Secret changes; this only rotates pods when `credentials.create`
   is true.
-- Removing the chart **does not** delete tunnels in Cloudflare — clean those
+- Removing the chart **does not** delete tunnels in Cloudflare - clean those
   up via the Cloudflare dashboard or `cloudflared tunnel delete`.
 
 ## Configuration

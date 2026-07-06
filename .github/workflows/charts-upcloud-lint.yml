@@ -134,8 +134,8 @@ jobs:
     # Neither chart can ever reach Ready in CI, so we validate the manifests
     # against a real apiserver (server-side dry-run) instead. This catches
     # everything chart-testing would have caught short of "did the workload
-    # start" — admission webhooks, schema errors, RBAC validation, CRD
-    # presence — without false-failing on missing cloud infra.
+    # start" - admission webhooks, schema errors, RBAC validation, CRD
+    # presence - without false-failing on missing cloud infra.
     name: helm install --dry-run=server (kind ${{ matrix.k8s }})
     runs-on: ubuntu-latest
     timeout-minutes: 15

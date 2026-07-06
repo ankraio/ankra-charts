@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "digitalocean-csi.fullname" . }}-node
+  namespace: {{ include "digitalocean-csi.namespace" . }}
+  labels:
+    {{- include "digitalocean-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node
+  {{- with (include "digitalocean-csi.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "digitalocean-csi.nodeSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: csi-do-plugin
+        {{- with .Values.node.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "digitalocean-csi.nodeSelectorLabels" . | nindent 8 }}
+        {{- with .Values.node.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "digitalocean-csi.imagePullSecrets" . | nindent 6 }}
+      {{- with .Values.node.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      serviceAccountName: {{ include "digitalocean-csi.fullname" . }}-node-sa
+      hostNetwork: true
+      {{- with .Values.node.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.node.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.node.automountUdevDeleter.enabled }}
+      initContainers:
+        {{- /* Delete the automount udev rule running on all DO droplets. The
+               rule mounts devices briefly and conflicts with CSI-managed
+               attachments ("resource busy" errors). */}}
+        - name: automount-udev-deleter
+          image: {{ include "digitalocean-csi.image" (dict "image" .Values.images.automountUdevDeleter "context" .) }}
+          imagePullPolicy: {{ .Values.images.automountUdevDeleter.pullPolicy }}
+          args:
+            - "rm"
+            - "-f"
+            - "/etc/udev/rules.d/99-digitalocean-automount.rules"
+          volumeMounts:
+            - name: udev-rules-dir
+              mountPath: /etc/udev/rules.d/
+      {{- end }}
+      containers:
+        - name: csi-node-driver-registrar
+          image: {{ include "digitalocean-csi.image" (dict "image" .Values.images.nodeDriverRegistrar "context" .) }}
+          imagePullPolicy: {{ .Values.images.nodeDriverRegistrar.pullPolicy }}
+          args:
+            - "--v={{ .Values.node.logVerbosity }}"
+            - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+            - name: DRIVER_REG_SOCK_PATH
+              value: {{ .Values.node.kubeletDir }}/plugins/dobs.csi.digitalocean.com/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            {{- toYaml .Values.node.sidecarResources | nindent 12 }}
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi/
+            - name: registration-dir
+              mountPath: /registration/
+        - name: csi-do-plugin
+          image: {{ include "digitalocean-csi.image" (dict "image" .Values.images.csiDriver "context" .) }}
+          imagePullPolicy: {{ .Values.images.csiDriver.pullPolicy }}
+          args:
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--url=$(DIGITALOCEAN_API_URL)"
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: DIGITALOCEAN_API_URL
+              value: {{ .Values.apiURL }}
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            allowPrivilegeEscalation: true
+          resources:
+            {{- toYaml .Values.node.resources | nindent 12 }}
+          volumeMounts:
+            - name: plugin-dir
+              mountPath: /csi
+            - name: pods-mount-dir
+              mountPath: {{ .Values.node.kubeletDir }}
+              # Mounts set up inside this container must propagate back to the
+              # host machine.
+              mountPropagation: "Bidirectional"
+            - name: device-dir
+              mountPath: /dev
+      volumes:
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.node.kubeletDir }}/plugins_registry/
+            type: DirectoryOrCreate
+        - name: plugin-dir
+          hostPath:
+            path: {{ .Values.node.kubeletDir }}/plugins/dobs.csi.digitalocean.com
+            type: DirectoryOrCreate
+        - name: pods-mount-dir
+          hostPath:
+            path: {{ .Values.node.kubeletDir }}
+            type: Directory
+        - name: device-dir
+          hostPath:
+            path: /dev
+        {{- if .Values.node.automountUdevDeleter.enabled }}
+        - name: udev-rules-dir
+          hostPath:
+            path: /etc/udev/rules.d/
+        {{- end }}

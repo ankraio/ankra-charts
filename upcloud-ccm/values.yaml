@@ -224,7 +224,7 @@ metrics:
     # -- The CCM uses a self-signed cert on its secure port.
     tlsConfig:
       insecureSkipVerify: true
-  # -- PodMonitor (alternative to ServiceMonitor — scrapes pods directly without
+  # -- PodMonitor (alternative to ServiceMonitor - scrapes pods directly without
   # requiring a Service). Useful when running multiple replicas behind a headless
   # Service is undesirable.
   podMonitor:
@@ -343,7 +343,7 @@ networkPolicy:
   # -- Extra egress rules merged with the default (allow DNS + UpCloud API + kube-apiserver).
   extraEgress: []
 
-# -- Liveness probe — hits the CCM `/healthz` over HTTPS on the secure port.
+# -- Liveness probe - hits the CCM `/healthz` over HTTPS on the secure port.
 livenessProbe:
   enabled: true
   httpGet:
@@ -356,7 +356,7 @@ livenessProbe:
   failureThreshold: 3
   successThreshold: 1
 
-# -- Readiness probe — same endpoint, shorter initial delay.
+# -- Readiness probe - same endpoint, shorter initial delay.
 readinessProbe:
   enabled: true
   httpGet:

@@ -1,6 +1,6 @@
 {{- if .Values.rbac.create -}}
 ---
-# Manager ClusterRole — what the operator can do across the cluster.
+# Manager ClusterRole - what the operator can do across the cluster.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -52,7 +52,7 @@ subjects:
     name: {{ include "cloudflare-operator.serviceAccountName" . }}
     namespace: {{ include "cloudflare-operator.namespace" . }}
 ---
-# Leader-election Role — namespace-scoped, mirrors upstream.
+# Leader-election Role - namespace-scoped, mirrors upstream.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -87,7 +87,7 @@ subjects:
     name: {{ include "cloudflare-operator.serviceAccountName" . }}
     namespace: {{ include "cloudflare-operator.namespace" . }}
 ---
-# Metrics authn/authz — required because the manager serves metrics secured
+# Metrics authn/authz - required because the manager serves metrics secured
 # by kube-rbac-proxy-style TokenReview / SubjectAccessReview.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -118,7 +118,7 @@ subjects:
     name: {{ include "cloudflare-operator.serviceAccountName" . }}
     namespace: {{ include "cloudflare-operator.namespace" . }}
 ---
-# Metrics reader — bind manually to humans / Prometheus tokens.
+# Metrics reader - bind manually to humans / Prometheus tokens.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

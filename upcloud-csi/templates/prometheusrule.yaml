@@ -95,7 +95,7 @@ spec:
           annotations:
             summary: "UpCloud PV {{`{{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }}`}} is >{{ (mul (.Values.metrics.prometheusRule.alerts.volumeNearFull.threshold | default 0.85) 100) | int }}% full"
             description: |
-              Resize the PVC (`kubectl edit pvc ...` — UpCloud CSI supports
+              Resize the PVC (`kubectl edit pvc ...` - UpCloud CSI supports
               online resize since v1.4.0) or schedule a backup + rotation.
 
         - alert: UpCloudCSIPodCrashLooping

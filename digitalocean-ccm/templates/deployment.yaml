@@ -1,0 +1,92 @@
+{{- include "digitalocean-ccm.validate" . -}}
+{{- include "digitalocean-ccm.validateReplicas" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "digitalocean-ccm.fullname" . }}
+  namespace: {{ include "digitalocean-ccm.namespace" . }}
+  labels:
+    {{- include "digitalocean-ccm.labels" . | nindent 4 }}
+  {{- with (include "digitalocean-ccm.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "digitalocean-ccm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- /* Rotate pods when the chart-managed Secret changes. */}}
+        {{- if .Values.credentials.create }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "digitalocean-ccm.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "digitalocean-ccm.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "digitalocean-ccm.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: digitalocean-cloud-controller-manager
+          image: {{ include "digitalocean-ccm.image" (dict "image" .Values.images.ccm "context" .) }}
+          imagePullPolicy: {{ .Values.images.ccm.pullPolicy }}
+          terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command:
+            - /bin/digitalocean-cloud-controller-manager
+          args:
+            - --leader-elect={{ .Values.leaderElect }}
+            - --v={{ .Values.logVerbosity }}
+            {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            - name: DO_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "digitalocean-ccm.secretName" . }}
+                  key: {{ .Values.credentials.tokenKey }}
+            {{- with .Values.region }}
+            - name: REGION
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

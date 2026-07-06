@@ -1,6 +1,6 @@
 {{- if .Values.snapshotWebhook.enabled -}}
 {{/*
-Snapshot validation webhook — vendored from UpCloud CSI v1.4.0
+Snapshot validation webhook - vendored from UpCloud CSI v1.4.0
 snapshot-webhook-upcloud-csi.yaml. Enable only after you have a TLS cert
 populated in the Secret named by .Values.snapshotWebhook.tlsSecretName.
 

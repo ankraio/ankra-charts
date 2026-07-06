@@ -1,0 +1,34 @@
+{{- if .Values.storageClasses.create -}}
+{{- $context := . -}}
+{{- $classes := list
+      (dict "name" "do-block-storage"            "fstype" ""    "reclaimPolicy" "")
+      (dict "name" "do-block-storage-retain"     "fstype" ""    "reclaimPolicy" "Retain")
+      (dict "name" "do-block-storage-xfs"        "fstype" "xfs" "reclaimPolicy" "")
+      (dict "name" "do-block-storage-xfs-retain" "fstype" "xfs" "reclaimPolicy" "Retain")
+-}}
+{{- range $classes }}
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "digitalocean-csi.labels" $context | nindent 4 }}
+  annotations:
+    {{- if eq $context.Values.storageClasses.defaultClass .name }}
+    storageclass.kubernetes.io/is-default-class: "true"
+    {{- end }}
+    {{- with (include "digitalocean-csi.annotations" $context) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+provisioner: dobs.csi.digitalocean.com
+allowVolumeExpansion: true
+{{- with .reclaimPolicy }}
+reclaimPolicy: {{ . }}
+{{- end }}
+{{- with .fstype }}
+parameters:
+  fstype: {{ . }}
+{{- end }}
+{{- end }}
+{{- end }}

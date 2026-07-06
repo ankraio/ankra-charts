@@ -1,0 +1,7 @@
+# ArtifactHub repository metadata template copied to the gh-pages branch by CI.
+# repositoryID is filled in by scripts/artifacthub-sync-repo.sh once the repo is
+# registered on artifacthub.io.
+repositoryID: ""
+owners:
+  - name: Ankra AB
+    email: admin@ankra.io

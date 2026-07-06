@@ -1,0 +1,163 @@
+suite: deployment
+templates:
+  - templates/deployment.yaml
+  - templates/secret.yaml
+release:
+  name: ut
+  namespace: kube-system
+chart:
+  version: 0.1.0
+  appVersion: v0.1.67
+set:
+  credentials.token: dop_v1_test
+
+tests:
+  - it: renders a Deployment with the chart-managed name
+    template: templates/deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: ut-digitalocean-ccm
+      - equal:
+          path: metadata.namespace
+          value: kube-system
+
+  - it: defaults to 1 replica with leader election disabled
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect=false
+
+  - it: fails when replicaCount > 1 without leaderElect
+    template: templates/deployment.yaml
+    set:
+      replicaCount: 2
+    asserts:
+      - failedTemplate:
+          errorMessage: "replicaCount > 1 requires leaderElect=true."
+
+  - it: allows replicaCount > 1 with leaderElect enabled
+    template: templates/deployment.yaml
+    set:
+      replicaCount: 2
+      leaderElect: true
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect=true
+
+  - it: runs on the host network with Default dnsPolicy like upstream
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: Default
+
+  - it: tolerates control-plane and uninitialized-cloud-provider taints
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: node-role.kubernetes.io/control-plane
+            effect: NoSchedule
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: node.cloudprovider.kubernetes.io/uninitialized
+            value: "true"
+            effect: NoSchedule
+
+  - it: uses the chart-managed Secret name by default
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: ut-digitalocean-ccm-credentials
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: access-token
+
+  - it: honours credentials.existingSecret with the conventional digitalocean name
+    template: templates/deployment.yaml
+    set:
+      credentials.create: false
+      credentials.token: ""
+      credentials.existingSecret: digitalocean
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          value: digitalocean
+
+  - it: exports REGION when region is set
+    template: templates/deployment.yaml
+    set:
+      region: ams3
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REGION
+            value: ams3
+
+  - it: omits REGION by default
+    template: templates/deployment.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REGION
+            value: ""
+
+  - it: falls back to Chart.AppVersion for the image tag
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/digitalocean/digitalocean-cloud-controller-manager:v0.1.67
+
+  - it: pins the image by digest when set
+    template: templates/deployment.yaml
+    set:
+      images.ccm.digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/digitalocean/digitalocean-cloud-controller-manager@sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+  - it: applies the backend-supplied nodeSelector
+    template: templates/deployment.yaml
+    set:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/control-plane"]
+          value: "true"
+
+  - it: drops all caps and uses a readonly root filesystem
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL

@@ -56,7 +56,7 @@ auto-bumps these.
   `mountOptions`, `annotations`, and `reclaimPolicy` / `volumeBindingMode`
   overrides.
 - **helm test hook**: provisions a small PVC, mounts it on a busybox pod,
-  writes and reads 4MiB of random data, then cleans up — exercises the
+  writes and reads 4MiB of random data, then cleans up - exercises the
   full controller → UpCloud → node mount path.
 - **Pod-spec passthroughs**: `hostAliases`, `dnsConfig`,
   `runtimeClassName`, `schedulerName`, `fsGroupChangePolicy`,
@@ -89,12 +89,12 @@ auto-bumps these.
 - Initial release of the `upcloud-csi` Helm chart, vendoring UpCloud CSI
   v1.4.0 (CRDs, RBAC, controller StatefulSet, snapshot-controller Deployment,
   node DaemonSet, three StorageClasses, optional snapshot validation webhook).
-- Sibling-chart credential sharing — defaults to reusing the Secret created
+- Sibling-chart credential sharing - defaults to reusing the Secret created
   by the [`upcloud-ccm`](../upcloud-ccm/README.md) chart.
 - Post-install/post-upgrade Helm hook Job that patches the chosen UpCloud SC
   as the cluster default (and clears K3s' built-in `local-path` default).
 - Hardened pod & container security contexts everywhere except the node
-  DaemonSet driver container (privileged by design — required for mount
+  DaemonSet driver container (privileged by design - required for mount
   syscalls).
 - HA defaults for the snapshot-controller (2 replicas + leader election +
   PDB) and a tunable HA path for the controller StatefulSet.

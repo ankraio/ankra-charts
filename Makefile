@@ -4,12 +4,12 @@
 # working directory. Both `cd charts && make lint` and
 # `make -C charts lint` (from the repo root) work.
 
-CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator
+CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi
 HELM     ?= helm
 KCONFORM ?= kubeconform
 
 .PHONY: help lint template unittest test \
-        sync sync-ccm sync-csi sync-cloudflare check docs
+        sync sync-ccm sync-csi sync-cloudflare sync-do-ccm sync-do-csi check docs
 
 help:
 	@printf 'Available targets:\n'
@@ -24,6 +24,12 @@ lint:
 	@$(HELM) lint upcloud-csi
 	@echo "==> helm lint cloudflare-operator"
 	@$(HELM) lint cloudflare-operator
+	@echo "==> helm lint digitalocean-ccm"
+	@$(HELM) lint digitalocean-ccm \
+		--set credentials.token=ci
+	@echo "==> helm lint digitalocean-csi"
+	@$(HELM) lint digitalocean-csi \
+		--set credentials.token=ci
 
 template:
 	@mkdir -p /tmp/rendered
@@ -35,7 +41,13 @@ template:
 	@$(HELM) template cf  cloudflare-operator \
 		--namespace cloudflare-operator-system \
 		> /tmp/rendered/cloudflare-operator.yaml
-	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator}.yaml"
+	@$(HELM) template do-ccm digitalocean-ccm \
+		--set credentials.token=ci \
+		> /tmp/rendered/digitalocean-ccm.yaml
+	@$(HELM) template do-csi digitalocean-csi \
+		--set credentials.token=ci \
+		> /tmp/rendered/digitalocean-csi.yaml
+	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,digitalocean-ccm,digitalocean-csi}.yaml"
 
 unittest:
 	@for c in $(CHARTS); do \
@@ -49,6 +61,8 @@ sync:
 	@./scripts/sync-upstream.sh ccm
 	@./scripts/sync-upstream.sh csi
 	@./scripts/sync-upstream.sh cloudflare
+	@./scripts/sync-upstream.sh do-ccm
+	@./scripts/sync-upstream.sh do-csi
 
 sync-ccm:
 	@./scripts/sync-upstream.sh ccm $(VERSION)
@@ -58,6 +72,12 @@ sync-csi:
 
 sync-cloudflare:
 	@./scripts/sync-upstream.sh cloudflare $(VERSION)
+
+sync-do-ccm:
+	@./scripts/sync-upstream.sh do-ccm $(VERSION)
+
+sync-do-csi:
+	@./scripts/sync-upstream.sh do-csi $(VERSION)
 
 check:
 	@./scripts/sync-upstream.sh check
