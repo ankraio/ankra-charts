@@ -14,9 +14,14 @@ domain: ""
 # @param ingress: Enable ingress for Psono.
 # This will create an Ingress object that routes traffic to the server and webclient services.
 # host will be set to base_url.
+# With the default "traefik" class the chart also renders a Traefik
+# StripPrefix Middleware (traefik.io/v1alpha1) that strips /server before
+# forwarding to the Psono server. For other controllers, override
+# ingressClassName and add the controller-specific annotations yourself,
+# e.g. for ingress-nginx the server path must be rewritten from /server/... to /...
 ingress:
   enabled: false
-  ingressClassName: "nginx"
+  ingressClassName: "traefik"
   annotations: { }
   tls:
     enabled: false

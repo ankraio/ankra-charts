@@ -6,6 +6,27 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-15
+
+### Changed
+
+- Default `ingress.ingressClassName` switched from `nginx` to `traefik`
+  (the NGINX ingress controller is retired upstream).
+- Ingress paths now use `pathType: Prefix` (`/server`, `/portal`, `/`)
+  instead of the nginx-specific regex paths, and the hardcoded
+  `nginx.ingress.kubernetes.io/rewrite-target` / `use-regex` annotations
+  were removed. Other controllers can be used by overriding
+  `ingress.ingressClassName` and adding controller-specific annotations
+  via `ingress.annotations` (the server expects `/server` to be stripped
+  from the request path).
+
+### Added
+
+- Traefik `StripPrefix` Middleware (`traefik.io/v1alpha1`) that strips
+  `/server` before forwarding to the Psono server; rendered and attached
+  to the Ingress automatically when `ingress.ingressClassName` is
+  `traefik`.
+
 ## [1.1.0] - 2026-07-05
 
 ### Fixed
