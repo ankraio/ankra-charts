@@ -1,17 +1,41 @@
 {{- if .Values.ingress.enabled -}}
 {{- $host := include "psono.ingressHost" . -}}
+{{- $traefik := eq .Values.ingress.ingressClassName "traefik" -}}
+{{- $stripServer := and $traefik .Values.server.enabled -}}
+{{- if $stripServer }}
+{{/*
+Traefik middleware that strips the /server prefix so the Psono server
+receives requests at its root (it has no notion of the /server sub-path).
+Requests to /portal and / are unaffected: StripPrefix only rewrites paths
+that actually start with /server.
+*/}}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "psono.fullname" . }}-strip-server
+  labels:
+    {{- include "psono.labels" . | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /server
+---
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "psono.fullname" . }}
   labels:
     {{- include "psono.labels" . | nindent 4 }}
+  {{- if or $stripServer .Values.ingress.annotations }}
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
-    nginx.ingress.kubernetes.io/use-regex: "true"
+    {{- if $stripServer }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{ include "psono.fullname" . }}-strip-server@kubernetescrd
+    {{- end }}
     {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+  {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.ingressClassName | quote }}
   {{- if .Values.ingress.tls.enabled }}
@@ -25,8 +49,8 @@ spec:
       http:
         paths:
         {{- if .Values.server.enabled }}
-          - path: /server/(.*)
-            pathType: ImplementationSpecific
+          - path: /server
+            pathType: Prefix
             backend:
               service:
                 name: {{ include "server.fullname" . }}
@@ -34,8 +58,8 @@ spec:
                   number: {{ .Values.server.service.port }}
         {{- end }}
         {{- if .Values.adminClient.enabled }}
-          - path: /(portal.*)
-            pathType: ImplementationSpecific
+          - path: /portal
+            pathType: Prefix
             backend:
               service:
                 name: {{ include "adminClient.fullname" . }}
@@ -43,8 +67,8 @@ spec:
                   number: {{ .Values.adminClient.service.port }}
         {{- end }}
         {{- if .Values.webclient.enabled }}
-          - path: /(.*)
-            pathType: ImplementationSpecific
+          - path: /
+            pathType: Prefix
             backend:
               service:
                 name: {{ include "webclient.fullname" . }}

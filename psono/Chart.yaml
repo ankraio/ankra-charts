@@ -5,7 +5,7 @@ description: |
   server, web client and (optional) admin client. Brings your own
   PostgreSQL, secret-keys Secret and (optional) ingress.
 type: application
-version: 1.1.0
+version: 1.2.0
 appVersion: "5.0.0"
 kubeVersion: ">=1.20.0-0"
 icon: https://gitlab.com/esaqa/psono/psono-client/-/raw/master/src/common/data/img/icon-128.png
@@ -47,17 +47,9 @@ annotations:
     - name: Chart (OCI)
       url: oci://ghcr.io/ankraio/ankra-charts/psono
   artifacthub.io/changes: |
-    - kind: fixed
-      description: server.env, webclient.env, adminClient.env and server.extraSecretEnvironmentVars rendered invalid YAML and broke helm template
-    - kind: fixed
-      description: webclient/adminClient replicas, podAnnotations, security contexts and imagePullSecrets were read from the wrong values scope and silently ignored
-    - kind: fixed
-      description: PSONO_ALLOWED_DOMAINS now renders as a comma-separated list instead of Go slice syntax
     - kind: changed
-      description: web client and admin client config options (allow_custom_server, allow_registration, allow_lost_password, disable_download_bar, authentication_methods) are now wired to webclient values instead of hardcoded
+      description: default ingress.ingressClassName switched from nginx to traefik
+    - kind: changed
+      description: ingress paths use pathType Prefix (/server, /portal, /) instead of nginx regex paths; the hardcoded nginx rewrite/regex annotations were removed
     - kind: added
-      description: server liveness/readiness probes against /healthcheck/, checksum/config rollout annotations for client ConfigMaps, ingress.tls.secretName override, chart icon and a helm-unittest suite
-    - kind: changed
-      description: ingress always renders networking.k8s.io/v1 (chart requires Kubernetes >= 1.20); admin client path is registered before the web client catch-all
-    - kind: removed
-      description: unused server.envFiles value
+      description: Traefik StripPrefix Middleware (traefik.io/v1alpha1) that strips /server before forwarding to the Psono server, wired automatically when ingressClassName is traefik

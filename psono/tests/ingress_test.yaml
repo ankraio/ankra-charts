@@ -3,6 +3,7 @@ templates:
   - templates/ingress.yaml
 release:
   name: psono
+  namespace: psono
 set:
   base_url: https://psono.example.com
   domain: example.com
@@ -12,20 +13,60 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders a networking.k8s.io/v1 Ingress with the host derived from base_url
+  - it: renders a Traefik StripPrefix Middleware and a networking.k8s.io/v1 Ingress
     set:
       ingress.enabled: true
     asserts:
+      - hasDocuments:
+          count: 2
+      - isAPIVersion:
+          of: traefik.io/v1alpha1
+        documentIndex: 0
+      - isKind:
+          of: Middleware
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: psono-strip-server
+        documentIndex: 0
+      - equal:
+          path: spec.stripPrefix.prefixes
+          value:
+            - /server
+        documentIndex: 0
       - isAPIVersion:
           of: networking.k8s.io/v1
+        documentIndex: 1
       - isKind:
           of: Ingress
+        documentIndex: 1
       - equal:
           path: spec.rules[0].host
           value: psono.example.com
+        documentIndex: 1
       - equal:
           path: spec.ingressClassName
-          value: nginx
+          value: traefik
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["traefik.ingress.kubernetes.io/router.middlewares"]
+          value: psono-psono-strip-server@kubernetescrd
+        documentIndex: 1
+
+  - it: skips the Middleware and its annotation for non-traefik ingress classes
+    set:
+      ingress.enabled: true
+      ingress.ingressClassName: my-other-controller
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.ingressClassName
+          value: my-other-controller
+      - notExists:
+          path: metadata.annotations
 
   - it: routes server and webclient by default, without the admin portal
     set:
@@ -34,18 +75,27 @@ tests:
       - lengthEqual:
           path: spec.rules[0].http.paths
           count: 2
+        documentIndex: 1
       - equal:
           path: spec.rules[0].http.paths[0].path
-          value: /server/(.*)
+          value: /server
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+        documentIndex: 1
       - equal:
           path: spec.rules[0].http.paths[0].backend.service.name
           value: psono-server
+        documentIndex: 1
       - equal:
           path: spec.rules[0].http.paths[1].path
-          value: /(.*)
+          value: /
+        documentIndex: 1
       - equal:
           path: spec.rules[0].http.paths[1].backend.service.name
           value: psono-webclient
+        documentIndex: 1
 
   - it: registers the admin portal path before the webclient catch-all when enabled
     set:
@@ -55,15 +105,19 @@ tests:
       - lengthEqual:
           path: spec.rules[0].http.paths
           count: 3
+        documentIndex: 1
       - equal:
           path: spec.rules[0].http.paths[1].path
-          value: /(portal.*)
+          value: /portal
+        documentIndex: 1
       - equal:
           path: spec.rules[0].http.paths[1].backend.service.name
           value: psono-admin
+        documentIndex: 1
       - equal:
           path: spec.rules[0].http.paths[2].path
-          value: /(.*)
+          value: /
+        documentIndex: 1
 
   - it: derives the TLS secret name from the host by default
     set:
@@ -73,9 +127,11 @@ tests:
       - equal:
           path: spec.tls[0].hosts[0]
           value: psono.example.com
+        documentIndex: 1
       - equal:
           path: spec.tls[0].secretName
           value: psono.example.com
+        documentIndex: 1
 
   - it: honors ingress.tls.secretName
     set:
@@ -86,3 +142,19 @@ tests:
       - equal:
           path: spec.tls[0].secretName
           value: psono-tls
+        documentIndex: 1
+
+  - it: merges user-supplied ingress annotations with the middleware annotation
+    set:
+      ingress.enabled: true
+      ingress.annotations:
+        cert-manager.io/cluster-issuer: letsencrypt
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["traefik.ingress.kubernetes.io/router.middlewares"]
+          value: psono-psono-strip-server@kubernetescrd
+        documentIndex: 1

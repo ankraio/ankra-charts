@@ -7,7 +7,7 @@ In-tree Helm charts maintained by the Ankra platform team.
 | [`upcloud-ccm`](upcloud-ccm/README.md) | UpCloud Cloud Controller Manager — provisions LoadBalancers, manages node labels, clears the `uninitialized` cloud-provider taint. | Hand-written from UpCloud docs; image `ghcr.io/upcloudltd/cloud-controller-manager`. |
 | [`upcloud-csi`](upcloud-csi/README.md) | UpCloud CSI block-storage driver — controller StatefulSet, snapshot-controller, node DaemonSet, three StorageClasses. | Vendored from upstream [`UpCloudLtd/upcloud-csi`](https://github.com/UpCloudLtd/upcloud-csi); auto-bumped daily. |
 | [`cloudflare-operator`](cloudflare-operator/README.md) | Cloudflare Tunnel operator (Tunnel / ClusterTunnel / TunnelBinding / AccessTunnel CRDs) — plus optional `ClusterOriginIssuer` for the cert-manager Origin CA external issuer. | Vendored from upstream [`adyanth/cloudflare-operator`](https://github.com/adyanth/cloudflare-operator); auto-bumped daily. |
-| [`psono`](psono/README.md) | Self-hosted [Psono](https://psono.com/) password manager — server, web client and optional admin client behind a single nginx Ingress. Bring your own PostgreSQL + Secrets. | Hand-written from Psono [server install docs](https://doc.psono.com/admin/installation/install-server-ce.html); images `psono/psono-{server,client,admin-client}`. |
+| [`psono`](psono/README.md) | Self-hosted [Psono](https://psono.com/) password manager — server, web client and optional admin client behind a single Ingress (Traefik by default). Bring your own PostgreSQL + Secrets. | Hand-written from Psono [server install docs](https://doc.psono.com/admin/installation/install-server-ce.html); images `psono/psono-{server,client,admin-client}`. |
 
 ## Install via `helm repo add` (recommended)
 

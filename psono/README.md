@@ -4,7 +4,7 @@
 
 [Psono](https://psono.com/) — self-hosted password manager — packaged as a
 Helm chart. Bundles the server, web client and (optional) admin client
-behind a single nginx Ingress.
+behind a single Ingress (Traefik by default).
 
 This chart is **bring-your-own**:
 
@@ -21,7 +21,7 @@ This chart is **bring-your-own**:
 
 # 2. Install the chart from GHCR.
 helm install psono oci://ghcr.io/ankraio/ankra-charts/psono \
-  --version 1.1.0 \
+  --version 1.2.0 \
   -n psono --create-namespace \
   --set base_url=https://psono.example.com \
   --set domain=example.com \
@@ -35,7 +35,7 @@ helm install psono oci://ghcr.io/ankraio/ankra-charts/psono \
 |---|---|
 | Kubernetes | `>= 1.20` (enforced by `Chart.yaml`'s `kubeVersion`). Ingress renders `networking.k8s.io/v1`. |
 | PostgreSQL | Externally managed (e.g. CloudNativePG, Zalando, Crunchy, RDS). The chart only consumes a Secret. |
-| Ingress controller | nginx by default (`ingress.ingressClassName: nginx`). Other controllers work — override the class and adapt the rewrite/regex annotations on `templates/ingress.yaml`. |
+| Ingress controller | Traefik by default (`ingress.ingressClassName: traefik`). The chart renders a Traefik `StripPrefix` Middleware that strips `/server` before it reaches the Psono server. Other controllers work — override the class and add controller-specific annotations via `ingress.annotations` (the server expects the `/server` prefix to be stripped). |
 | cert-manager | Optional. If `ingress.tls.enabled=true`, the chart references a TLS Secret named after `base_url`'s host (override with `ingress.tls.secretName`). |
 
 ## Required Secrets (Bring Your Own)
@@ -110,7 +110,7 @@ stringData:
 
 ```bash
 helm install psono oci://ghcr.io/ankraio/ankra-charts/psono \
-  --version 1.1.0 \
+  --version 1.2.0 \
   -n psono --create-namespace \
   -f my-values.yaml
 ```
@@ -136,11 +136,12 @@ helm install psono ./psono -n psono --create-namespace -f my-values.yaml
 | Admin client | `psono/psono-admin-client:1.7.12` | `adminClient.enabled=false` | `10102` |
 
 When `ingress.enabled=true`, a single Ingress fronts all three under one
-host (`base_url`):
+host (`base_url`), all with `pathType: Prefix`:
 
-- `/server/(.*)` → server
-- `/(portal.*)` → admin client (when enabled)
-- `/(.*)` → web client (catch-all, registered last)
+- `/server` → server (the `/server` prefix is stripped by a Traefik
+  Middleware before the request reaches the server)
+- `/portal` → admin client (when enabled)
+- `/` → web client (catch-all, registered last)
 
 ConfigMap changes roll the web client / admin client Deployments
 automatically via a `checksum/config` pod annotation. The server ships
@@ -158,7 +159,7 @@ See [`values.yaml`](values.yaml) for the full list. Key knobs:
 | `domain` | `""` | Default user domain, surfaced to the web/admin clients. |
 | `imagePullSecrets` | `[]` | Pull secrets for all components (override per component with e.g. `server.imagePullSecrets`). |
 | `ingress.enabled` | `false` | Render the shared Ingress object. |
-| `ingress.ingressClassName` | `"nginx"` | IngressClass to bind. |
+| `ingress.ingressClassName` | `"traefik"` | IngressClass to bind. With `traefik`, a StripPrefix Middleware for `/server` is rendered and attached automatically. |
 | `ingress.tls.enabled` | `false` | Add a `tls:` block keyed off `base_url`'s host. |
 | `ingress.tls.secretName` | `""` | TLS secret name; defaults to the host derived from `base_url`. |
 | `server.enabled` | `true` | Render the server Deployment/SA/Service. |
