@@ -1,0 +1,82 @@
+suite: controller
+templates:
+  - templates/controller-statefulset.yaml
+  - templates/secret.yaml
+release:
+  name: ut
+  namespace: kube-system
+chart:
+  version: 0.1.0
+  appVersion: v4.17.0
+set:
+  credentials.token: dop_v1_test
+
+tests:
+  - it: renders a StatefulSet with five containers
+    template: templates/controller-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: ut-digitalocean-csi-controller
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 5
+
+  - it: wires the DO plugin token from the chart-managed Secret
+    template: templates/controller-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[4].name
+          value: csi-do-plugin
+      - equal:
+          path: spec.template.spec.containers[4].env[2].valueFrom.secretKeyRef.name
+          value: ut-digitalocean-csi-credentials
+      - equal:
+          path: spec.template.spec.containers[4].env[2].valueFrom.secretKeyRef.key
+          value: access-token
+
+  - it: honours credentials.existingSecret with the conventional digitalocean name
+    template: templates/controller-statefulset.yaml
+    set:
+      credentials.create: false
+      credentials.token: ""
+      credentials.existingSecret: digitalocean
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[4].env[2].valueFrom.secretKeyRef.name
+          value: digitalocean
+
+  - it: falls back to Chart.AppVersion for the plugin image tag
+    template: templates/controller-statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[4].image
+          value: docker.io/digitalocean/do-csi-plugin:v4.17.0
+
+  - it: applies the backend-supplied controller nodeSelector
+    template: templates/controller-statefulset.yaml
+    set:
+      controller.nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/control-plane"]
+          value: "true"
+
+  - it: passes the default volumes page size flag
+    template: templates/controller-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[4].args
+          content: --default-volumes-page-size=200
+
+  - it: tolerates control-plane taints by default
+    template: templates/controller-statefulset.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: node-role.kubernetes.io/control-plane
+            effect: NoSchedule

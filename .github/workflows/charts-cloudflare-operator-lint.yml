@@ -59,7 +59,7 @@ jobs:
       - name: helm lint (defaults)
         run: helm lint cloudflare-operator
 
-      - name: helm template — minimal overlay
+      - name: helm template - minimal overlay
         run: |
           mkdir -p /tmp/rendered
           helm template ci cloudflare-operator \
@@ -67,21 +67,21 @@ jobs:
             -f cloudflare-operator/values-examples/minimal.yaml \
             > /tmp/rendered/minimal.yaml
 
-      - name: helm template — production overlay
+      - name: helm template - production overlay
         run: |
           helm template ci cloudflare-operator \
             --namespace cloudflare-operator-system \
             -f cloudflare-operator/values-examples/production.yaml \
             > /tmp/rendered/production.yaml
 
-      - name: helm template — air-gapped overlay
+      - name: helm template - air-gapped overlay
         run: |
           helm template ci cloudflare-operator \
             --namespace cloudflare-operator-system \
             -f cloudflare-operator/values-examples/air-gapped.yaml \
             > /tmp/rendered/air-gapped.yaml
 
-      - name: helm template — full toggles
+      - name: helm template - full toggles
         run: |
           helm template ci cloudflare-operator \
             --namespace cloudflare-operator-system \
@@ -101,7 +101,7 @@ jobs:
             --set replicaCount=2 \
             > /tmp/rendered/full.yaml
 
-      - name: kubeconform — validate every rendered overlay
+      - name: kubeconform - validate every rendered overlay
         run: |
           set -euo pipefail
           for f in /tmp/rendered/*.yaml; do

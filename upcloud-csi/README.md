@@ -17,7 +17,7 @@ helm install upcloud-ccm ./charts/upcloud-ccm -n kube-system \
   --set credentials.username="$UPCLOUD_USERNAME" \
   --set credentials.password="$UPCLOUD_PASSWORD"
 
-# 2. Install the CSI driver — defaults reuse the CCM's Secret.
+# 2. Install the CSI driver - defaults reuse the CCM's Secret.
 helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
   --set storageClasses.defaultClass=maxiops
 ```
@@ -42,7 +42,7 @@ helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
 | `Deployment/<release>-upcloud-csi-snapshot-controller` | upstream | External snapshot-controller. Two replicas + PDB by default. |
 | `DaemonSet/<release>-upcloud-csi-node` | upstream | csi-node-driver-registrar + csi-upcloud-plugin. Privileged plugin (required for mount syscalls). |
 | `StorageClass` × 3 | upstream + extended | `upcloud-block-storage-maxiops`, `…-standard`, `…-hdd`. Per-class enable flag, default-class annotation toggle, `allowedTopologies`, `mountOptions`, per-tier `reclaimPolicy` / `volumeBindingMode`. |
-| `VolumeSnapshotClass` × 1–2 | upstream + extended | Default `Delete` policy SC, optional `Retain` policy SC. |
+| `VolumeSnapshotClass` × 1-2 | upstream + extended | Default `Delete` policy SC, optional `Retain` policy SC. |
 | RBAC | upstream | ServiceAccounts, ClusterRoles, ClusterRoleBindings, leader-election Role. |
 | `Job` (post-install hook) | chart | Patches the chosen UpCloud SC as cluster default and clears K3s' `local-path` default. |
 | `CronJob` + scoped RBAC | chart | Opt-in periodic `VolumeSnapshot` creation with PVC/namespace label selectors and retention rotation (`snapshotCronJob.enabled`). |
@@ -58,7 +58,7 @@ helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
 | Kubernetes | `>= 1.27` (enforced by `Chart.yaml`'s `kubeVersion`). |
 | UpCloud CCM | Recommended (provides node UUID annotations the CSI driver relies on). Install [`upcloud-ccm`](../upcloud-ccm/README.md) first. |
 | UpCloud API credentials | Reused from `upcloud-ccm`-created Secret by default; can be supplied directly. |
-| Snapshot Controller external CRDs | Bundled in `crds/`. No external `snapshot-controller` install needed — the chart ships one. |
+| Snapshot Controller external CRDs | Bundled in `crds/`. No external `snapshot-controller` install needed - the chart ships one. |
 
 ## Sharing credentials with `upcloud-ccm`
 
@@ -134,8 +134,8 @@ The chart can render two snapshot classes, controlled independently:
 
 | Class | Toggle | `deletionPolicy` | Use case |
 |---|---|---|---|
-| `upcloud-csi-snapshotclass` | `snapshotClasses.delete.enabled` (default `true`) | `Delete` | Application-level snapshots, ephemeral test clones — UpCloud snapshot disappears when the K8s `VolumeSnapshot` is removed. |
-| `upcloud-csi-snapshotclass-retain` | `snapshotClasses.retain.enabled` | `Retain` | Compliance / pre-migration archives — UpCloud snapshot survives even if the `VolumeSnapshot` object is deleted. |
+| `upcloud-csi-snapshotclass` | `snapshotClasses.delete.enabled` (default `true`) | `Delete` | Application-level snapshots, ephemeral test clones - UpCloud snapshot disappears when the K8s `VolumeSnapshot` is removed. |
+| `upcloud-csi-snapshotclass-retain` | `snapshotClasses.retain.enabled` | `Retain` | Compliance / pre-migration archives - UpCloud snapshot survives even if the `VolumeSnapshot` object is deleted. |
 
 Mark one as the cluster default with `snapshotClasses.<name>.isDefault: true`.
 
@@ -186,7 +186,7 @@ spec:
 
 ## Multi-zone clusters
 
-UpCloud block storage is **zone-bound** — a `fi-hel1` volume cannot be
+UpCloud block storage is **zone-bound** - a `fi-hel1` volume cannot be
 attached to a `fi-hel2` VM. For clusters that span multiple zones, switch
 to `WaitForFirstConsumer` + `allowedTopologies`:
 
@@ -230,7 +230,7 @@ kube-prometheus-stack`, dashboard sidecar label `grafana_dashboard: "1"`).
 | Pod stuck `ContainerCreating: MountVolume.MountDevice failed` | Node DaemonSet not running on that node, or kubelet root mismatch | Verify `kubectl get pods -l app.kubernetes.io/component=node` covers every node; check `node.kubeletDir`. |
 | `helm test upcloud-csi` fails | Provisioner/attacher cannot reach UpCloud (credentials/quota) | Inspect the test pod events; check Secret data. |
 | Snapshots fail to create | Snapshot controller down / `VolumeSnapshotClass` missing | Verify CRDs installed and the `snapshot-controller` Deployment is Ready. |
-| VolumeSnapshot stays `ReadyToUse=false` | UpCloud API rate-limit on snapshot create | Reduce concurrent snapshots in the CronJob, or wait — the snapshot eventually completes. |
+| VolumeSnapshot stays `ReadyToUse=false` | UpCloud API rate-limit on snapshot create | Reduce concurrent snapshots in the CronJob, or wait - the snapshot eventually completes. |
 
 ## Helm test
 
@@ -328,5 +328,5 @@ A full table of values lives in [`values.yaml`](values.yaml). Key knobs:
 
 ## See also
 
-- [upcloud-ccm](../upcloud-ccm/README.md) — install this first for shared credentials.
+- [upcloud-ccm](../upcloud-ccm/README.md) - install this first for shared credentials.
 - Upstream: <https://github.com/UpCloudLtd/upcloud-csi>.

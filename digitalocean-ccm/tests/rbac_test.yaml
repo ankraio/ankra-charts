@@ -1,0 +1,67 @@
+suite: rbac
+templates:
+  - templates/clusterrole.yaml
+  - templates/clusterrolebinding.yaml
+  - templates/serviceaccount.yaml
+release:
+  name: ut
+  namespace: kube-system
+set:
+  credentials.token: dop_v1_test
+
+tests:
+  - it: renders the upstream cloud-controller-manager ClusterRole rules
+    template: templates/clusterrole.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["coordination.k8s.io"]
+            resources: ["leases"]
+            verbs: ["get", "watch", "list", "create", "update", "delete"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["nodes"]
+            verbs: ["*"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["services"]
+            verbs: ["list", "patch", "update", "watch"]
+
+  - it: binds the ClusterRole to the chart ServiceAccount
+    template: templates/clusterrolebinding.yaml
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: roleRef.name
+          value: ut-digitalocean-ccm
+      - contains:
+          path: subjects
+          content:
+            kind: ServiceAccount
+            name: cloud-controller-manager
+            namespace: kube-system
+
+  - it: creates the cloud-controller-manager ServiceAccount by default
+    template: templates/serviceaccount.yaml
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: cloud-controller-manager
+
+  - it: renders nothing when rbac.create is false
+    template: templates/clusterrole.yaml
+    set:
+      rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0

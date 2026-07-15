@@ -36,7 +36,7 @@ Target namespace (override > release).
 {{- end }}
 
 {{/*
-Selector labels — must remain stable across upgrades to avoid orphaning pods.
+Selector labels - must remain stable across upgrades to avoid orphaning pods.
 */}}
 {{- define "cloudflare-operator.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "cloudflare-operator.name" . }}

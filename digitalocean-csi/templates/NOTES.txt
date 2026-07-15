@@ -1,0 +1,29 @@
+digitalocean-csi {{ .Chart.Version }} (app {{ .Chart.AppVersion }}) installed in namespace {{ include "digitalocean-csi.namespace" . }}.
+
+Check the driver:
+
+  kubectl -n {{ include "digitalocean-csi.namespace" . }} rollout status statefulset/{{ include "digitalocean-csi.fullname" . }}-controller
+  kubectl -n {{ include "digitalocean-csi.namespace" . }} rollout status daemonset/{{ include "digitalocean-csi.fullname" . }}-node
+
+{{- if .Values.storageClasses.create }}
+
+StorageClasses rendered (default: {{ .Values.storageClasses.defaultClass | default "none" }}):
+
+  kubectl get storageclass do-block-storage do-block-storage-retain do-block-storage-xfs do-block-storage-xfs-retain
+{{- end }}
+
+Provision a test volume:
+
+  kubectl apply -f - <<EOF
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: csi-do-test-pvc
+  spec:
+    accessModes: [ReadWriteOnce]
+    resources:
+      requests:
+        storage: 1Gi
+  EOF
+
+Pair this chart with `digitalocean-ccm` for LoadBalancer support.

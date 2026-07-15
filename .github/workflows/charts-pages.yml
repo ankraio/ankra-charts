@@ -6,16 +6,20 @@ name: charts-pages
 #
 # Hand-rolled (rather than helm/chart-releaser-action) because the charts live
 # at the repo root rather than under a single `charts/` directory. Idempotent:
-# re-running with an already-published chart+version is a no-op. The gh-pages
-# branch (with index.html + artifacthub-repo.yml) is bootstrapped out-of-band.
+# re-running with an already-published chart+version is a no-op. Chart
+# directories are discovered automatically via scripts/discover-charts.sh.
 
 on:
   push:
     branches: [main]
     paths:
-      - "upcloud-ccm/**"
-      - "upcloud-csi/**"
-      - "cloudflare-operator/**"
+      - "*/Chart.yaml"
+      - "*/values.yaml"
+      - "*/templates/**"
+      - "*/tests/**"
+      - "scripts/discover-charts.sh"
+      - "scripts/artifacthub-sync-repo.sh"
+      - ".github/artifacthub-repo.yml"
       - ".github/workflows/charts-pages.yml"
   workflow_dispatch:
 
@@ -28,6 +32,9 @@ permissions:
 
 env:
   PAGES_URL: https://ankraio.github.io/ankra-charts
+  ARTIFACTHUB_ORG: ankra
+  ARTIFACTHUB_REPO_NAME: ankra-charts
+  ARTIFACTHUB_REPO_DISPLAY_NAME: Ankra Charts
 
 jobs:
   publish:
@@ -36,6 +43,22 @@ jobs:
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
+
+      - name: Discover chart directories
+        id: charts
+        run: |
+          set -euo pipefail
+          mapfile -t chart_directories < <(bash scripts/discover-charts.sh)
+          if [[ "${#chart_directories[@]}" -eq 0 ]]; then
+            echo "No chart directories found." >&2
+            exit 1
+          fi
+          printf '%s\n' "${chart_directories[@]}"
+          {
+            printf 'charts<<EOF\n'
+            printf '%s\n' "${chart_directories[@]}"
+            printf 'EOF\n'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Checkout gh-pages
         uses: actions/checkout@v4
@@ -52,7 +75,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cr-packages
-          for chart in upcloud-ccm upcloud-csi cloudflare-operator; do
+          while IFS= read -r chart; do
+            [[ -n "${chart}" ]] || continue
             if [[ "${chart}" == "upcloud-ccm" ]]; then
               helm lint "${chart}" \
                 --set ccmConfig.clusterID=ci \
@@ -62,15 +86,41 @@ jobs:
               helm lint "${chart}"
             fi
             helm package "${chart}" --destination .cr-packages
-          done
+          done <<< "${{ steps.charts.outputs.charts }}"
 
       - name: Update the Pages Helm repo index
         run: |
           set -euo pipefail
-          # Copy the freshly packaged charts in alongside the existing ones.
           cp -f .cr-packages/*.tgz gh-pages/
-          # Regenerate index.yaml across all packages, preserving prior metadata.
           helm repo index gh-pages --url "${PAGES_URL}" --merge gh-pages/index.yaml
+
+      - name: Ensure ArtifactHub metadata file exists
+        run: |
+          set -euo pipefail
+          if [[ ! -f gh-pages/artifacthub-repo.yml ]]; then
+            cp .github/artifacthub-repo.yml gh-pages/artifacthub-repo.yml
+          fi
+          if [[ ! -f gh-pages/index.html ]]; then
+            printf '%s\n' \
+              '<!DOCTYPE html>' \
+              '<html lang="en">' \
+              '  <head><meta charset="utf-8"><title>Ankra Charts</title></head>' \
+              '  <body><p>Ankra Helm charts. Use <code>helm repo add ankra https://ankraio.github.io/ankra-charts</code>.</p></body>' \
+              '</html>' \
+              > gh-pages/index.html
+          fi
+
+      - name: Register or sync ArtifactHub repository
+        env:
+          ARTIFACTHUB_API_KEY_ID: ${{ secrets.ARTIFACTHUB_API_KEY_ID }}
+          ARTIFACTHUB_API_KEY_SECRET: ${{ secrets.ARTIFACTHUB_API_KEY_SECRET }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ARTIFACTHUB_API_KEY_ID}" || -z "${ARTIFACTHUB_API_KEY_SECRET}" ]]; then
+            echo "ArtifactHub API secrets not configured; skipping registration."
+            exit 0
+          fi
+          bash scripts/artifacthub-sync-repo.sh gh-pages
 
       - name: Commit and push to gh-pages
         run: |
@@ -86,6 +136,19 @@ jobs:
           git commit -m "chore(charts): publish to Pages Helm repo [skip ci]"
           git push origin gh-pages
 
+      - name: Claim ArtifactHub repository ownership
+        env:
+          ARTIFACTHUB_API_KEY_ID: ${{ secrets.ARTIFACTHUB_API_KEY_ID }}
+          ARTIFACTHUB_API_KEY_SECRET: ${{ secrets.ARTIFACTHUB_API_KEY_SECRET }}
+          ARTIFACTHUB_ACTION: claim
+        run: |
+          set -euo pipefail
+          if [[ -z "${ARTIFACTHUB_API_KEY_ID}" || -z "${ARTIFACTHUB_API_KEY_SECRET}" ]]; then
+            echo "ArtifactHub API secrets not configured; skipping ownership claim."
+            exit 0
+          fi
+          bash scripts/artifacthub-sync-repo.sh gh-pages
+
       - name: Summary
         if: always()
         run: |
@@ -97,4 +160,6 @@ jobs:
             echo "helm repo update"
             echo "helm search repo ankra"
             echo '```'
+            echo
+            echo "Configure \`ARTIFACTHUB_API_KEY_ID\` and \`ARTIFACTHUB_API_KEY_SECRET\` repository secrets to auto-register on ArtifactHub."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,55 @@
+apiVersion: v2
+name: digitalocean-ccm
+description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified from the upstream release manifests, with LoadBalancer provisioning, node lifecycle management, and uninitialized-taint clearing.
+type: application
+version: 0.1.0
+appVersion: "v0.1.67"
+kubeVersion: ">=1.27.0-0"
+icon: https://ankra.io/images/apple-touch-icon.png
+
+home: https://github.com/ankraio/ankra-charts/tree/main/digitalocean-ccm
+sources:
+  - https://github.com/ankraio/ankra-charts/tree/main/digitalocean-ccm
+  - https://github.com/digitalocean/digitalocean-cloud-controller-manager
+
+keywords:
+  - digitalocean
+  - ccm
+  - cloud-controller-manager
+  - cloud-provider
+  - load-balancer
+  - k3s
+
+maintainers:
+  - name: Ankra AB
+    email: admin@ankra.io
+    url: https://ankra.io
+
+annotations:
+  category: Infrastructure
+  licenses: Apache-2.0
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/maintainers: |
+    - name: Ankra AB
+      email: admin@ankra.io
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/ankraio/ankra-charts
+    - name: Helm repo (helm repo add)
+      url: https://ankraio.github.io/ankra-charts
+    - name: Upstream project
+      url: https://github.com/digitalocean/digitalocean-cloud-controller-manager
+    - name: Chart (OCI)
+      url: oci://ghcr.io/ankraio/ankra-charts/digitalocean-ccm
+  artifacthub.io/recommendations: |
+    - url: https://artifacthub.io/packages/helm/ankra-charts/digitalocean-csi
+  artifacthub.io/operator: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/images: |
+    - name: digitalocean-cloud-controller-manager
+      image: docker.io/digitalocean/digitalocean-cloud-controller-manager:v0.1.67
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial chart, vendored from the upstream v0.1.67 release manifest.

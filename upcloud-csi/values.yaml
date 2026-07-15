@@ -174,10 +174,10 @@ storageClasses:
     allowedTopologies: []
     annotations: {}
 
-# -- VolumeSnapshotClasses. The chart can render two — one with
+# -- VolumeSnapshotClasses. The chart can render two - one with
 # `deletionPolicy: Delete` (CSI deletes the underlying UpCloud snapshot when
 # the K8s VolumeSnapshot is removed) and one with `deletionPolicy: Retain`
-# (UpCloud snapshot survives — used for compliance / pre-migration backups).
+# (UpCloud snapshot survives - used for compliance / pre-migration backups).
 snapshotClasses:
   delete:
     enabled: true
@@ -321,7 +321,7 @@ snapshotController:
 node:
   # -- PriorityClass for node pods.
   priorityClassName: system-node-critical
-  # -- Tolerate every taint by default — DaemonSet must run everywhere PVs
+  # -- Tolerate every taint by default - DaemonSet must run everywhere PVs
   # might be mounted.
   tolerations:
     - operator: Exists
@@ -450,7 +450,7 @@ networkPolicy:
 # Pair with `snapshotClasses.retain.enabled=true` for compliance archives.
 snapshotCronJob:
   enabled: false
-  # -- Cron schedule (UTC by default — override `timeZone`).
+  # -- Cron schedule (UTC by default - override `timeZone`).
   schedule: "0 2 * * *"
   timeZone: "Etc/UTC"
   successfulJobsHistoryLimit: 3

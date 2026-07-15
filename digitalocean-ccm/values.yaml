@@ -1,0 +1,175 @@
+# -- Global values, applied across every workload in this chart and
+# composable with sibling Bitnami-style charts (e.g. `global.imageRegistry`).
+global:
+  # -- Override every `images.*.registry` (useful for air-gapped installs that
+  # mirror images into a private registry such as Harbor).
+  imageRegistry: ""
+  # -- Appended to chart-level `imagePullSecrets`.
+  imagePullSecrets: []
+
+# -- Override the release namespace for every rendered resource.
+# Defaults to `.Release.Namespace`; production clusters usually install
+# into `kube-system`.
+namespaceOverride: ""
+
+# -- Common labels stamped onto every resource.
+commonLabels: {}
+# -- Common annotations stamped onto every resource.
+commonAnnotations: {}
+
+# -- Number of CCM replicas. Upstream ships a single replica with leader
+# election disabled; set `leaderElect: true` when raising this above 1.
+replicaCount: 1
+
+# -- Enable Kubernetes leader election (`--leader-elect`). Required when
+# `replicaCount > 1`; the upstream single-replica manifest disables it.
+leaderElect: false
+
+# -- Image-pull secrets for all containers (combined with `global.imagePullSecrets`).
+imagePullSecrets: []
+
+images:
+  ccm:
+    # -- Registry the CCM image is pulled from (overridden by `global.imageRegistry`).
+    registry: docker.io
+    # -- Repository within the registry.
+    repository: digitalocean/digitalocean-cloud-controller-manager
+    # -- Tag. Empty string falls back to `.Chart.AppVersion`.
+    tag: ""
+    # -- Image digest (sha256:...). When set, takes precedence over `tag`
+    # and yields `registry/repository@sha256:...`. Recommended for production.
+    digest: ""
+    # -- `IfNotPresent`, `Always`, or `Never`.
+    pullPolicy: IfNotPresent
+
+credentials:
+  # -- Render a Secret with the supplied `token`.
+  # Mutually exclusive with `existingSecret`.
+  create: true
+  # -- Reference an externally-managed Secret (e.g. the conventional
+  # `digitalocean` Secret in kube-system, shared with the digitalocean-csi
+  # chart).
+  existingSecret: ""
+  # -- Secret key holding the DigitalOcean API token. The upstream
+  # convention is `access-token`.
+  tokenKey: access-token
+  # -- DigitalOcean personal access token. Required when `create: true`.
+  token: ""
+
+# -- DigitalOcean region slug (e.g. `ams3`). Exported as the `REGION`
+# environment variable. The CCM discovers the region from the droplet
+# metadata service when empty; set it explicitly for deterministic startup
+# on clusters where the metadata service is unreachable.
+region: ""
+
+serviceAccount:
+  # -- Create a ServiceAccount. K3s started with `--disable-cloud-controller`
+  # (the external-CCM setup this chart targets) does not ship one.
+  create: true
+  # -- Name of the SA to use (either created here or referenced).
+  name: "cloud-controller-manager"
+  # -- Extra annotations on the SA.
+  annotations: {}
+  # -- Mount the SA token automatically into pods. Required for CCM to talk
+  # to the apiserver.
+  automountServiceAccountToken: true
+
+rbac:
+  # -- Render the upstream `system:cloud-controller-manager` ClusterRole plus
+  # a ClusterRoleBinding to the SA above.
+  create: true
+
+# -- PriorityClass for the CCM pods. `system-cluster-critical` ensures they
+# evict last under pressure.
+priorityClassName: system-cluster-critical
+
+# -- Tolerations so the pod schedules on control-plane nodes and survives
+# the `uninitialized` cloud-provider taint during cluster bootstrap.
+tolerations:
+  - key: node.cloudprovider.kubernetes.io/uninitialized
+    value: "true"
+    effect: NoSchedule
+  - key: CriticalAddonsOnly
+    operator: Exists
+  - key: node-role.kubernetes.io/master
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    effect: NoSchedule
+
+# -- Node selector for the CCM pod. Set to pin the pod to control-plane
+# nodes (e.g. `node-role.kubernetes.io/control-plane: "true"` on K3s).
+nodeSelector: {}
+
+# -- Pod affinity/anti-affinity rules.
+affinity: {}
+
+# -- Run on the host network like the upstream manifest - the CCM must reach
+# the apiserver before the CNI is necessarily ready.
+hostNetwork: true
+
+# -- DNS policy. Upstream uses `Default` so resolution works on the host
+# network before cluster DNS exists.
+dnsPolicy: Default
+
+# -- Grace period before SIGKILL.
+terminationGracePeriodSeconds: 30
+
+# -- Restrict revision history to keep etcd lean (upstream uses 2).
+revisionHistoryLimit: 2
+
+# -- Rolling update strategy.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# -- Pod-level security context.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# -- Resource requests & limits. Upstream requests only; conservative limits
+# added for predictable scheduling.
+resources:
+  requests:
+    cpu: 100m
+    memory: 50Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# -- Extra environment variables for the CCM container.
+extraEnv: []
+
+# -- Extra command-line flags appended after the chart-managed flags
+# (chart flags win on conflicts because they appear first).
+extraArgs: []
+
+# -- Pod annotations.
+podAnnotations: {}
+
+# -- Pod labels (in addition to chart-managed labels).
+podLabels: {}
+
+# -- Pod Disruption Budget. Active when `replicaCount > 1`.
+podDisruptionBudget:
+  enabled: true
+  # -- One of `minAvailable` / `maxUnavailable` must be set.
+  minAvailable: 1
+  maxUnavailable: ""
+
+# -- Logging verbosity (`--v=<n>` flag).
+logVerbosity: 2
+
+# -- `FallbackToLogsOnError` makes Kubernetes surface container logs when the
+# container exits non-zero, instead of just `terminated` with no detail.
+terminationMessagePolicy: FallbackToLogsOnError

@@ -1,0 +1,24 @@
+digitalocean-ccm {{ .Chart.Version }} (app {{ .Chart.AppVersion }}) installed in namespace {{ include "digitalocean-ccm.namespace" . }}.
+
+Check the controller:
+
+  kubectl -n {{ include "digitalocean-ccm.namespace" . }} rollout status deployment/{{ include "digitalocean-ccm.fullname" . }}
+  kubectl -n {{ include "digitalocean-ccm.namespace" . }} logs deployment/{{ include "digitalocean-ccm.fullname" . }}
+
+{{- if .Values.credentials.create }}
+
+The DigitalOcean API token is stored in the chart-managed Secret
+`{{ include "digitalocean-ccm.secretName" . }}`.
+{{- else }}
+
+Using the externally-managed Secret `{{ include "digitalocean-ccm.secretName" . }}`
+(key `{{ .Values.credentials.tokenKey }}`).
+{{- end }}
+
+Nodes shed the `node.cloudprovider.kubernetes.io/uninitialized` taint once the
+CCM initialises them. Verify with:
+
+  kubectl get nodes -o custom-columns='NAME:.metadata.name,TAINTS:.spec.taints[*].key'
+
+LoadBalancer Services are provisioned as DigitalOcean Load Balancers in the
+droplet region. Pair this chart with `digitalocean-csi` for block storage.

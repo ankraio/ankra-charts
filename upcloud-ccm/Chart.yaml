@@ -1,6 +1,6 @@
 apiVersion: v2
 name: upcloud-ccm
-description: UpCloud Cloud Controller Manager for Kubernetes — leader-elected, hardened, with built-in Prometheus alerts & Grafana dashboard.
+description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected, hardened, with built-in Prometheus alerts & Grafana dashboard.
 type: application
 version: 0.3.0
 appVersion: "v1.2.1"

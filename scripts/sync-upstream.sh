@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# sync-upstream.sh - Sync charts/{upcloud-ccm,upcloud-csi,cloudflare-operator}
-# with the latest upstream releases. Idempotent: re-running with the same
-# version produces no git diff.
+# sync-upstream.sh - Sync charts/{upcloud-ccm,upcloud-csi,cloudflare-operator,
+# digitalocean-ccm,digitalocean-csi} with the latest upstream releases.
+# Idempotent: re-running with the same version produces no git diff.
 #
 # Usage:
 #   ./scripts/sync-upstream.sh check                  # print latest upstream versions, no writes
 #   ./scripts/sync-upstream.sh ccm [version]          # bump CCM appVersion (e.g. v1.2.3); default: latest
 #   ./scripts/sync-upstream.sh csi [version]          # re-vendor + bump CSI appVersion; default: latest
 #   ./scripts/sync-upstream.sh cloudflare [version]   # re-vendor + bump cloudflare-operator appVersion; default: latest
+#   ./scripts/sync-upstream.sh do-ccm [version]       # re-vendor + bump digitalocean-ccm appVersion; default: latest
+#   ./scripts/sync-upstream.sh do-csi [version]       # re-vendor + bump digitalocean-csi appVersion; default: latest
 #
 # Exit codes:
 #   0 - success, no structural change (image-tag-only diff). Safe to auto-merge.
@@ -28,12 +30,20 @@ CSI_DIR="${CHARTS_DIR}/upcloud-csi"
 CSI_VENDOR_DIR="${CSI_DIR}/vendor"
 CF_DIR="${CHARTS_DIR}/cloudflare-operator"
 CF_VENDOR_DIR="${CF_DIR}/vendor"
+DO_CCM_DIR="${CHARTS_DIR}/digitalocean-ccm"
+DO_CCM_VENDOR_DIR="${DO_CCM_DIR}/vendor"
+DO_CSI_DIR="${CHARTS_DIR}/digitalocean-csi"
+DO_CSI_VENDOR_DIR="${DO_CSI_DIR}/vendor"
 
 CCM_GHCR_IMAGE="ghcr.io/upcloudltd/cloud-controller-manager"
 CCM_GH_REPO="UpCloudLtd/cloud-controller-manager"
 CSI_GH_REPO="UpCloudLtd/upcloud-csi"
 CF_GH_REPO="adyanth/cloudflare-operator"
 CF_IMAGE="docker.io/adyanth/cloudflare-operator"
+DO_CCM_GH_REPO="digitalocean/digitalocean-cloud-controller-manager"
+DO_CCM_IMAGE="docker.io/digitalocean/digitalocean-cloud-controller-manager"
+DO_CSI_GH_REPO="digitalocean/csi-digitalocean"
+DO_CSI_IMAGE="docker.io/digitalocean/do-csi-plugin"
 
 # -------------------------------------------------------------------------
 # Helpers
@@ -83,7 +93,7 @@ patch_chart_yaml() {
 # inside a values.yaml `images.<key>:` block. Uses Python (which is available
 # everywhere `yq` is) and walks the file line by line, looking for the matching
 # image block and patching the requested sub-field while leaving every other
-# byte alone — comments, blank lines, indentation all preserved.
+# byte alone - comments, blank lines, indentation all preserved.
 patch_values_image_field() {
     local file=$1 image_key=$2 field=$3 value=$4
     require_tool python3
@@ -188,6 +198,18 @@ patch_cf_image_digest() {
     patch_values_image_field "${CF_DIR}/values.yaml" manager digest "$1"
 }
 
+patch_do_ccm_image_digest() {
+    patch_values_image_field "${DO_CCM_DIR}/values.yaml" ccm digest "$1"
+}
+
+patch_do_csi_image_tag() {
+    patch_values_image_field "${DO_CSI_DIR}/values.yaml" "$1" tag "$2"
+}
+
+patch_do_csi_image_digest() {
+    patch_values_image_field "${DO_CSI_DIR}/values.yaml" "$1" digest "$2"
+}
+
 # Honour GITHUB_TOKEN to dodge rate limits in CI and authenticated local runs.
 gh_curl() {
     local -a auth=()
@@ -251,9 +273,12 @@ cmd_check() {
     require_tool jq
 
     local ccm_current ccm_latest csi_current csi_latest cf_current cf_latest
+    local do_ccm_current do_ccm_latest do_csi_current do_csi_latest
     ccm_current=$(read_chart_appversion "${CCM_DIR}")
     csi_current=$(read_chart_appversion "${CSI_DIR}")
     cf_current=$(read_chart_appversion "${CF_DIR}")
+    do_ccm_current=$(read_chart_appversion "${DO_CCM_DIR}")
+    do_csi_current=$(read_chart_appversion "${DO_CSI_DIR}")
     ccm_latest=$(gh_latest_release "${CCM_GH_REPO}")
     if [[ -z "$ccm_latest" ]]; then
         ccm_latest=$(ghcr_latest_tag "${CCM_GHCR_IMAGE}")
@@ -261,11 +286,15 @@ cmd_check() {
     fi
     csi_latest=$(gh_latest_release "${CSI_GH_REPO}")
     cf_latest=$(gh_latest_release "${CF_GH_REPO}")
+    do_ccm_latest=$(gh_latest_release "${DO_CCM_GH_REPO}")
+    do_csi_latest=$(gh_latest_release "${DO_CSI_GH_REPO}")
 
     printf 'chart\tcurrent\tlatest\n'
     printf 'upcloud-ccm\t%s\t%s\n' "${ccm_current:-?}" "${ccm_latest:-?}"
     printf 'upcloud-csi\t%s\t%s\n' "${csi_current:-?}" "${csi_latest:-?}"
     printf 'cloudflare-operator\t%s\t%s\n' "${cf_current:-?}" "${cf_latest:-?}"
+    printf 'digitalocean-ccm\t%s\t%s\n' "${do_ccm_current:-?}" "${do_ccm_latest:-?}"
+    printf 'digitalocean-csi\t%s\t%s\n' "${do_csi_current:-?}" "${do_csi_latest:-?}"
 }
 
 cmd_ccm() {
@@ -374,7 +403,7 @@ cmd_csi() {
     fi
 
     if [[ "$structural_change" == "1" ]]; then
-        log "STRUCTURAL CHANGE detected — workflow should label PR 'needs-review'"
+        log "STRUCTURAL CHANGE detected - workflow should label PR 'needs-review'"
         exit 2
     fi
     exit 0
@@ -522,15 +551,222 @@ PY
     fi
 
     if [[ "$structural_change" == "1" ]]; then
-        log "STRUCTURAL CHANGE detected — workflow should label PR 'needs-review'"
+        log "STRUCTURAL CHANGE detected - workflow should label PR 'needs-review'"
         exit 2
     fi
     exit 0
 }
 
+cmd_do_ccm() {
+    require_tool curl
+    require_tool jq
+
+    local version="${1:-}"
+    if [[ -z "$version" ]]; then
+        version=$(gh_latest_release "${DO_CCM_GH_REPO}")
+    fi
+    [[ -n "$version" ]] || die "could not determine latest digitalocean-ccm version"
+
+    log "syncing digitalocean-ccm to ${version}"
+
+    local current
+    current=$(read_chart_appversion "${DO_CCM_DIR}")
+    local vendor_target="${DO_CCM_VENDOR_DIR}/${version}"
+    mkdir -p "${vendor_target}"
+
+    local url="https://raw.githubusercontent.com/${DO_CCM_GH_REPO}/master/releases/digitalocean-cloud-controller-manager/${version}.yml"
+    log "downloading ${version}.yml"
+    curl -fsSL "${url}" -o "${vendor_target}/digitalocean-cloud-controller-manager.yml" \
+        || die "failed to download ${url}"
+
+    # Point the `current` symlink at the freshly vendored version.
+    ln -sfn "${version}" "${DO_CCM_VENDOR_DIR}/current"
+
+    # Detect structural changes vs the previous vendor snapshot.
+    local structural_change=0
+    if [[ "$current" != "$version" && -d "${DO_CCM_VENDOR_DIR}/${current}" ]]; then
+        log "diffing ${current} -> ${version}"
+        if diff -u \
+            "${DO_CCM_VENDOR_DIR}/${current}/digitalocean-cloud-controller-manager.yml" \
+            "${vendor_target}/digitalocean-cloud-controller-manager.yml" \
+            | grep -vE '^(\+\+\+|---|@@|[+-]\s+(- )?image:)' \
+            | grep -qE '^[+-]'
+        then
+            log "structural change detected in digitalocean-cloud-controller-manager.yml"
+            structural_change=1
+        fi
+    fi
+
+    # Bump Chart.yaml only when appVersion actually changed.
+    if [[ "$current" != "$version" ]]; then
+        local new_chart_version
+        new_chart_version=$(bump_patch "$(read_chart_version "${DO_CCM_DIR}")")
+        patch_chart_yaml "${DO_CCM_DIR}" "${version}" "${new_chart_version}"
+        log "digitalocean-ccm bumped: ${current:-?} -> ${version} (chart ${new_chart_version})"
+    else
+        log "digitalocean-ccm appVersion already ${version}; Chart.yaml left alone"
+    fi
+
+    # Best-effort: pin the image digest too.
+    local digest
+    digest=$(image_digest "${DO_CCM_IMAGE}:${version}")
+    if [[ -n "$digest" ]]; then
+        log "pinning digitalocean-ccm digest: ${digest}"
+        patch_do_ccm_image_digest "${digest}"
+    fi
+
+    if [[ "$structural_change" == "1" ]]; then
+        log "STRUCTURAL CHANGE detected - workflow should label PR 'needs-review'"
+        exit 2
+    fi
+    exit 0
+}
+
+cmd_do_csi() {
+    require_tool curl
+    require_tool jq
+    require_tool yq
+    require_tool python3
+
+    local version="${1:-}"
+    if [[ -z "$version" ]]; then
+        version=$(gh_latest_release "${DO_CSI_GH_REPO}")
+    fi
+    [[ -n "$version" ]] || die "could not determine latest digitalocean-csi version"
+
+    log "syncing digitalocean-csi to ${version}"
+
+    local current
+    current=$(read_chart_appversion "${DO_CSI_DIR}")
+    local vendor_target="${DO_CSI_VENDOR_DIR}/${version}"
+    mkdir -p "${vendor_target}"
+
+    local assets=(crds.yaml driver.yaml snapshot-controller.yaml)
+    for asset in "${assets[@]}"; do
+        local url="https://raw.githubusercontent.com/${DO_CSI_GH_REPO}/master/deploy/kubernetes/releases/csi-digitalocean-${version}/${asset}"
+        log "downloading ${asset}"
+        curl -fsSL "${url}" -o "${vendor_target}/${asset}" \
+            || die "failed to download ${url}"
+    done
+
+    # Point the `current` symlink at the freshly vendored version.
+    ln -sfn "${version}" "${DO_CSI_VENDOR_DIR}/current"
+
+    # Detect structural changes vs the previous vendor snapshot.
+    local structural_change=0
+    if [[ "$current" != "$version" && -d "${DO_CSI_VENDOR_DIR}/${current}" ]]; then
+        log "diffing ${current} -> ${version} (driver.yaml only)"
+        if diff -u \
+            "${DO_CSI_VENDOR_DIR}/${current}/driver.yaml" \
+            "${vendor_target}/driver.yaml" \
+            | grep -vE '^(\+\+\+|---|@@|[+-]\s+(- )?image:|[+-]\s+tag:)' \
+            | grep -qE '^[+-]'
+        then
+            log "structural change detected in driver.yaml"
+            structural_change=1
+        fi
+    fi
+
+    # Re-split the snapshot CRDs into crds/<name>.yaml.
+    log "re-splitting CRDs into crds/*.yaml"
+    python3 - "${vendor_target}/crds.yaml" "${DO_CSI_DIR}/crds" <<'PY'
+import re, sys, pathlib
+
+src_path, crds_dir = sys.argv[1:3]
+src = pathlib.Path(src_path).read_text()
+out_dir = pathlib.Path(crds_dir)
+out_dir.mkdir(exist_ok=True)
+
+for old in out_dir.glob("*.yaml"):
+    old.unlink()
+
+docs = [d for d in re.split(r'^---\s*$', src, flags=re.M)
+        if d.strip() and 'CustomResourceDefinition' in d]
+for d in docs:
+    m = re.search(r'^  name:\s*(\S+)$', d, flags=re.M)
+    if not m:
+        continue
+    name = m.group(1)
+    out = out_dir / f"{name}.yaml"
+    out.write_text(d.strip() + "\n")
+    print("wrote", out)
+PY
+
+    # Extract sidecar image tags from the new manifests and patch values.yaml.
+    extract_and_patch_do_csi_tags "${vendor_target}/driver.yaml" "${vendor_target}/snapshot-controller.yaml"
+
+    # Bump Chart.yaml only when appVersion actually changed.
+    if [[ "$current" != "$version" ]]; then
+        local new_chart_version
+        new_chart_version=$(bump_patch "$(read_chart_version "${DO_CSI_DIR}")")
+        patch_chart_yaml "${DO_CSI_DIR}" "${version}" "${new_chart_version}"
+        log "digitalocean-csi bumped: ${current:-?} -> ${version} (chart ${new_chart_version})"
+    else
+        log "digitalocean-csi appVersion already ${version}; Chart.yaml left alone"
+    fi
+
+    # Best-effort: pin the do-csi-plugin image digest.
+    local digest
+    digest=$(image_digest "${DO_CSI_IMAGE}:${version}")
+    if [[ -n "$digest" ]]; then
+        log "pinning csiDriver digest: ${digest}"
+        patch_do_csi_image_digest "csiDriver" "${digest}"
+    fi
+
+    if [[ "$structural_change" == "1" ]]; then
+        log "STRUCTURAL CHANGE detected - workflow should label PR 'needs-review'"
+        exit 2
+    fi
+    exit 0
+}
+
+# Pull every `image: …` reference from the upstream DO CSI manifests and map
+# it to a values.yaml key. The do-csi-plugin image resolves its tag from
+# `.Chart.AppVersion`, so only the sidecars are patched.
+extract_and_patch_do_csi_tags() {
+    require_tool yq
+
+    local images
+    images=$(for manifest in "$@"; do
+        yq -r '.. | select(has("image")) | .image' "${manifest}" 2>/dev/null
+    done \
+        | grep -vE '^(---|null)$' \
+        | grep -v '^$' \
+        | sort -u || true)
+
+    while IFS= read -r image; do
+        [[ -n "$image" ]] || continue
+        local tag="${image##*:}"
+        local repo="${image%:*}"
+        local key=""
+        case "$repo" in
+            *csi-provisioner*)             key=provisioner ;;
+            *csi-attacher*)                key=attacher ;;
+            *csi-resizer*)                 key=resizer ;;
+            *csi-snapshotter*)             key=snapshotter ;;
+            *csi-node-driver-registrar*)   key=nodeDriverRegistrar ;;
+            *snapshot-controller*)         key=snapshotController ;;
+            *do-csi-plugin*)
+                log "leaving images.csiDriver.tag empty (chart uses .Chart.AppVersion)"
+                patch_do_csi_image_tag "csiDriver" ""
+                continue
+                ;;
+            *alpine*)
+                continue
+                ;;
+            *)
+                log "skipping unrecognised image ${image}"
+                continue
+                ;;
+        esac
+        log "patching images.${key}.tag = ${tag}"
+        patch_do_csi_image_tag "${key}" "${tag}"
+    done <<<"$images"
+}
+
 # Pull every `image: …` reference from the upstream setup-upcloud-csi.yaml
 # and map it to a values.yaml key. Patches the .tag of each. Skips upstream
-# `latest` tags for the csiDriver image — the chart resolves those from
+# `latest` tags for the csiDriver image - the chart resolves those from
 # `.Chart.AppVersion` instead, which keeps `helm install` deterministic.
 extract_and_patch_csi_tags() {
     local setup_yaml=$1
@@ -587,6 +823,8 @@ main() {
         ccm)        cmd_ccm        "$@" ;;
         csi)        cmd_csi        "$@" ;;
         cloudflare) cmd_cloudflare "$@" ;;
+        do-ccm)     cmd_do_ccm     "$@" ;;
+        do-csi)     cmd_do_csi     "$@" ;;
         ""|-h|--help)
             cat >&2 <<EOF
 sync-upstream.sh - sync charts/* with their upstream releases
@@ -596,6 +834,8 @@ Usage:
   $0 ccm [version]               # bump upcloud-ccm appVersion (default: latest)
   $0 csi [version]               # re-vendor upcloud-csi (default: latest)
   $0 cloudflare [version]        # re-vendor cloudflare-operator (default: latest)
+  $0 do-ccm [version]            # re-vendor digitalocean-ccm (default: latest)
+  $0 do-csi [version]            # re-vendor digitalocean-csi (default: latest)
 
 Exit codes:
   0 - success, image-tag-only diff

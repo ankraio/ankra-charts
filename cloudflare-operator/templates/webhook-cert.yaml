@@ -42,7 +42,7 @@ spec:
 {{- end }}
 {{- if and .Values.webhook.certManager.enabled .Values.metrics.certificate.enabled }}
 ---
-# Metrics serving cert — used by the manager's `--metrics-bind-address` HTTPS
+# Metrics serving cert - used by the manager's `--metrics-bind-address` HTTPS
 # endpoint. Mirrors upstream behaviour so kube-rbac-proxy-style scraping
 # works out of the box.
 apiVersion: cert-manager.io/v1

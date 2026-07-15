@@ -106,7 +106,7 @@ suit your environment:
 - `--profiling=false` and `--contention-profiling=false`.
 - Liveness/readiness probes target the CCM secure `/healthz` over HTTPS.
 - `metrics.serviceMonitor.enabled` (or `metrics.podMonitor.enabled`) exposes
-  the CCM to Prometheus — requires the Prometheus Operator CRDs.
+  the CCM to Prometheus - requires the Prometheus Operator CRDs.
 - `metrics.prometheusRule.enabled` renders the recommended alert rules
   (CCM down, leader-election flapping, API errors, crash loop).
 - `dashboard.enabled` ships a Grafana dashboard ConfigMap discovered by the
@@ -128,7 +128,7 @@ The chart ships three opt-in observability resources:
 | Resource | Value flag | Purpose |
 |---|---|---|
 | `ServiceMonitor` | `metrics.serviceMonitor.enabled` | Prometheus Operator scrapes the headless metrics Service. |
-| `PodMonitor` | `metrics.podMonitor.enabled` | Alternative — scrapes pods directly without a Service. |
+| `PodMonitor` | `metrics.podMonitor.enabled` | Alternative - scrapes pods directly without a Service. |
 | `PrometheusRule` | `metrics.prometheusRule.enabled` | Recommended alerts (see below). |
 | Grafana dashboard | `dashboard.enabled` | ConfigMap auto-discovered by the kube-prometheus-stack Grafana sidecar. |
 
@@ -233,5 +233,5 @@ See [`values.yaml`](values.yaml) for the full list of values. Key knobs:
 
 ## See also
 
-- [upcloud-csi](../upcloud-csi/README.md) — block-storage CSI driver, installs alongside the CCM.
+- [upcloud-csi](../upcloud-csi/README.md) - block-storage CSI driver, installs alongside the CCM.
 - UpCloud documentation: [Getting started with Kubernetes on UpCloud](https://upcloud.com/community/tutorials/getting-started-upcloud-kubernetes-services).

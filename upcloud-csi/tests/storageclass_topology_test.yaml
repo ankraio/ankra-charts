@@ -7,7 +7,7 @@ release:
   namespace: kube-system
 
 tests:
-  - it: defaults — no allowedTopologies / mountOptions stamped
+  - it: defaults - no allowedTopologies / mountOptions stamped
     template: templates/storageclass-maxiops.yaml
     asserts:
       - isKind:

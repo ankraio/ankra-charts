@@ -1,0 +1,86 @@
+apiVersion: v2
+name: digitalocean-csi
+description: DigitalOcean CSI block-storage driver - controller StatefulSet, node DaemonSet, snapshot controller, snapshot CRDs, and the do-block-storage StorageClasses, chart-ified from the upstream release manifests.
+type: application
+version: 0.1.0
+appVersion: "v4.17.0"
+kubeVersion: ">=1.27.0-0"
+icon: https://ankra.io/images/apple-touch-icon.png
+
+home: https://github.com/ankraio/ankra-charts/tree/main/digitalocean-csi
+sources:
+  - https://github.com/ankraio/ankra-charts/tree/main/digitalocean-csi
+  - https://github.com/digitalocean/csi-digitalocean
+
+keywords:
+  - digitalocean
+  - csi
+  - block-storage
+  - storage
+  - snapshots
+  - k3s
+
+maintainers:
+  - name: Ankra AB
+    email: admin@ankra.io
+    url: https://ankra.io
+
+annotations:
+  category: Storage
+  licenses: Apache-2.0
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: storage
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/maintainers: |
+    - name: Ankra AB
+      email: admin@ankra.io
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/ankraio/ankra-charts
+    - name: Helm repo (helm repo add)
+      url: https://ankraio.github.io/ankra-charts
+    - name: Upstream project
+      url: https://github.com/digitalocean/csi-digitalocean
+    - name: Chart (OCI)
+      url: oci://ghcr.io/ankraio/ankra-charts/digitalocean-csi
+  artifacthub.io/recommendations: |
+    - url: https://artifacthub.io/packages/helm/ankra-charts/digitalocean-ccm
+  artifacthub.io/operator: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/crds: |
+    - kind: VolumeSnapshotClass
+      version: snapshot.storage.k8s.io/v1
+      name: volumesnapshotclasses.snapshot.storage.k8s.io
+      description: Snapshot classes for the external-snapshotter.
+    - kind: VolumeSnapshotContent
+      version: snapshot.storage.k8s.io/v1
+      name: volumesnapshotcontents.snapshot.storage.k8s.io
+      description: Snapshot content objects bound to VolumeSnapshots.
+    - kind: VolumeSnapshot
+      version: snapshot.storage.k8s.io/v1
+      name: volumesnapshots.snapshot.storage.k8s.io
+      description: User-requested snapshots of PersistentVolumeClaims.
+  artifacthub.io/images: |
+    - name: do-csi-plugin
+      image: docker.io/digitalocean/do-csi-plugin:v4.17.0
+    - name: csi-provisioner
+      image: registry.k8s.io/sig-storage/csi-provisioner:v6.2.0
+      whitelisted: true
+    - name: csi-attacher
+      image: registry.k8s.io/sig-storage/csi-attacher:v4.11.0
+      whitelisted: true
+    - name: csi-snapshotter
+      image: registry.k8s.io/sig-storage/csi-snapshotter:v8.5.0
+      whitelisted: true
+    - name: csi-resizer
+      image: registry.k8s.io/sig-storage/csi-resizer:v2.1.0
+      whitelisted: true
+    - name: csi-node-driver-registrar
+      image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.16.0
+      whitelisted: true
+    - name: snapshot-controller
+      image: registry.k8s.io/sig-storage/snapshot-controller:v8.5.0
+      whitelisted: true
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial chart, vendored from the upstream v4.17.0 release manifests.

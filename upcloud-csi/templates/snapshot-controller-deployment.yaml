@@ -1,6 +1,6 @@
 {{- if .Values.snapshotController.enabled -}}
 {{/*
-Snapshot Controller — vendored from UpCloud CSI v1.4.0 setup-upcloud-csi.yaml.
+Snapshot Controller - vendored from UpCloud CSI v1.4.0 setup-upcloud-csi.yaml.
 External snapshot-controller that watches VolumeSnapshot resources and
 drives snapshot creation via the CSI driver.
 */}}

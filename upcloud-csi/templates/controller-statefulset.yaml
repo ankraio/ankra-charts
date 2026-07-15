@@ -1,6 +1,6 @@
 {{- include "upcloud-csi.validate" . -}}
 {{/*
-csi-upcloud-controller StatefulSet — vendored from UpCloud CSI v1.4.0
+csi-upcloud-controller StatefulSet - vendored from UpCloud CSI v1.4.0
 setup-upcloud-csi.yaml. Image references and pod-level defaults are
 exposed via values; sidecar args (csi-address, timeouts, leader-election)
 are preserved verbatim from upstream.

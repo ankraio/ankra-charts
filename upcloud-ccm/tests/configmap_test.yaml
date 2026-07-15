@@ -7,7 +7,7 @@ release:
 
 tests:
   # ccmConfig.clusterID requiredness is enforced by values.schema.json
-  # (minLength: 1) — Helm rejects the install before templating runs.
+  # (minLength: 1) - Helm rejects the install before templating runs.
 
   - it: renders config with clusterID + clusterName
     set:

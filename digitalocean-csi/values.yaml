@@ -1,0 +1,212 @@
+# -- Global values, applied across every workload in this chart and
+# composable with sibling Bitnami-style charts (e.g. `global.imageRegistry`).
+global:
+  # -- Override every `images.*.registry` (useful for air-gapped installs that
+  # mirror images into a private registry such as Harbor).
+  imageRegistry: ""
+  # -- Appended to chart-level `imagePullSecrets`.
+  imagePullSecrets: []
+
+# -- Override the release namespace for every rendered resource.
+# Defaults to `.Release.Namespace`; production clusters usually install
+# into `kube-system`.
+namespaceOverride: ""
+
+# -- Common labels stamped onto every resource.
+commonLabels: {}
+# -- Common annotations stamped onto every resource.
+commonAnnotations: {}
+
+# -- Image-pull secrets for all containers (combined with `global.imagePullSecrets`).
+imagePullSecrets: []
+
+images:
+  csiDriver:
+    # -- Registry the DO CSI plugin image is pulled from.
+    registry: docker.io
+    # -- Repository within the registry.
+    repository: digitalocean/do-csi-plugin
+    # -- Tag. Empty string falls back to `.Chart.AppVersion`.
+    tag: ""
+    # -- Image digest (sha256:...). Takes precedence over `tag` when set.
+    digest: ""
+    pullPolicy: IfNotPresent
+  provisioner:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-provisioner
+    tag: "v6.2.0"
+    pullPolicy: IfNotPresent
+  attacher:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-attacher
+    tag: "v4.11.0"
+    pullPolicy: IfNotPresent
+  snapshotter:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-snapshotter
+    tag: "v8.5.0"
+    pullPolicy: IfNotPresent
+  resizer:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-resizer
+    tag: "v2.1.0"
+    pullPolicy: IfNotPresent
+  nodeDriverRegistrar:
+    registry: registry.k8s.io
+    repository: sig-storage/csi-node-driver-registrar
+    tag: "v2.16.0"
+    pullPolicy: IfNotPresent
+  snapshotController:
+    registry: registry.k8s.io
+    repository: sig-storage/snapshot-controller
+    tag: "v8.5.0"
+    pullPolicy: IfNotPresent
+  automountUdevDeleter:
+    registry: docker.io
+    repository: library/alpine
+    tag: "3"
+    pullPolicy: IfNotPresent
+
+credentials:
+  # -- Render a Secret with the supplied `token`.
+  # Mutually exclusive with `existingSecret`.
+  create: true
+  # -- Reference an externally-managed Secret (e.g. the conventional
+  # `digitalocean` Secret in kube-system, shared with the digitalocean-ccm
+  # chart).
+  existingSecret: ""
+  # -- Secret key holding the DigitalOcean API token. The upstream
+  # convention is `access-token`.
+  tokenKey: access-token
+  # -- DigitalOcean personal access token. Required when `create: true`.
+  token: ""
+
+# -- DigitalOcean API endpoint, exported as `DIGITALOCEAN_API_URL`.
+apiURL: https://api.digitalocean.com/
+
+controller:
+  # -- Replicas for the controller StatefulSet. Upstream ships 1.
+  replicas: 1
+  # -- Node selector for the controller (e.g. pin to control-plane nodes).
+  nodeSelector: {}
+  # -- Tolerations for the controller pod.
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      effect: NoSchedule
+    - key: node.cloudprovider.kubernetes.io/uninitialized
+      value: "true"
+      effect: NoSchedule
+  # -- Affinity rules for the controller pod.
+  affinity: {}
+  # -- PriorityClass, upstream uses `system-cluster-critical`.
+  priorityClassName: system-cluster-critical
+  # -- `--default-volumes-page-size` for the DO plugin.
+  defaultVolumesPageSize: 200
+  # -- Resources for the DO plugin container.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # -- Resources shared by the provisioner/attacher/snapshotter/resizer sidecars.
+  sidecarResources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  # -- Pod annotations.
+  podAnnotations: {}
+  # -- Pod labels.
+  podLabels: {}
+  # -- Logging verbosity for plugin and sidecars.
+  logVerbosity: 5
+
+node:
+  # -- Node selector for the DaemonSet.
+  nodeSelector: {}
+  # -- Tolerations - upstream tolerates everything so storage detaches
+  # cleanly even from cordoned/tainted nodes.
+  tolerations:
+    - operator: Exists
+  # -- PriorityClass, upstream uses `system-node-critical`.
+  priorityClassName: system-node-critical
+  # -- Delete the DO automount udev rule that conflicts with CSI-managed
+  # droplets ("resource busy" errors on attach).
+  automountUdevDeleter:
+    enabled: true
+  # -- Resources for the DO plugin container.
+  resources:
+    requests:
+      cpu: 25m
+      memory: 48Mi
+    limits:
+      cpu: 250m
+      memory: 192Mi
+  # -- Resources for the node-driver-registrar sidecar.
+  sidecarResources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  # -- Pod annotations.
+  podAnnotations: {}
+  # -- Pod labels.
+  podLabels: {}
+  # -- Kubelet root directory - change for K3s custom data dirs.
+  kubeletDir: /var/lib/kubelet
+  # -- Logging verbosity.
+  logVerbosity: 5
+
+snapshotController:
+  # -- Deploy the external snapshot-controller. Disable when the cluster
+  # already runs one (e.g. installed by another CSI driver).
+  enabled: true
+  # -- Replicas for the snapshot-controller StatefulSet.
+  replicas: 1
+  # -- Node selector.
+  nodeSelector: {}
+  # -- Tolerations.
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      effect: NoSchedule
+  # -- Resources.
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  # -- Logging verbosity.
+  logVerbosity: 5
+
+rbac:
+  # -- Render the upstream ClusterRoles/Bindings for the controller sidecars,
+  # node driver registrar, and snapshot controller.
+  create: true
+
+storageClasses:
+  # -- Render the upstream do-block-storage StorageClasses.
+  create: true
+  # -- Which class is annotated `storageclass.kubernetes.io/is-default-class`.
+  # One of `do-block-storage`, `do-block-storage-retain`,
+  # `do-block-storage-xfs`, `do-block-storage-xfs-retain`, or `""` for none.
+  defaultClass: do-block-storage
+
+volumeSnapshotClass:
+  # -- Render the default do-block-storage VolumeSnapshotClass.
+  create: true
+  # -- Mark it as the cluster default snapshot class.
+  isDefault: true
+  # -- `Delete` or `Retain`.
+  deletionPolicy: Delete

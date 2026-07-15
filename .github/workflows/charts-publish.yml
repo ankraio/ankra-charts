@@ -6,16 +6,17 @@ name: charts-publish
 #   oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>
 #
 # Each chart is published independently; pushing the same chart+version twice
-# is treated as a no-op (the step checks GHCR before packaging).
+# is treated as a no-op (the step checks GHCR before packaging). Chart
+# directories are discovered automatically via scripts/discover-charts.sh.
 
 on:
   push:
     branches: [main]
     paths:
-      - "upcloud-ccm/**"
-      - "upcloud-csi/**"
-      - "cloudflare-operator/**"
-      - "psono/**"
+      - "*/Chart.yaml"
+      - "*/values.yaml"
+      - "*/templates/**"
+      - "scripts/discover-charts.sh"
       - ".github/workflows/charts-publish.yml"
   workflow_dispatch:
     inputs:
@@ -36,14 +37,31 @@ env:
   OCI_REGISTRY: ghcr.io/${{ github.repository_owner }}/ankra-charts
 
 jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.discover.outputs.charts }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: discover
+        run: |
+          set -euo pipefail
+          charts_json="$(bash scripts/discover-charts.sh | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+          if [[ "${charts_json}" == "[]" ]]; then
+            echo "No chart directories found." >&2
+            exit 1
+          fi
+          echo "charts=${charts_json}" >> "$GITHUB_OUTPUT"
+
   publish:
     name: publish ${{ matrix.chart }}
+    needs: discover
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        chart: [upcloud-ccm, upcloud-csi, cloudflare-operator, psono]
+        chart: ${{ fromJson(needs.discover.outputs.charts) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -82,7 +100,6 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Try to pull the OCI ref headers; succeeds only if the tag exists.
           if helm show chart "oci://${OCI_REGISTRY}/${name}" --version "${version}" \
                > /dev/null 2>&1; then
             echo "::notice::${name}:${version} already published; skipping. Bump version: in Chart.yaml to publish a new release."
@@ -130,7 +147,7 @@ jobs:
             echo "### \`${{ steps.meta.outputs.chart_name }}\` @ \`${{ steps.meta.outputs.chart_version }}\`"
             echo
             if [[ "${{ steps.exists.outputs.skip }}" == "true" ]]; then
-              echo "Already published — skipped."
+              echo "Already published - skipped."
             else
               echo "Published \`${{ steps.meta.outputs.oci_ref }}\`."
               echo

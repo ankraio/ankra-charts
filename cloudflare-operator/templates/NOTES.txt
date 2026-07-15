@@ -37,7 +37,7 @@ NEXT STEPS
    This release rendered the Secret with the values you supplied.
 {{- else }}
 
-   You set `credentials.existingSecret={{ .Values.credentials.existingSecret }}` — make
+   You set `credentials.existingSecret={{ .Values.credentials.existingSecret }}` - make
    sure that Secret exists in `{{ include "cloudflare-operator.namespace" . }}` before
    the operator can reconcile tunnels.
 {{- end }}
@@ -72,7 +72,7 @@ NEXT STEPS
 {{- if .Values.sampleClusterTunnel.enabled }}
 
    A sample ClusterTunnel `{{ .Values.sampleClusterTunnel.name }}` was rendered for
-   `{{ .Values.sampleClusterTunnel.cloudflareDomain }}` — verify it became Ready:
+   `{{ .Values.sampleClusterTunnel.cloudflareDomain }}` - verify it became Ready:
 
        kubectl get clustertunnel {{ .Values.sampleClusterTunnel.name }}
 {{- end }}

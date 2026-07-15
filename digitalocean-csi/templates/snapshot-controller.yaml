@@ -1,0 +1,43 @@
+{{- if .Values.snapshotController.enabled -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "digitalocean-csi.fullname" . }}-snapshot-controller
+  namespace: {{ include "digitalocean-csi.namespace" . }}
+  labels:
+    {{- include "digitalocean-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snapshot-controller
+  {{- with (include "digitalocean-csi.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "digitalocean-csi.fullname" . }}-snapshot-controller
+  replicas: {{ .Values.snapshotController.replicas }}
+  selector:
+    matchLabels:
+      {{- include "digitalocean-csi.snapshotControllerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "digitalocean-csi.snapshotControllerSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "digitalocean-csi.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "digitalocean-csi.fullname" . }}-snapshot-controller-sa
+      {{- with .Values.snapshotController.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.snapshotController.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: snapshot-controller
+          image: {{ include "digitalocean-csi.image" (dict "image" .Values.images.snapshotController "context" .) }}
+          imagePullPolicy: {{ .Values.images.snapshotController.pullPolicy }}
+          args:
+            - "--v={{ .Values.snapshotController.logVerbosity }}"
+          resources:
+            {{- toYaml .Values.snapshotController.resources | nindent 12 }}
+{{- end }}

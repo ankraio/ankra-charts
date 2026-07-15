@@ -1,0 +1,17 @@
+{{- if .Values.volumeSnapshotClass.create -}}
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: do-block-storage
+  labels:
+    {{- include "digitalocean-csi.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.volumeSnapshotClass.isDefault }}
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+    {{- end }}
+    {{- with (include "digitalocean-csi.annotations" .) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+driver: dobs.csi.digitalocean.com
+deletionPolicy: {{ .Values.volumeSnapshotClass.deletionPolicy }}
+{{- end }}
