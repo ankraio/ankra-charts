@@ -103,12 +103,22 @@ tolerations:
     value: "true"
     effect: NoSchedule
 
-# -- Pin the pod to control-plane nodes by default.
-nodeSelector:
-  node-role.kubernetes.io/control-plane: ""
+# -- Extra nodeSelector labels. Control-plane pinning is done via
+# `affinity.nodeAffinity` (Exists) below so it works on both kubeadm
+# (label value "") and k3s (label value "true"); an exact-match
+# nodeSelector of `node-role.kubernetes.io/control-plane: ""` never
+# matches k3s and leaves the CCM permanently unschedulable.
+nodeSelector: {}
 
-# -- Soft anti-affinity to spread replicas across nodes when possible.
+# -- Pin the pod to control-plane nodes (distro-agnostic via `Exists`) and
+# spread replicas across nodes when possible.
 affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
   podAntiAffinity:
     preferredDuringSchedulingIgnoredDuringExecution:
       - weight: 100
