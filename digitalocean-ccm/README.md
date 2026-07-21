@@ -50,7 +50,7 @@ helm install digitalocean-ccm oci://ghcr.io/ankraio/ankra-charts/digitalocean-cc
 | `region` | `""` | Region slug exported as `REGION`; empty relies on the droplet metadata service. |
 | `replicaCount` | `1` | Upstream default. Set `leaderElect=true` before raising. |
 | `leaderElect` | `false` | Kubernetes leader election. |
-| `nodeSelector` | `{}` | Pin the pod (e.g. `node-role.kubernetes.io/control-plane: "true"` on K3s). |
+| `nodeSelector` | `{}` | Exact-match pin. Prefer `affinity` with `node-role.kubernetes.io/control-plane` `Exists` so kubeadm (`""`) and k3s (`"true"`) both match. |
 | `images.ccm.digest` | `""` | Optional digest pin, takes precedence over the tag. |
 
 See [values.yaml](values.yaml) for the full surface.

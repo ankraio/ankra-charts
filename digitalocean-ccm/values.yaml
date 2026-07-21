@@ -96,8 +96,8 @@ tolerations:
   - key: node-role.kubernetes.io/control-plane
     effect: NoSchedule
 
-# -- Node selector for the CCM pod. Set to pin the pod to control-plane
-# nodes (e.g. `node-role.kubernetes.io/control-plane: "true"` on K3s).
+# -- Node selector for the CCM pod. Prefer affinity Exists on
+# node-role.kubernetes.io/control-plane (matches kubeadm "" and k3s "true").
 nodeSelector: {}
 
 # -- Pod affinity/anti-affinity rules.
