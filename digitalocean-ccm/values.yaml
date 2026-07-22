@@ -62,6 +62,13 @@ credentials:
 # on clusters where the metadata service is unreachable.
 region: ""
 
+# -- DigitalOcean VPC UUID exported as the `DO_CLUSTER_VPC_ID` environment
+# variable. Required for LoadBalancer provisioning on clusters whose droplets
+# live in a non-default VPC: when empty the CCM sends an empty VPCUUID and
+# DigitalOcean rejects the load balancer with 422 "target droplets don't
+# belong to the same VPC as the Load Balancer".
+vpcID: ""
+
 serviceAccount:
   # -- Create a ServiceAccount. K3s started with `--disable-cloud-controller`
   # (the external-CCM setup this chart targets) does not ship one.
@@ -96,8 +103,8 @@ tolerations:
   - key: node-role.kubernetes.io/control-plane
     effect: NoSchedule
 
-# -- Node selector for the CCM pod. Set to pin the pod to control-plane
-# nodes (e.g. `node-role.kubernetes.io/control-plane: "true"` on K3s).
+# -- Node selector for the CCM pod. Prefer affinity Exists on
+# node-role.kubernetes.io/control-plane (matches kubeadm "" and k3s "true").
 nodeSelector: {}
 
 # -- Pod affinity/anti-affinity rules.

@@ -2,8 +2,8 @@ apiVersion: v2
 name: digitalocean-ccm
 description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified from the upstream release manifests, with LoadBalancer provisioning, node lifecycle management, and uninitialized-taint clearing.
 type: application
-version: 0.1.0
-appVersion: "v0.1.67"
+version: 0.1.1
+appVersion: "v0.1.68"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 
@@ -49,7 +49,9 @@ annotations:
   artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/images: |
     - name: digitalocean-cloud-controller-manager
-      image: docker.io/digitalocean/digitalocean-cloud-controller-manager:v0.1.67
+      image: docker.io/digitalocean/digitalocean-cloud-controller-manager:v0.1.68
   artifacthub.io/changes: |
+    - kind: changed
+      description: Bump CCM to v0.1.68 for private-IP-only droplet handling.
     - kind: added
-      description: Initial chart, vendored from the upstream v0.1.67 release manifest.
+      description: vpcID value exported as DO_CLUSTER_VPC_ID for LoadBalancer provisioning on custom-VPC clusters.
