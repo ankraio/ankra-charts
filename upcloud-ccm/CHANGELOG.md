@@ -6,6 +6,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-22
+
+### Fixed
+
+- **helm test image**: `registry.k8s.io/kubectl` is a distroless image with no
+  shell, but the connection test runs a `/bin/sh` script, so `helm test`
+  containers could never start. The test image now defaults to
+  `docker.io/alpine/k8s:1.31.13` (kubectl + shell, amd64/arm64).
+
 ## [0.3.0] - 2026-06-28
 
 ### Fixed

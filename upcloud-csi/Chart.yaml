@@ -2,7 +2,7 @@ apiVersion: v2
 name: upcloud-csi
 description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus alerts & Grafana dashboard.
 type: application
-version: 0.3.0
+version: 0.3.1
 appVersion: "v1.4.0"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
