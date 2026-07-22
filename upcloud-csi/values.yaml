@@ -72,10 +72,12 @@ images:
     digest: ""
     pullPolicy: IfNotPresent
   kubectl:
-    # Used only by the default-SC patch hook Job.
-    registry: registry.k8s.io
-    repository: kubectl
-    tag: "v1.31.0"
+    # Used only by the default-SC patch hook Job. Must contain BOTH a shell
+    # and kubectl: the hook runs a /bin/sh script, and registry.k8s.io/kubectl
+    # is distroless (no shell), which made the Job fail on every install.
+    registry: docker.io
+    repository: alpine/k8s
+    tag: "1.31.13"
     digest: ""
     pullPolicy: IfNotPresent
 
@@ -474,9 +476,10 @@ snapshotCronJob:
   # -- When true, only log what would be snapshotted/rotated.
   dryRun: false
   image:
-    registry: registry.k8s.io
-    repository: kubectl
-    tag: v1.31.0
+    # Must contain both a shell and kubectl (see images.kubectl).
+    registry: docker.io
+    repository: alpine/k8s
+    tag: 1.31.13
     pullPolicy: IfNotPresent
   resources:
     requests:

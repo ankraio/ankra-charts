@@ -290,9 +290,11 @@ tests:
   enabled: true
   timeout: 120s
   image:
-    registry: registry.k8s.io
-    repository: kubectl
-    tag: v1.31.0
+    # Must contain both a shell and kubectl: the test runs a /bin/sh script,
+    # and registry.k8s.io/kubectl is distroless (no shell).
+    registry: docker.io
+    repository: alpine/k8s
+    tag: 1.31.13
     pullPolicy: IfNotPresent
   resources:
     requests:

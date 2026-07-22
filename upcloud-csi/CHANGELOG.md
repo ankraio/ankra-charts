@@ -12,6 +12,18 @@ auto-bumps these.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-22
+
+### Fixed
+
+- **default-SC hook / snapshot CronJob image**: `registry.k8s.io/kubectl` is a
+  distroless image with no shell, but both the default-StorageClass hook Job
+  and the snapshot backup CronJob run `/bin/sh` scripts — the hook container
+  could never start, the post-install hook failed, and with
+  `--rollback-on-failure` every install of the chart was rolled back.
+  Both now default to `docker.io/alpine/k8s:1.31.13` (kubectl + shell,
+  amd64/arm64).
+
 ## [0.3.0] - 2026-06-28
 
 ### Fixed
