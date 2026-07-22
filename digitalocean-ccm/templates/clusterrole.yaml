@@ -1,5 +1,5 @@
 {{- if .Values.rbac.create -}}
-{{- /* Vendored from the upstream v0.1.67 release manifest
+{{- /* Vendored from the upstream v0.1.68 release manifest
        (system:cloud-controller-manager). */ -}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

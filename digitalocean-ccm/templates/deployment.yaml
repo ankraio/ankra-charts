@@ -85,6 +85,10 @@ spec:
             - name: REGION
               value: {{ . | quote }}
             {{- end }}
+            {{- with .Values.vpcID }}
+            - name: DO_CLUSTER_VPC_ID
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

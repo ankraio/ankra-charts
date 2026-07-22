@@ -6,8 +6,8 @@ release:
   name: ut
   namespace: kube-system
 chart:
-  version: 0.1.0
-  appVersion: v0.1.67
+  version: 0.1.1
+  appVersion: v0.1.68
 set:
   credentials.token: dop_v1_test
 
@@ -123,12 +123,32 @@ tests:
             name: REGION
             value: ""
 
+  - it: exports DO_CLUSTER_VPC_ID when vpcID is set
+    template: templates/deployment.yaml
+    set:
+      vpcID: d958c536-6502-4b69-980e-c0f036b328e4
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DO_CLUSTER_VPC_ID
+            value: d958c536-6502-4b69-980e-c0f036b328e4
+
+  - it: omits DO_CLUSTER_VPC_ID by default
+    template: templates/deployment.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DO_CLUSTER_VPC_ID
+            value: ""
+
   - it: falls back to Chart.AppVersion for the image tag
     template: templates/deployment.yaml
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: docker.io/digitalocean/digitalocean-cloud-controller-manager:v0.1.67
+          value: docker.io/digitalocean/digitalocean-cloud-controller-manager:v0.1.68
 
   - it: pins the image by digest when set
     template: templates/deployment.yaml
