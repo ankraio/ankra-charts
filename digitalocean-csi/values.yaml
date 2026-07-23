@@ -29,7 +29,7 @@ images:
     # -- Tag. Empty string falls back to `.Chart.AppVersion`.
     tag: ""
     # -- Image digest (sha256:...). Takes precedence over `tag` when set.
-    digest: ""
+    digest: "sha256:4fb09a5fbab3d72bf8a3246666ee6b25cc3e3eacb31c5d906e7f70b9735408d3"
     pullPolicy: IfNotPresent
   provisioner:
     registry: registry.k8s.io
