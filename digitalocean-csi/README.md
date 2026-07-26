@@ -49,7 +49,7 @@ helm install digitalocean-csi oci://ghcr.io/ankraio/ankra-charts/digitalocean-cs
 |---|---|---|
 | `credentials.create` | `true` | Render a Secret from `credentials.token`. |
 | `credentials.existingSecret` | `""` | Use an externally-managed Secret instead. |
-| `controller.nodeSelector` | `{}` | Pin the controller (e.g. `node-role.kubernetes.io/control-plane: "true"` on K3s). |
+| `controller.nodeSelector` | `{}` | Exact-match pin. Prefer `controller.affinity` with control-plane label `Exists` for kubeadm+k3s. |
 | `storageClasses.defaultClass` | `do-block-storage` | Which class carries the default-class annotation. |
 | `snapshotController.enabled` | `true` | Disable when the cluster already runs an external snapshot-controller. |
 | `node.kubeletDir` | `/var/lib/kubelet` | Kubelet data dir for non-standard distributions. |

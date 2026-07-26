@@ -2,7 +2,7 @@ apiVersion: v2
 name: upcloud-ccm
 description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected, hardened, with built-in Prometheus alerts & Grafana dashboard.
 type: application
-version: 0.3.1
+version: 0.3.2
 appVersion: "v1.2.1"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
@@ -58,12 +58,4 @@ annotations:
       whitelisted: true
   artifacthub.io/changes: |
     - kind: fixed
-      description: PodMonitor no longer emits an empty bearerTokenSecret; supply metrics.podMonitor.bearerTokenSecret to scrape the secure port.
-    - kind: fixed
-      description: helm test now runs under a dedicated least-privilege ServiceAccount + namespaced Role instead of the cluster-privileged CCM ServiceAccount.
-    - kind: fixed
-      description: Deployment honors serviceAccount.automountServiceAccountToken instead of hardcoding true.
-    - kind: fixed
-      description: --bind-address is forced to 0.0.0.0 when either ServiceMonitor or PodMonitor is enabled.
-    - kind: changed
-      description: README requirements/defaults corrected to reflect serviceAccount.create and rbac.create defaulting to true.
+      description: "helm test now runs: the connection test executes a /bin/sh script, but registry.k8s.io/kubectl is distroless with no shell, so the test container could never start. The test image defaults to docker.io/alpine/k8s (kubectl + shell, amd64/arm64)."

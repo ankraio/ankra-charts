@@ -48,9 +48,10 @@ helm install digitalocean-ccm oci://ghcr.io/ankraio/ankra-charts/digitalocean-cc
 | `credentials.existingSecret` | `""` | Use an externally-managed Secret instead. |
 | `credentials.tokenKey` | `access-token` | Secret key holding the API token. |
 | `region` | `""` | Region slug exported as `REGION`; empty relies on the droplet metadata service. |
+| `vpcID` | `""` | Cluster VPC UUID exported as `DO_CLUSTER_VPC_ID`; required for LoadBalancers on custom-VPC clusters. |
 | `replicaCount` | `1` | Upstream default. Set `leaderElect=true` before raising. |
 | `leaderElect` | `false` | Kubernetes leader election. |
-| `nodeSelector` | `{}` | Pin the pod (e.g. `node-role.kubernetes.io/control-plane: "true"` on K3s). |
+| `nodeSelector` | `{}` | Exact-match pin. Prefer `affinity` with `node-role.kubernetes.io/control-plane` `Exists` so kubeadm (`""`) and k3s (`"true"`) both match. |
 | `images.ccm.digest` | `""` | Optional digest pin, takes precedence over the tag. |
 
 See [values.yaml](values.yaml) for the full surface.
