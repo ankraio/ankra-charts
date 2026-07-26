@@ -2,7 +2,7 @@ apiVersion: v2
 name: upcloud-ccm
 description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected, hardened, with built-in Prometheus alerts & Grafana dashboard.
 type: application
-version: 0.3.1
+version: 0.3.2
 appVersion: "v1.2.1"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
@@ -58,4 +58,4 @@ annotations:
       whitelisted: true
   artifacthub.io/changes: |
     - kind: fixed
-      description: "CCM is now schedulable on k3s: control-plane pinning uses nodeAffinity Exists instead of an exact-match nodeSelector of node-role.kubernetes.io/control-plane='' (which never matches the k3s label value 'true', leaving the pod permanently Pending and breaking LoadBalancer provisioning)."
+      description: "helm test now runs: the connection test executes a /bin/sh script, but registry.k8s.io/kubectl is distroless with no shell, so the test container could never start. The test image defaults to docker.io/alpine/k8s (kubectl + shell, amd64/arm64)."
