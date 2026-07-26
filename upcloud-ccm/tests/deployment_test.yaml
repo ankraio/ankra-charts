@@ -74,6 +74,19 @@ tests:
             value: "true"
             effect: NoSchedule
 
+  - it: pins to control-plane via nodeAffinity Exists (k3s-safe, no exact-match nodeSelector)
+    template: templates/deployment.yaml
+    asserts:
+      # An exact-match nodeSelector of control-plane="" never matches k3s
+      # (label value "true") and would wedge the CCM as Pending. Default must be empty.
+      - isNull:
+          path: spec.template.spec.nodeSelector
+      - contains:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions
+          content:
+            key: node-role.kubernetes.io/control-plane
+            operator: Exists
+
   - it: uses the chart-managed Secret name by default
     template: templates/deployment.yaml
     asserts:

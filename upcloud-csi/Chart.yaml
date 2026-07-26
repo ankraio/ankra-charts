@@ -2,7 +2,7 @@ apiVersion: v2
 name: upcloud-csi
 description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus alerts & Grafana dashboard.
 type: application
-version: 0.3.0
+version: 0.3.1
 appVersion: "v1.4.0"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
@@ -78,10 +78,4 @@ annotations:
       whitelisted: true
   artifacthub.io/changes: |
     - kind: fixed
-      description: Snapshot CronJob retention is now applied per source PVC (filtered on the upcloud-csi.ankra.io/source-pvc label) instead of namespace-wide, so retentionCount keeps N snapshots per volume.
-    - kind: fixed
-      description: PodMonitor now scrapes a real metrics port - enabling it wires the csi-provisioner sidecar --http-endpoint and a matching controller container port (the driver itself exposes no metrics).
-    - kind: fixed
-      description: Snapshot validation webhook ClusterRoleBinding now binds the controller ServiceAccount the Deployment actually runs as (was the unused node ServiceAccount).
-    - kind: changed
-      description: Added a chart icon, a helm repo add link, and the snapshot-validation-webhook/kubectl/busybox images to ArtifactHub metadata.
+      description: "CSI controller and snapshot controller are now schedulable on k3s: control-plane pinning uses nodeAffinity Exists instead of an exact-match nodeSelector of node-role.kubernetes.io/control-plane='' (which never matches the k3s label value 'true', leaving both pods permanently Pending so no PersistentVolumeClaim could ever be provisioned)."

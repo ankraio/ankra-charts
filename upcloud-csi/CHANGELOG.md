@@ -12,6 +12,21 @@ auto-bumps these.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-19
+
+### Fixed
+
+- **Unschedulable on k3s**: the controller StatefulSet and snapshot-controller
+  Deployment pinned to control-plane nodes via an exact-match
+  `nodeSelector: {node-role.kubernetes.io/control-plane: ""}`. That empty-string
+  value is the kubeadm convention; k3s labels its server node
+  `node-role.kubernetes.io/control-plane: "true"`, so the selector never matched
+  and both pods stayed `Pending` forever — meaning **no PersistentVolumeClaim
+  could be dynamically provisioned**. Pinning now uses `affinity.nodeAffinity`
+  with `operator: Exists` (matches the label regardless of value) and the
+  default `nodeSelector` is empty (`{}`). The node DaemonSet was unaffected.
+  Works on both kubeadm and k3s.
+
 ## [0.3.0] - 2026-06-28
 
 ### Fixed

@@ -199,9 +199,12 @@ controller:
   priorityClassName: system-cluster-critical
   # -- DNS policy. `ClusterFirst` works for the controller (no host network).
   dnsPolicy: ClusterFirst
-  # -- Run controller on control-plane nodes only by default.
-  nodeSelector:
-    node-role.kubernetes.io/control-plane: ""
+  # -- Extra nodeSelector labels. Control-plane pinning is via
+  # `affinity.nodeAffinity` (Exists) below so it works on both kubeadm
+  # (label value "") and k3s (label value "true"); an exact-match
+  # nodeSelector of `node-role.kubernetes.io/control-plane: ""` never
+  # matches k3s and leaves the controller permanently unschedulable.
+  nodeSelector: {}
   tolerations:
     - key: node-role.kubernetes.io/control-plane
       operator: Exists
@@ -209,7 +212,14 @@ controller:
     - key: node-role.kubernetes.io/master
       operator: Exists
       effect: NoSchedule
+  # -- Run controller on control-plane nodes (distro-agnostic via `Exists`).
   affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
@@ -279,8 +289,12 @@ snapshotController:
   enabled: true
   replicaCount: 2
   priorityClassName: system-cluster-critical
-  nodeSelector:
-    node-role.kubernetes.io/control-plane: ""
+  # -- Extra nodeSelector labels. Control-plane pinning is via
+  # `affinity.nodeAffinity` (Exists) below so it works on both kubeadm
+  # (label value "") and k3s (label value "true"); an exact-match
+  # nodeSelector of `node-role.kubernetes.io/control-plane: ""` never
+  # matches k3s and leaves the snapshot controller permanently unschedulable.
+  nodeSelector: {}
   tolerations:
     - key: node-role.kubernetes.io/control-plane
       operator: Exists
@@ -288,7 +302,14 @@ snapshotController:
     - key: node-role.kubernetes.io/master
       operator: Exists
       effect: NoSchedule
-  affinity: {}
+  # -- Run snapshot controller on control-plane nodes (distro-agnostic via `Exists`).
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65532

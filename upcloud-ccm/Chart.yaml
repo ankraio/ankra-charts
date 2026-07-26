@@ -2,7 +2,7 @@ apiVersion: v2
 name: upcloud-ccm
 description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected, hardened, with built-in Prometheus alerts & Grafana dashboard.
 type: application
-version: 0.3.0
+version: 0.3.1
 appVersion: "v1.2.1"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
@@ -58,12 +58,4 @@ annotations:
       whitelisted: true
   artifacthub.io/changes: |
     - kind: fixed
-      description: PodMonitor no longer emits an empty bearerTokenSecret; supply metrics.podMonitor.bearerTokenSecret to scrape the secure port.
-    - kind: fixed
-      description: helm test now runs under a dedicated least-privilege ServiceAccount + namespaced Role instead of the cluster-privileged CCM ServiceAccount.
-    - kind: fixed
-      description: Deployment honors serviceAccount.automountServiceAccountToken instead of hardcoding true.
-    - kind: fixed
-      description: --bind-address is forced to 0.0.0.0 when either ServiceMonitor or PodMonitor is enabled.
-    - kind: changed
-      description: README requirements/defaults corrected to reflect serviceAccount.create and rbac.create defaulting to true.
+      description: "CCM is now schedulable on k3s: control-plane pinning uses nodeAffinity Exists instead of an exact-match nodeSelector of node-role.kubernetes.io/control-plane='' (which never matches the k3s label value 'true', leaving the pod permanently Pending and breaking LoadBalancer provisioning)."
