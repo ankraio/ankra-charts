@@ -63,12 +63,12 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: 0.13.1
-    created: "2026-07-26T08:36:28.065339241Z"
+    created: "2026-08-07T15:14:16.072948986Z"
     description: 'Helm chart for the community Cloudflare Operator (adyanth/cloudflare-operator)
       that reconciles Tunnel, ClusterTunnel, AccessTunnel and TunnelBinding CRDs against
       Cloudflare Zero Trust / Cloudflare Tunnel. Optionally renders a ClusterOriginIssuer
       for use with the cert-manager origin-ca-issuer. '
-    digest: aa0dae310501c86d854673cf4551447b2ad4bd718b25ef05c709879cbd1613ed
+    digest: 94dc477aa6afa01e9e5c8ecf79957f249f7bc8a50622fea703cb4f68648f1396
     home: https://github.com/ankraio/ankra-charts/tree/main/cloudflare-operator
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -125,11 +125,11 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.1.68
-    created: "2026-07-26T08:36:28.067034513Z"
+    created: "2026-08-07T15:14:16.073976876Z"
     description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified
       from the upstream release manifests, with LoadBalancer provisioning, node lifecycle
       management, and uninitialized-taint clearing.
-    digest: 46bb325678491307283b8e33089300fea9135d88a60aad14eea1a37c7c37ea9a
+    digest: 4dbc1e86d265353d7c4dbcc578d2a9183bcec2c3c0ff98af3c883a7017157a17
     home: https://github.com/ankraio/ankra-charts/tree/main/digitalocean-ccm
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -182,7 +182,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.1.67
-    created: "2026-07-26T08:36:28.066059409Z"
+    created: "2026-08-07T15:14:16.073482593Z"
     description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified
       from the upstream release manifests, with LoadBalancer provisioning, node lifecycle
       management, and uninitialized-taint clearing.
@@ -271,11 +271,11 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v4.17.0
-    created: "2026-07-26T08:36:28.069541485Z"
+    created: "2026-08-07T15:14:16.075682503Z"
     description: DigitalOcean CSI block-storage driver - controller StatefulSet, node
       DaemonSet, snapshot controller, snapshot CRDs, and the do-block-storage StorageClasses,
       chart-ified from the upstream release manifests.
-    digest: d9dcb689e632c8b53fd8b2f6526b8e7261580b0f5b90359658bda510ef70cf2b
+    digest: bf99ba5cbe7a2c8f5e58816173f24330f8380dbae8adfc9ae6d657a5f12f3238
     home: https://github.com/ankraio/ankra-charts/tree/main/digitalocean-csi
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -326,11 +326,11 @@ entries:
           email: admin@ankra.io
     apiVersion: v2
     appVersion: 5.0.0
-    created: "2026-07-26T08:36:28.071220606Z"
+    created: "2026-08-07T15:14:16.076890326Z"
     description: 'Helm chart for Psono — self-hosted password manager. Packages the
       Psono server, web client and (optional) admin client. Brings your own PostgreSQL,
       secret-keys Secret and (optional) ingress. '
-    digest: f132909c022d19c5e468b2b13efffb09ea2be6ccee5412a1c520430fce6e6ec5
+    digest: 948382c6058160e00af4513e66fd4562c8ac8a72af66d179d4573b7670b2c811
     home: https://github.com/ankraio/ankra-charts/tree/main/psono
     icon: https://gitlab.com/esaqa/psono/psono-client/-/raw/master/src/common/data/img/icon-128.png
     keywords:
@@ -388,7 +388,7 @@ entries:
           email: admin@ankra.io
     apiVersion: v2
     appVersion: 5.0.0
-    created: "2026-07-26T08:36:28.070385403Z"
+    created: "2026-08-07T15:14:16.07632096Z"
     description: 'Helm chart for Psono — self-hosted password manager. Packages the
       Psono server, web client and (optional) admin client. Brings your own PostgreSQL,
       secret-keys Secret and (optional) ingress. '
@@ -449,10 +449,10 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.1
-    created: "2026-07-26T08:36:28.075042486Z"
+    created: "2026-08-07T15:14:16.079684116Z"
     description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
-    digest: 6c18bcd8ceebb298696701921436214c8e955670a306c178d21ee74d5419edf9
+    digest: f0ec4c9fddbb9da0bcc468137b2799ed372117f585aeb3f14d58f54e6ae34891
     home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -511,7 +511,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.1
-    created: "2026-07-26T08:36:28.073764335Z"
+    created: "2026-08-07T15:14:16.078784063Z"
     description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
     digest: 2f1978f72a64deaf6528faf920eba24a65c6647813403cbfdef6eb61aef98653
@@ -581,7 +581,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.1
-    created: "2026-07-26T08:36:28.072489971Z"
+    created: "2026-08-07T15:14:16.07786642Z"
     description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
     digest: d766c6be83150502ca272fdb52a0e1cbdc9b50295e88979c4fe021c32acfd39b
@@ -662,7 +662,90 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-07-26T08:36:28.082326126Z"
+    created: "2026-08-07T15:14:16.086894383Z"
+    description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
+      v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
+      alerts & Grafana dashboard.
+    digest: 5c2f43833879e72dd9852ae7c68504ac52c8830ed3d0af4f9757e73dad631766
+    home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
+    icon: https://ankra.io/images/apple-touch-icon.png
+    keywords:
+    - upcloud
+    - csi
+    - storage
+    - block-storage
+    - persistent-volumes
+    - snapshots
+    - backup
+    - observability
+    - prometheus
+    - grafana
+    - k3s
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - email: admin@ankra.io
+      name: Ankra AB
+      url: https://ankra.io
+    name: upcloud-csi
+    sources:
+    - https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
+    - https://github.com/UpCloudLtd/upcloud-csi
+    type: application
+    urls:
+    - https://ankraio.github.io/ankra-charts/upcloud-csi-0.3.3.tgz
+    version: 0.3.3
+  - annotations:
+      artifacthub.io/category: storage
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: "Installs no longer roll back: the default-StorageClass hook Job and the snapshot backup CronJob run /bin/sh scripts, but registry.k8s.io/kubectl is distroless with no shell, so the hook container could never start and --rollback-on-failure undid every install. Both images default to docker.io/alpine/k8s (kubectl + shell, amd64/arm64)."
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/images: |
+        - name: upcloud-csi
+          image: ghcr.io/upcloudltd/upcloud-csi:v1.4.0
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v3.1.0
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v3.4.0
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.4.0
+        - name: csi-snapshotter
+          image: registry.k8s.io/sig-storage/csi-snapshotter:v4.2.1
+        - name: snapshot-controller
+          image: registry.k8s.io/sig-storage/snapshot-controller:v4.2.1
+        - name: csi-node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.5.0
+        - name: snapshot-validation-webhook
+          image: registry.k8s.io/sig-storage/snapshot-validation-webhook:v4.2.1
+        - name: kubectl
+          image: registry.k8s.io/kubectl:v1.31.0
+        - name: busybox-test-hook
+          image: registry.k8s.io/e2e-test-images/busybox:1.36.1-1
+          whitelisted: true
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Source
+          url: https://github.com/ankraio/ankra-charts
+        - name: Helm repo (helm repo add)
+          url: https://ankraio.github.io/ankra-charts
+        - name: Upstream project
+          url: https://github.com/UpCloudLtd/upcloud-csi
+        - name: Upstream image (GHCR)
+          url: https://ghcr.io/upcloudltd/upcloud-csi
+        - name: Chart (OCI)
+          url: oci://ghcr.io/ankraio/ankra-charts/upcloud-csi
+      artifacthub.io/maintainers: |
+        - name: Ankra AB
+          email: admin@ankra.io
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/ankra-charts/upcloud-ccm
+      category: Storage
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: v1.4.0
+    created: "2026-08-07T15:14:16.084877417Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
@@ -745,7 +828,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-07-26T08:36:28.079914444Z"
+    created: "2026-08-07T15:14:16.083356832Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
@@ -834,7 +917,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-07-26T08:36:28.077796232Z"
+    created: "2026-08-07T15:14:16.081795667Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
@@ -866,4 +949,4 @@ entries:
     urls:
     - https://ankraio.github.io/ankra-charts/upcloud-csi-0.3.0.tgz
     version: 0.3.0
-generated: "2026-07-26T08:36:28.063762382Z"
+generated: "2026-08-07T15:14:16.071828928Z"
