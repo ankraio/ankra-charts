@@ -91,8 +91,10 @@ helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
      present and `disableLocalPathDefault: true`, the default).
    - Marks the chosen UpCloud SC as the cluster default.
 
-The hook has its own scoped RBAC (`storageclasses: get/list/patch`) that
-is created `pre-install,pre-upgrade` and deleted on success.
+The hook has its own scoped RBAC (`storageclasses: get/list/patch`) created
+in the same `post-install,post-upgrade` event at a lower hook-weight, so it
+exists for the Job's pod and is replaced on the next run
+(`before-hook-creation`).
 
 ## Air-gapped installs
 
