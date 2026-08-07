@@ -35,6 +35,50 @@ tests:
           path: metadata.annotations["helm.sh/hook"]
           pattern: "post-install,post-upgrade"
 
+  - it: SA and RBAC ride the same post hook event as the Job, earlier and without hook-succeeded
+    set:
+      storageClasses.defaultClass: standard
+    asserts:
+      - documentIndex: 0
+        isKind:
+          of: ServiceAccount
+      - documentIndex: 0
+        equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - documentIndex: 0
+        equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+      - documentIndex: 0
+        equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+      - documentIndex: 1
+        equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - documentIndex: 1
+        equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+      - documentIndex: 2
+        equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - documentIndex: 2
+        equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+      - documentIndex: 3
+        equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+      - documentIndex: 3
+        equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "10"
+
   - it: validates defaultClass enum (schema-level)
     set:
       storageClasses.defaultClass: garbage

@@ -7,7 +7,12 @@ Post-install/post-upgrade Job that:
   1. (optional) Removes the `is-default-class` annotation from K3s' local-path SC.
   2. Marks the chosen UpCloud SC as the cluster default.
 
-The Job and its scoped RBAC are created as Helm hooks and deleted on success.
+The SA/RBAC ride the same post-install,post-upgrade event as the Job, at a
+lower hook-weight so they exist before the Job's pod is created. They must NOT
+be pre-install hooks with a hook-succeeded delete policy: Helm deletes such
+hooks at the end of the pre phase, so the post-install Job's pod could never
+mount its ServiceAccount. Only the Job carries hook-succeeded; the SA/RBAC are
+replaced via before-hook-creation on the next run.
 Idempotent: re-running it produces no errors (`get … || true` for local-path).
 */}}
 apiVersion: v1
@@ -19,9 +24,9 @@ metadata:
     {{- include "upcloud-csi.labels" . | nindent 4 }}
     app.kubernetes.io/component: default-sc-hook
   annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -31,9 +36,9 @@ metadata:
     {{- include "upcloud-csi.labels" . | nindent 4 }}
     app.kubernetes.io/component: default-sc-hook
   annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation
 rules:
   - apiGroups: ["storage.k8s.io"]
     resources: ["storageclasses"]
@@ -47,9 +52,9 @@ metadata:
     {{- include "upcloud-csi.labels" . | nindent 4 }}
     app.kubernetes.io/component: default-sc-hook
   annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    "helm.sh/hook-delete-policy": before-hook-creation
 subjects:
   - kind: ServiceAccount
     name: {{ $hookName }}
@@ -70,7 +75,7 @@ metadata:
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "10"
-    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   ttlSecondsAfterFinished: {{ .Values.defaultClassJob.ttlSecondsAfterFinished }}
   activeDeadlineSeconds: {{ .Values.defaultClassJob.activeDeadlineSeconds }}

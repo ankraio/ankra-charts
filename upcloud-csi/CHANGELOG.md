@@ -12,6 +12,24 @@ auto-bumps these.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-07
+
+### Fixed
+
+- **default-SC hook Job could never run**: the hook's ServiceAccount /
+  ClusterRole / ClusterRoleBinding were `pre-install,pre-upgrade` hooks with a
+  `hook-succeeded` delete policy, while the patch Job itself is
+  `post-install,post-upgrade`. Helm deletes succeeded pre-hooks at the end of
+  the pre phase, so the post-install Job always failed pod creation with
+  `serviceaccount "<release>-default-sc" not found`, hit
+  `activeDeadlineSeconds`, and (with `--rollback-on-failure`) uninstalled the
+  whole release: the chart was uninstallable whenever
+  `storageClasses.defaultClass` was set. The SA/RBAC now ride the same
+  `post-install,post-upgrade` event at a lower hook-weight than the Job, with
+  delete policy `before-hook-creation` only; `hook-succeeded` stays on the Job
+  (which also gains `before-hook-creation` so a lingering failed Job can't
+  block the next upgrade).
+
 ## [0.3.2] - 2026-07-26
 
 ### Fixed
