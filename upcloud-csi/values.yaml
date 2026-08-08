@@ -27,7 +27,7 @@ images:
     registry: ghcr.io
     repository: upcloudltd/upcloud-csi
     tag: ""   # falls back to .Chart.AppVersion (v1.4.0)
-    digest: ""
+    digest: "sha256:5af91c663788edcf5333ed1c5cf80d73cdb827b6aa9f42f2bebef98c06cfddb5"
     pullPolicy: IfNotPresent
   provisioner:
     registry: registry.k8s.io
