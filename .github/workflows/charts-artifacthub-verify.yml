@@ -1,0 +1,83 @@
+name: charts-artifacthub-verify
+
+# Confirm that every chart version served from the Pages Helm repo is actually
+# live on Artifact Hub.
+#
+# Publishing to Artifact Hub is pull-based: charts-pages regenerates index.yaml
+# and Artifact Hub re-indexes it on its own schedule. A version Artifact Hub
+# refuses (bad annotation, malformed metadata) is dropped silently — the
+# publishing side stays green while the package never appears. This job is the
+# missing feedback loop.
+#
+# Runs on a schedule rather than inline with charts-pages because Artifact Hub
+# tracks repositories roughly every 30 minutes, so a freshly pushed version is
+# legitimately absent for a while after publishing.
+
+on:
+  schedule:
+    - cron: "40 * * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows: [charts-pages]
+    types: [completed]
+
+concurrency:
+  group: charts-artifacthub-verify
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PAGES_URL: https://ankraio.github.io/ankra-charts
+  ARTIFACTHUB_ORG: ankra
+  ARTIFACTHUB_REPO_NAME: ankra-charts
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # workflow_run fires immediately after charts-pages, before Artifact Hub
+      # has had a chance to re-track the updated index.
+      - name: Wait for the Artifact Hub tracker
+        if: github.event_name == 'workflow_run'
+        run: sleep 300
+
+      # Always exits 0 so the summary below still renders; the real gate is the
+      # final step, which reads the captured status.
+      - name: Verify Artifact Hub has every published version
+        id: verify
+        run: |
+          set +e
+          bash scripts/artifacthub-verify.sh 2>&1 | tee /tmp/artifacthub-verify.log
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          set -euo pipefail
+          status="${{ steps.verify.outputs.status }}"
+          {
+            echo "### Artifact Hub verification"
+            echo
+            case "${status}" in
+              0) echo "All chart versions published to \`${PAGES_URL}\` are live on Artifact Hub." ;;
+              2) echo "**The Helm repository is not registered on Artifact Hub.** No chart will ever be listed until it is added once, by hand — see the log for the exact steps." ;;
+              *) echo "**Verification failed.** One or more published chart versions are missing from Artifact Hub." ;;
+            esac
+            echo
+            echo '```'
+            cat /tmp/artifacthub-verify.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if verification did not pass
+        run: |
+          set -euo pipefail
+          status="${{ steps.verify.outputs.status }}"
+          if [[ "${status}" != "0" ]]; then
+            echo "Artifact Hub verification exited ${status}." >&2
+            exit 1
+          fi
