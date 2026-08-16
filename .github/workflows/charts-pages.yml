@@ -15,8 +15,11 @@ on:
     paths:
       - "*/Chart.yaml"
       - "*/values.yaml"
+      - "*/values.schema.json"
       - "*/templates/**"
+      - "*/crds/**"
       - "*/tests/**"
+      - "*/README.md"
       - "scripts/discover-charts.sh"
       - "scripts/artifacthub-sync-repo.sh"
       - ".github/artifacthub-repo.yml"
@@ -111,15 +114,18 @@ jobs:
           fi
 
       - name: Register or sync ArtifactHub repository
+        id: register
         env:
           ARTIFACTHUB_API_KEY_ID: ${{ secrets.ARTIFACTHUB_API_KEY_ID }}
           ARTIFACTHUB_API_KEY_SECRET: ${{ secrets.ARTIFACTHUB_API_KEY_SECRET }}
         run: |
           set -euo pipefail
           if [[ -z "${ARTIFACTHUB_API_KEY_ID}" || -z "${ARTIFACTHUB_API_KEY_SECRET}" ]]; then
-            echo "ArtifactHub API secrets not configured; skipping registration."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ARTIFACTHUB_API_KEY_ID / ARTIFACTHUB_API_KEY_SECRET are not set, so this repository cannot self-register on Artifact Hub. Charts publish to the Pages Helm repo but will not be listed on Artifact Hub until the repository is registered. See the 'Publishing to Artifact Hub' section of README.md."
             exit 0
           fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
           bash scripts/artifacthub-sync-repo.sh gh-pages
 
       - name: Commit and push to gh-pages
@@ -144,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${ARTIFACTHUB_API_KEY_ID}" || -z "${ARTIFACTHUB_API_KEY_SECRET}" ]]; then
-            echo "ArtifactHub API secrets not configured; skipping ownership claim."
+            echo "Artifact Hub API secrets not configured; skipping ownership claim."
             exit 0
           fi
           bash scripts/artifacthub-sync-repo.sh gh-pages
@@ -161,5 +167,13 @@ jobs:
             echo "helm search repo ankra"
             echo '```'
             echo
-            echo "Configure \`ARTIFACTHUB_API_KEY_ID\` and \`ARTIFACTHUB_API_KEY_SECRET\` repository secrets to auto-register on ArtifactHub."
+            echo "### Artifact Hub"
+            echo
+            if [[ "${{ steps.register.outputs.configured }}" == "true" ]]; then
+              echo "Repository registration synced. New versions are picked up automatically within ~30 minutes."
+            else
+              echo "**Not registered.** \`ARTIFACTHUB_API_KEY_ID\` and \`ARTIFACTHUB_API_KEY_SECRET\` are not configured, so these charts are published to the Pages Helm repo but are **not listed on Artifact Hub**."
+              echo
+              echo "See the 'Publishing to Artifact Hub' section of README.md for the one-time setup."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
