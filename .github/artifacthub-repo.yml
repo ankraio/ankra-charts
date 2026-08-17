@@ -1,7 +1,12 @@
-# ArtifactHub repository metadata template copied to the gh-pages branch by CI.
-# repositoryID is filled in by scripts/artifacthub-sync-repo.sh once the repo is
-# registered on artifacthub.io.
-repositoryID: ""
+# ArtifactHub repository metadata template copied to the gh-pages branch by CI
+# when that branch does not already carry one.
+#
+# repositoryID is what Artifact Hub reads to grant the Verified Publisher label.
+# scripts/artifacthub-sync-repo.sh writes it automatically when the API-key
+# secrets are configured; the repository was registered by hand, so the ID is
+# recorded here directly and this file stays the source of truth if gh-pages is
+# ever rebuilt from scratch.
+repositoryID: "960356cc-6378-4f2d-a55f-429fbab4cc92"
 owners:
   - name: Ankra AB
     email: admin@ankra.io

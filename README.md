@@ -231,34 +231,41 @@ merge to `main`, and the new version appears on Artifact Hub on its own.
 A new top-level chart directory is discovered automatically by
 `scripts/discover-charts.sh` and needs no Artifact Hub UI step of its own.
 
-### One-time bootstrap
+### Registration (already done)
 
-The single Artifact Hub repository entry
-(`ankra/ankra-charts` → `https://ankraio.github.io/ankra-charts`) covers every
-chart. Register it either way:
+The single Artifact Hub repository entry covers every chart and **is already
+registered** — there is nothing to do for a new chart or a new release:
 
-**Option A - let CI do it.** Create an authorization key under
+| | |
+|---|---|
+| Organization | `ankra` |
+| Name | `ankra-charts` |
+| URL | `https://ankraio.github.io/ankra-charts` |
+| Repository ID | `960356cc-6378-4f2d-a55f-429fbab4cc92` |
+
+That ID is recorded in [`.github/artifacthub-repo.yml`](.github/artifacthub-repo.yml)
+and served from `gh-pages` at
+[`/artifacthub-repo.yml`](https://ankraio.github.io/ankra-charts/artifacthub-repo.yml),
+which is what Artifact Hub reads to grant the Verified Publisher label. Keep it —
+dropping it downgrades the listing.
+
+The `ARTIFACTHUB_API_KEY_ID` / `ARTIFACTHUB_API_KEY_SECRET` secrets remain
+**optional**. They only let `charts-pages` manage the repository entry over the
+API (re-register it if deleted, re-claim ownership); publishing does not need
+them. To set them up, create an authorization key under
 [Artifact Hub → Control Panel → Authorization keys](https://artifacthub.io/control-panel/authorization-keys)
 as a member of the `ankra` organization, then:
 
 ```bash
 gh secret set ARTIFACTHUB_API_KEY_ID -R ankraio/ankra-charts
 gh secret set ARTIFACTHUB_API_KEY_SECRET -R ankraio/ankra-charts
-gh workflow run charts-pages.yml -R ankraio/ankra-charts
 ```
 
-`charts-pages` then registers the repository, writes the resulting
-`repositoryID` into `artifacthub-repo.yml` on `gh-pages`, and claims ownership so
-the packages show up under the verified `ankra` publisher.
-
-**Option B - register it by hand.** Artifact Hub → Control Panel → Repositories →
-Add, with kind `Helm charts`, name `ankra-charts`, display name `Ankra Charts`,
-URL `https://ankraio.github.io/ankra-charts`. Tracking starts immediately; the
-API-key secrets stay optional (they are only needed for CI to manage the entry).
-
-Without either, charts still publish to the Pages Helm repo and to GHCR, but
-they are **not listed on Artifact Hub** — `charts-pages` says so in its job
-summary rather than passing silently.
+If the entry is ever deleted, re-add it at Artifact Hub → Control Panel →
+Repositories → Add with the values in the table above. Until it exists, charts
+still publish to the Pages Helm repo and to GHCR but are **not listed on
+Artifact Hub**, and `charts-pages` says so in its job summary rather than
+passing silently.
 
 ### Verification
 
