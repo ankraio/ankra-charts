@@ -227,7 +227,8 @@
         "accessMode": { "type": "string" },
         "size": { "type": "string" },
         "storageClass": { "type": "string" },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "keepOnUninstall": { "type": "boolean" }
       }
     },
 

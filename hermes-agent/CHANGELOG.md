@@ -2,6 +2,17 @@
 
 All notable changes to the `hermes-agent` chart.
 
+## 0.1.3 - 2026-08-17
+
+### Added
+
+- The data volume now ships `helm.sh/resource-policy: keep`, so `helm uninstall`
+  leaves it behind instead of deleting the agent's memory, sessions and platform
+  pairings. Set `persistence.keepOnUninstall=false` to go back to the old
+  behaviour. Helm reads this annotation from the **stored release manifest**, so
+  annotating a live PVC after the fact does nothing - it has to ship with the
+  chart, which is how a real uninstall took a volume with it.
+
 ## 0.1.2 - 2026-08-17
 
 ### Fixed

@@ -201,6 +201,12 @@ persistence:
   size: 5Gi
   storageClass: ""
   annotations: {}
+  # Keep the volume when the release is uninstalled. HERMES_HOME holds the
+  # agent's memory, sessions and platform pairings, and `helm uninstall`
+  # otherwise deletes it with no confirmation. Note Helm reads this annotation
+  # from the stored release manifest, so adding it to a live PVC afterwards is
+  # too late - it has to ship with the chart.
+  keepOnUninstall: true
 
 # Extra Node packages installed into the persistent volume at startup.
 # Off by default: this pulls code from a public registry into a running pod.

@@ -3,6 +3,7 @@ templates:
   - templates/deployment.yaml
   - templates/configmap.yaml
   - templates/secret.yaml
+  - templates/pvc.yaml
 release:
   name: ut
   namespace: hermes
@@ -231,3 +232,31 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: keeps the data volume when the release is uninstalled
+    template: templates/pvc.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+
+  - it: can be told to let the volume go
+    template: templates/pvc.yaml
+    set:
+      persistence.keepOnUninstall: false
+    asserts:
+      - notExists:
+          path: metadata.annotations["helm.sh/resource-policy"]
+
+  - it: keeps caller annotations alongside the retain policy
+    template: templates/pvc.yaml
+    set:
+      persistence.annotations:
+        example.com/team: platform
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
