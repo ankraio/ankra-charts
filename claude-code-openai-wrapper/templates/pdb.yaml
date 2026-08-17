@@ -1,0 +1,13 @@
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "claude-code-openai-wrapper.fullname" . }}
+  labels:
+    {{- include "claude-code-openai-wrapper.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "claude-code-openai-wrapper.selectorLabels" . | nindent 6 }}
+{{- end }}

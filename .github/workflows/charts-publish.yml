@@ -131,6 +131,10 @@ jobs:
                 --set base_url=https://psono.example.com \
                 --set domain=example.com
               ;;
+            claude-code-openai-wrapper)
+              helm lint "${{ matrix.chart }}" \
+                --set secrets.existingSecret=ci-placeholder
+              ;;
             *)
               helm lint "${{ matrix.chart }}"
               ;;

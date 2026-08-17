@@ -1,0 +1,68 @@
+suite: service and ingress routing
+templates:
+  - templates/service.yaml
+  - templates/ingress.yaml
+release:
+  name: ut
+  namespace: claude
+tests:
+  - it: exposes one http port targeting the container port by name
+    template: templates/service.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8000
+      - equal:
+          path: spec.ports[0].targetPort
+          value: http
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: honours a different service port
+    template: templates/service.yaml
+    set:
+      secrets.existingSecret: s
+      service.port: 80
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 80
+
+  - it: keeps sessions sticky when asked
+    template: templates/service.yaml
+    set:
+      secrets.existingSecret: s
+      service.sessionAffinity: ClientIP
+    asserts:
+      - equal:
+          path: spec.sessionAffinity
+          value: ClientIP
+
+  - it: renders no Service when disabled
+    template: templates/service.yaml
+    set:
+      secrets.existingSecret: s
+      service.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: routes the Ingress to the Service port
+    template: templates/ingress.yaml
+    set:
+      secrets.existingSecret: s
+      ingress.enabled: true
+      ingress.className: nginx
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: ut-claude-code-openai-wrapper
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8000
+      - equal:
+          path: spec.ingressClassName
+          value: nginx

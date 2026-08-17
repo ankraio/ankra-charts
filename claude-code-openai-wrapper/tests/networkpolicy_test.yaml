@@ -1,0 +1,65 @@
+suite: network policy
+templates:
+  - templates/networkpolicy.yaml
+release:
+  name: ut
+  namespace: claude
+tests:
+  - it: allows same-namespace clients to the server port only
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].namespaceSelector.matchExpressions[0].values
+          value:
+            - claude
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 8000
+
+  - it: allows DNS and public HTTPS with the private ranges excluded
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - equal:
+          path: spec.egress[0].ports[0].port
+          value: 53
+      - equal:
+          path: spec.egress[1].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 169.254.0.0/16
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 10.0.0.0/8
+
+  - it: admits additional client namespaces
+    set:
+      secrets.existingSecret: s
+      networkPolicy.ingress.allowSameNamespace: false
+      networkPolicy.ingress.allowedNamespaces:
+        - ingress-nginx
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].namespaceSelector.matchExpressions[0].values
+          value:
+            - ingress-nginx
+
+  - it: emits an IPv6 block when asked
+    set:
+      secrets.existingSecret: s
+      networkPolicy.egress.ipv6: true
+    asserts:
+      - equal:
+          path: spec.egress[1].to[1].ipBlock.cidr
+          value: "::/0"
+
+  - it: renders nothing when disabled with the waiver
+    set:
+      secrets.existingSecret: s
+      hardening.allowUnrestrictedNetwork: true
+      networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

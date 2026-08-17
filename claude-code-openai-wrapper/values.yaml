@@ -1,0 +1,274 @@
+nameOverride: ""
+fullnameOverride: ""
+
+# Render-time guardrails. Each flag turns one hardening rule from "enforced"
+# into "your problem"; every one of them fails the render with an explanation
+# instead of silently shipping a weaker Deployment.
+hardening:
+  enabled: true
+  # Permit API keys supplied as plain values (secrets.<KEY>) instead of an
+  # existing Secret or an ExternalSecret.
+  allowInlineSecrets: false
+  # Permit image.tag without image.digest.
+  allowMutableImageTag: false
+  # Permit root, writable root filesystem, added capabilities, privilege
+  # escalation or a mounted ServiceAccount token.
+  allowPrivilegedRuntime: false
+  # Permit an Ingress in front of the wrapper without API_KEY protection.
+  # Every endpoint behind it is then public, including POST /v1/tools/config,
+  # which switches on Claude Code's Read/Write/Bash tools inside the pod.
+  allowUnauthenticatedIngress: false
+  # Permit "*" in server.corsOrigins.
+  allowWildcardCors: false
+  # Permit egress to RFC1918 / carrier-grade-NAT ranges (cluster-internal
+  # services, other tenants, private networks).
+  allowClusterInternalEgress: false
+  # Permit egress to 169.254.0.0/16 - the cloud instance metadata service.
+  allowMetadataEndpointEgress: false
+  # Permit running with networkPolicy.enabled=false.
+  allowUnrestrictedNetwork: false
+
+# Built by Ankra from the pinned upstream release: upstream publishes no
+# container image, and its own Dockerfile is a development setup (root,
+# --reload). See images/claude-code-openai-wrapper/ in this repository.
+image:
+  registry: ghcr.io
+  repository: ankraio/claude-code-openai-wrapper
+  # Tag is documentation; digest is what is pulled. Keep both in step.
+  tag: v2.3.0
+  digest: sha256:1f3a5f0338f4ffd07fc7f573699b708be8bb2c06db53513234a47adf74f1ff4d
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Sessions (/v1/sessions, session_id continuity) live in each pod's memory.
+# Plain stateless chat completions scale out fine; with more than one replica,
+# session continuity only works with service.sessionAffinity=ClientIP, and
+# /v1/sessions listings still show one pod's view.
+replicaCount: 1
+revisionHistoryLimit: 5
+
+strategy:
+  type: RollingUpdate
+
+# How the wrapper authenticates to Claude:
+#   api-key - ANTHROPIC_API_KEY from the configured Secret (recommended)
+#   bedrock - AWS Bedrock; credentials from the Secret, or IRSA/pod identity
+#             via serviceAccount.annotations
+#   vertex  - Google Vertex AI; credentials via Workload Identity or a mounted
+#             service-account key
+auth:
+  method: api-key
+  bedrock:
+    region: ""
+  vertex:
+    projectId: ""
+    region: ""
+
+server:
+  port: 8000
+  # Rendered into CORS_ORIGINS as a JSON array. Upstream defaults to ["*"];
+  # this chart defaults to no browser origins at all - OpenAI SDK clients are
+  # not browsers and need no CORS. "*" is refused unless waived.
+  corsOrigins: []
+  # Claude Agent SDK call timeout, in milliseconds.
+  maxTimeoutMilliseconds: 600000
+  # Maximum request body size, in bytes.
+  maxRequestSizeBytes: 10485760
+  # Default and speed-optimised models. Empty means upstream's own resolution:
+  # with an ANTHROPIC_API_KEY it discovers the latest Sonnet at startup.
+  defaultModel: ""
+  fastModel: ""
+  # Pin the advertised /v1/models list (CLAUDE_MODELS_OVERRIDE).
+  modelsOverride: []
+  rateLimit:
+    enabled: true
+    # Per-endpoint requests/minute. Empty keeps upstream's default.
+    perMinute: ""
+    chatPerMinute: ""
+    # Kubelet liveness+readiness probes also count against the health bucket;
+    # upstream's default of 30/min leaves little headroom.
+    healthPerMinute: "120"
+  debug: false
+  verbose: false
+
+env: {}
+
+extraEnv: []
+extraEnvFrom: []
+
+# Every key of the configured Secret lands in the container environment, so
+# name keys exactly as the wrapper reads them: ANTHROPIC_API_KEY, API_KEY
+# (wrapper endpoint protection), AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY for
+# Bedrock, and so on.
+secrets:
+  # Preferred: a Secret you already manage (SOPS, Vault, ESO, sealed-secrets).
+  existingSecret: ""
+  annotations: {}
+  # Any other key here becomes a Secret entry, e.g. ANTHROPIC_API_KEY.
+  # Refused unless hardening.allowInlineSecrets=true - plain API keys in values
+  # end up in the Helm release Secret, in Git, and in shell history.
+
+externalSecret:
+  enabled: false
+  # external-secrets.io/v1beta1 was removed in ESO 0.17; v1 is current.
+  apiVersion: external-secrets.io/v1
+  name: ""
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: ""
+  target:
+    name: ""
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      type: Opaque
+      metadata:
+        annotations: {}
+        labels: {}
+  data: []
+  dataFrom: []
+  annotations: {}
+  labels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8000
+  annotations: {}
+  labels: {}
+  # Set to ClientIP when running more than one replica and using session
+  # continuity, so a conversation keeps hitting the pod that holds it.
+  sessionAffinity: None
+  externalTrafficPolicy: ""
+  internalTrafficPolicy: ""
+  loadBalancerSourceRanges: []
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: claude-wrapper.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Default posture: deny all ingress except same-namespace clients, allow DNS,
+# allow HTTPS to the public internet only. RFC1918, CGNAT, loopback and the
+# 169.254.0.0/16 metadata endpoint are excluded, so a compromised wrapper -
+# whose tool mode can execute commands in the pod - cannot reach cloud
+# instance credentials or pivot into the cluster network. api.anthropic.com,
+# Bedrock and Vertex endpoints are all public HTTPS.
+networkPolicy:
+  enabled: true
+  allowDns: true
+  dnsNamespace: kube-system
+  ingress:
+    allowSameNamespace: true
+    allowedNamespaces: []
+    extra: []
+  egress:
+    allowPublicInternet: true
+    ports:
+      - protocol: TCP
+        port: 443
+    # Additional destinations that punch through the CIDR exclusions above,
+    # e.g. an in-cluster model gateway. Raw NetworkPolicyEgressRule entries.
+    extra: []
+    excludedCidrs:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 169.254.0.0/16
+      - 100.64.0.0/10
+      - 127.0.0.0/8
+    # Emit a second ipBlock for IPv6 (::/0 minus ULA/link-local/loopback).
+    ipv6: false
+    excludedCidrsIPv6:
+      - fc00::/7
+      - fe80::/10
+      - ::1/128
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+# Raw probe specs copied onto the container; empty means the chart's httpGet
+# probes against /health on the server port.
+probes:
+  liveness: {}
+  readiness: {}
+  startup: {}
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+    ephemeral-storage: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+    ephemeral-storage: 2Gi
+
+terminationGracePeriodSeconds: 30
+
+podAnnotations: {}
+deploymentAnnotations: {}
+podLabels: {}
+
+# Keeps every Service in the namespace out of the wrapper's environment.
+enableServiceLinks: false
+
+# Set to false on clusters with user namespaces (k8s >= 1.33) enabled.
+hostUsers: null
+
+podSecurityContext:
+  runAsNonRoot: true
+  # The image's fixed wrapper user.
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  # Kept read-only: the bundled Claude Code CLI writes only under HOME and
+  # /tmp, which the chart mounts as emptyDirs.
+  readOnlyRootFilesystem: true
+  privileged: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# emptyDir size caps for the two writable paths. HOME holds the Claude CLI's
+# state; /tmp holds the SDK's per-request working directories.
+writableVolumes:
+  home:
+    sizeLimit: 256Mi
+  tmp:
+    sizeLimit: 1Gi
+
+priorityClassName: ""
+runtimeClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+extraVolumes: []
+extraVolumeMounts: []
+extraInitContainers: []
+extraContainers: []
+extraObjects: []

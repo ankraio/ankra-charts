@@ -1,0 +1,186 @@
+suite: deployment
+templates:
+  - templates/deployment.yaml
+  # Included by the checksum annotations.
+  - templates/secret.yaml
+  - templates/external-secret.yaml
+release:
+  name: ut
+  namespace: claude
+tests:
+  - it: pins the image by tag and digest
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^ghcr.io/ankraio/claude-code-openai-wrapper:v[0-9.]+@sha256:[a-f0-9]{64}$"
+
+  - it: renders the server environment with plain integers
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PORT
+            value: "8000"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MAX_REQUEST_SIZE
+            value: "10485760"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MAX_TIMEOUT
+            value: "600000"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CORS_ORIGINS
+            value: "[]"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLAUDE_AUTH_METHOD
+            value: api_key
+
+  - it: renders CORS origins as a JSON array
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+      server.corsOrigins:
+        - https://console.example.com
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CORS_ORIGINS
+            value: '["https://console.example.com"]'
+
+  - it: bedrock mode sets the Bedrock switches
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+      auth.method: bedrock
+      auth.bedrock.region: eu-central-1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLAUDE_CODE_USE_BEDROCK
+            value: "1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_REGION
+            value: eu-central-1
+
+  - it: vertex mode sets the Vertex switches
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+      auth.method: vertex
+      auth.vertex.projectId: my-project
+      auth.vertex.region: europe-west4
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ANTHROPIC_VERTEX_PROJECT_ID
+            value: my-project
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLOUD_ML_REGION
+            value: europe-west4
+
+  - it: consumes the existing Secret without marking it optional
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: claude-credentials
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: claude-credentials
+              optional: false
+
+  - it: probes /health on the http port
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: http
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 24
+
+  - it: mounts writable emptyDirs over HOME and /tmp
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: home
+            mountPath: /home/wrapper
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tmp
+            mountPath: /tmp
+
+  - it: runs restricted-profile compliant
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 10001
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+
+  - it: skips the checksum annotation with an existing Secret
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations
+
+  - it: rolls the pod when the inline Secret changes
+    template: templates/deployment.yaml
+    set:
+      hardening.allowInlineSecrets: true
+      secrets.ANTHROPIC_API_KEY: ci-placeholder
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations.checksum/secret
+
+  - it: rolls the pod when the ExternalSecret changes
+    template: templates/deployment.yaml
+    set:
+      externalSecret.enabled: true
+      externalSecret.secretStoreRef.name: vault
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations.checksum/external-secret

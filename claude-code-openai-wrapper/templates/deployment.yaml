@@ -1,0 +1,231 @@
+{{- include "claude-code-openai-wrapper.validate" . -}}
+{{- $image := include "claude-code-openai-wrapper.image" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "claude-code-openai-wrapper.fullname" . }}
+  labels:
+    {{- include "claude-code-openai-wrapper.labels" . | nindent 4 }}
+  {{- with .Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+  selector:
+    matchLabels:
+      {{- include "claude-code-openai-wrapper.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "claude-code-openai-wrapper.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if or .Values.externalSecret.enabled (not .Values.secrets.existingSecret) .Values.podAnnotations }}
+      annotations:
+        {{- if .Values.externalSecret.enabled }}
+        checksum/external-secret: {{ include (print $.Template.BasePath "/external-secret.yaml") . | sha256sum }}
+        {{- else if not .Values.secrets.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "claude-code-openai-wrapper.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      enableServiceLinks: {{ .Values.enableServiceLinks }}
+      {{- if not (kindIs "invalid" .Values.hostUsers) }}
+      hostUsers: {{ .Values.hostUsers }}
+      {{- end }}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.extraInitContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: claude-code-openai-wrapper
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PORT
+              value: {{ .Values.server.port | quote }}
+            - name: MAX_TIMEOUT
+              value: {{ .Values.server.maxTimeoutMilliseconds | int64 | toString | quote }}
+            - name: MAX_REQUEST_SIZE
+              value: {{ .Values.server.maxRequestSizeBytes | int64 | toString | quote }}
+            # Parsed by upstream as a JSON array.
+            - name: CORS_ORIGINS
+              value: {{ .Values.server.corsOrigins | toJson | quote }}
+            - name: RATE_LIMIT_ENABLED
+              value: {{ .Values.server.rateLimit.enabled | toString | quote }}
+            {{- with .Values.server.rateLimit.perMinute }}
+            - name: RATE_LIMIT_PER_MINUTE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.server.rateLimit.chatPerMinute }}
+            - name: RATE_LIMIT_CHAT_PER_MINUTE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.server.rateLimit.healthPerMinute }}
+            - name: RATE_LIMIT_HEALTH_PER_MINUTE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.server.defaultModel }}
+            - name: DEFAULT_MODEL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.server.fastModel }}
+            - name: FAST_MODEL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if gt (len .Values.server.modelsOverride) 0 }}
+            - name: CLAUDE_MODELS_OVERRIDE
+              value: {{ join "," .Values.server.modelsOverride | quote }}
+            {{- end }}
+            {{- if .Values.server.debug }}
+            - name: DEBUG_MODE
+              value: "true"
+            {{- end }}
+            {{- if .Values.server.verbose }}
+            - name: VERBOSE
+              value: "true"
+            {{- end }}
+            {{- if eq .Values.auth.method "api-key" }}
+            - name: CLAUDE_AUTH_METHOD
+              value: api_key
+            {{- else if eq .Values.auth.method "bedrock" }}
+            - name: CLAUDE_AUTH_METHOD
+              value: bedrock
+            - name: CLAUDE_CODE_USE_BEDROCK
+              value: "1"
+            - name: AWS_REGION
+              value: {{ .Values.auth.bedrock.region | quote }}
+            {{- else if eq .Values.auth.method "vertex" }}
+            - name: CLAUDE_AUTH_METHOD
+              value: vertex
+            - name: CLAUDE_CODE_USE_VERTEX
+              value: "1"
+            - name: ANTHROPIC_VERTEX_PROJECT_ID
+              value: {{ .Values.auth.vertex.projectId | quote }}
+            - name: CLOUD_ML_REGION
+              value: {{ .Values.auth.vertex.region | quote }}
+            {{- end }}
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ printf "%v" $value | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "claude-code-openai-wrapper.secretName" . }}
+                optional: {{ not (include "claude-code-openai-wrapper.secretManagedExternally" .) }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port | int }}
+              protocol: TCP
+          {{- if .Values.probes.liveness }}
+          livenessProbe:
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          {{- else }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          {{- end }}
+          {{- if .Values.probes.readiness }}
+          readinessProbe:
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          {{- else }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          {{- end }}
+          {{- if .Values.probes.startup }}
+          startupProbe:
+            {{- toYaml .Values.probes.startup | nindent 12 }}
+          {{- else }}
+          # Startup covers the SDK verification in upstream's lifespan hook,
+          # which can take up to 30s before the first /health responds.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            # The bundled Claude Code CLI keeps its state under ~/.claude, and
+            # the SDK creates per-request working directories under /tmp; both
+            # must stay writable under readOnlyRootFilesystem.
+            - name: home
+              mountPath: /home/wrapper
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: home
+          emptyDir:
+            sizeLimit: {{ .Values.writableVolumes.home.sizeLimit | quote }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ .Values.writableVolumes.tmp.sizeLimit | quote }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

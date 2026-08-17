@@ -1,0 +1,12 @@
+# Smallest configuration that satisfies the chart's guardrails.
+#
+# Create the Secret first, then install:
+#
+#   kubectl -n claude create secret generic claude-credentials \
+#     --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+#
+#   helm install claude-wrapper ankra/claude-code-openai-wrapper -n claude --create-namespace \
+#     -f claude-code-openai-wrapper/values-examples/minimal.yaml
+
+secrets:
+  existingSecret: claude-credentials

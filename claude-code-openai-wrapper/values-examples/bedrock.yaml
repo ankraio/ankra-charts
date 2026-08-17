@@ -1,0 +1,31 @@
+# AWS Bedrock authentication via IRSA: no Anthropic key at all. The pod's
+# ServiceAccount is annotated with an IAM role that may call Bedrock's
+# Anthropic models, so no long-lived credential exists anywhere.
+#
+# The Secret only carries the wrapper's own API_KEY bearer token (required
+# here because an Ingress exposes the API):
+#
+#   kubectl -n claude create secret generic claude-wrapper-auth \
+#     --from-literal=API_KEY="$(openssl rand -hex 32)"
+
+auth:
+  method: bedrock
+  bedrock:
+    region: eu-central-1
+
+secrets:
+  existingSecret: claude-wrapper-auth
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::111111111111:role/claude-code-openai-wrapper
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: claude-api.internal.example.com
+      paths:
+        - path: /
+          pathType: Prefix

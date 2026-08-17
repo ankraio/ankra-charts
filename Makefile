@@ -4,13 +4,13 @@
 # working directory. Both `cd charts && make lint` and
 # `make -C charts lint` (from the repo root) work.
 
-CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi psono hermes-agent
+CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi psono hermes-agent claude-code-openai-wrapper
 HELM     ?= helm
 KCONFORM ?= kubeconform
 
 .PHONY: help lint template unittest test secret-scan \
         sync sync-ccm sync-csi sync-cloudflare sync-do-ccm sync-do-csi check docs \
-        hermes-digest hermes-digest-latest
+        hermes-digest hermes-digest-latest claude-wrapper-digest claude-wrapper-digest-latest
 
 help:
 	@printf 'Available targets:\n'
@@ -37,6 +37,9 @@ lint:
 		--set domain=example.com
 	@echo "==> helm lint hermes-agent"
 	@$(HELM) lint --strict hermes-agent
+	@echo "==> helm lint claude-code-openai-wrapper"
+	@$(HELM) lint --strict claude-code-openai-wrapper \
+		--set secrets.existingSecret=ci-placeholder
 
 template:
 	@mkdir -p /tmp/rendered
@@ -65,7 +68,11 @@ template:
 		--namespace hermes \
 		--set secrets.existingSecret=hermes-credentials \
 		> /tmp/rendered/hermes-agent.yaml
-	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,digitalocean-ccm,digitalocean-csi,psono,hermes-agent}.yaml"
+	@$(HELM) template claude-wrapper claude-code-openai-wrapper \
+		--namespace claude \
+		--set secrets.existingSecret=claude-credentials \
+		> /tmp/rendered/claude-code-openai-wrapper.yaml
+	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,digitalocean-ccm,digitalocean-csi,psono,hermes-agent,claude-code-openai-wrapper}.yaml"
 
 unittest:
 	@for c in $(CHARTS); do \
@@ -111,6 +118,7 @@ sync-do-csi:
 check:
 	@./scripts/sync-upstream.sh check
 	@./scripts/sync-image-digest.sh hermes-agent check
+	@./scripts/sync-image-digest.sh claude-code-openai-wrapper check
 
 # Re-resolve the digest hermes-agent pins for its current tag.
 hermes-digest:
@@ -119,6 +127,14 @@ hermes-digest:
 # Move hermes-agent to the newest upstream tag and re-pin the digest.
 hermes-digest-latest:
 	@./scripts/sync-image-digest.sh hermes-agent latest
+
+# Re-resolve the digest claude-code-openai-wrapper pins for its current tag.
+claude-wrapper-digest:
+	@./scripts/sync-image-digest.sh claude-code-openai-wrapper
+
+# Move claude-code-openai-wrapper to the newest published image tag and re-pin.
+claude-wrapper-digest-latest:
+	@./scripts/sync-image-digest.sh claude-code-openai-wrapper latest
 
 docs:
 	@command -v helm-docs >/dev/null 2>&1 || { echo "install helm-docs: https://github.com/norwoodj/helm-docs"; exit 1; }

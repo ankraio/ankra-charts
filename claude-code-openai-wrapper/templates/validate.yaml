@@ -1,0 +1,1 @@
+{{- include "claude-code-openai-wrapper.validate" . -}}
