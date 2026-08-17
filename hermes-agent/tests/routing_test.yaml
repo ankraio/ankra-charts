@@ -1,0 +1,133 @@
+suite: service, ingress and virtualservice
+templates:
+  - templates/service.yaml
+  - templates/ingress.yaml
+  - templates/virtualservice.yaml
+release:
+  name: ut
+  namespace: hermes
+set:
+  secrets.existingSecret: hermes-credentials
+tests:
+  - it: exposes nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: derives the Service ports from the enabled listeners
+    template: templates/service.yaml
+    set:
+      service.enabled: true
+      apiServer.enabled: true
+      webhook.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].name
+          value: api-server
+      - equal:
+          path: spec.ports[0].port
+          value: 8642
+      - equal:
+          path: spec.ports[1].name
+          value: webhook
+      - equal:
+          path: spec.ports[1].port
+          value: 8644
+
+  - it: prefers explicit Service ports over the derived ones
+    template: templates/service.yaml
+    set:
+      service.enabled: true
+      apiServer.enabled: true
+      service.ports:
+        - name: custom
+          port: 9000
+          targetPort: 8642
+    asserts:
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+      - equal:
+          path: spec.ports[0].name
+          value: custom
+
+  - it: fails when a Service is asked for with nothing to expose
+    template: templates/service.yaml
+    set:
+      service.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "service.enabled=true requires"
+
+  - it: only sets loadBalancerSourceRanges on a LoadBalancer
+    template: templates/service.yaml
+    set:
+      service.enabled: true
+      apiServer.enabled: true
+      service.loadBalancerSourceRanges:
+        - 203.0.113.0/24
+    asserts:
+      - notExists:
+          path: spec.loadBalancerSourceRanges
+
+  - it: keeps the source ranges on a LoadBalancer
+    template: templates/service.yaml
+    set:
+      service.enabled: true
+      apiServer.enabled: true
+      service.type: LoadBalancer
+      service.loadBalancerSourceRanges:
+        - 203.0.113.0/24
+    asserts:
+      - contains:
+          path: spec.loadBalancerSourceRanges
+          content: 203.0.113.0/24
+
+  - it: routes the Ingress to the first exposed port
+    template: templates/ingress.yaml
+    set:
+      service.enabled: true
+      apiServer.enabled: true
+      ingress.enabled: true
+      ingress.className: nginx
+      ingress.hosts:
+        - host: hermes.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+      - equal:
+          path: spec.rules[0].host
+          value: hermes.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8642
+
+  - it: routes the VirtualService to the in-cluster Service
+    template: templates/virtualservice.yaml
+    set:
+      service.enabled: true
+      apiServer.enabled: true
+      virtualService.enabled: true
+      virtualService.hosts:
+        - hermes.example.com
+      virtualService.gateways:
+        - istio-system/public
+    asserts:
+      - equal:
+          path: spec.http[0].route[0].destination.host
+          value: ut-hermes-agent.hermes.svc.cluster.local
+      - equal:
+          path: spec.http[0].route[0].destination.port.number
+          value: 8642
+      - equal:
+          path: spec.http[0].timeout
+          value: 3600s

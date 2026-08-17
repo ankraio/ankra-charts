@@ -1,0 +1,174 @@
+suite: deployment
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+  - templates/secret.yaml
+release:
+  name: ut
+  namespace: hermes
+tests:
+  - it: pins the image by digest and keeps the tag for readability
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: docker.io/nousresearch/hermes-agent:v2026.8.16@sha256:f8f548d87d16634d1ad9e3777280f3f577ba2358703f04e18e74007ffd3621bf
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: docker.io/nousresearch/hermes-agent:v2026.8.16@sha256:f8f548d87d16634d1ad9e3777280f3f577ba2358703f04e18e74007ffd3621bf
+
+  - it: honours a private registry mirror
+    template: templates/deployment.yaml
+    set:
+      image.registry: harbor.internal
+      image.repository: mirror/hermes-agent
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^harbor\\.internal/mirror/hermes-agent:"
+
+  - it: runs unprivileged with a read-only root filesystem
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: keeps the ServiceAccount token and Service environment out of the pod
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+      - equal:
+          path: spec.template.spec.enableServiceLinks
+          value: false
+
+  - it: omits hostUsers unless it is set explicitly
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.hostUsers
+
+  - it: passes hostUsers through when set
+    template: templates/deployment.yaml
+    set:
+      hostUsers: false
+    asserts:
+      - equal:
+          path: spec.template.spec.hostUsers
+          value: false
+
+  - it: reserves ephemeral storage so a runaway download cannot fill the node
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits["ephemeral-storage"]
+          value: 4Gi
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests["ephemeral-storage"]
+          value: 1Gi
+
+  - it: stays single-writer with a Recreate rollout
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: marks the generated Secret optional and the managed Secret required
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom[0].secretRef.optional
+          value: true
+
+  - it: requires the Secret when one is managed outside the release
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: hermes-credentials
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom[0].secretRef.name
+          value: hermes-credentials
+      - equal:
+          path: spec.template.spec.containers[0].envFrom[0].secretRef.optional
+          value: false
+
+  - it: adds tcpSocket probes when the API server listener is enabled
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: hermes-credentials
+      apiServer.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 8642
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: 8642
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.tcpSocket.port
+          value: 8642
+
+  - it: never overrides an explicit probe
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: hermes-credentials
+      apiServer.enabled: true
+      probes.liveness:
+        httpGet:
+          path: /health
+          port: 8642
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket
+
+  - it: blocks npm lifecycle scripts when extra packages are installed
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: hermes-credentials
+      npm.enabled: true
+      npm.packages:
+        - "@modelcontextprotocol/server-filesystem"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: npm-install
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].args[0]
+          pattern: --ignore-scripts
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].args[0]
+          pattern: --registry "https://registry\.npmjs\.org"
+
+  - it: renders nothing in operator mode
+    template: templates/deployment.yaml
+    set:
+      operator.enabled: true
+      operator.tenants:
+        - name: tenant-a
+    asserts:
+      - hasDocuments:
+          count: 0

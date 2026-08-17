@@ -4,12 +4,13 @@
 # working directory. Both `cd charts && make lint` and
 # `make -C charts lint` (from the repo root) work.
 
-CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi psono
+CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi psono hermes-agent
 HELM     ?= helm
 KCONFORM ?= kubeconform
 
 .PHONY: help lint template unittest test secret-scan \
-        sync sync-ccm sync-csi sync-cloudflare sync-do-ccm sync-do-csi check docs
+        sync sync-ccm sync-csi sync-cloudflare sync-do-ccm sync-do-csi check docs \
+        hermes-digest hermes-digest-latest
 
 help:
 	@printf 'Available targets:\n'
@@ -34,6 +35,8 @@ lint:
 	@$(HELM) lint psono \
 		--set base_url=https://psono.example.com \
 		--set domain=example.com
+	@echo "==> helm lint hermes-agent"
+	@$(HELM) lint --strict hermes-agent
 
 template:
 	@mkdir -p /tmp/rendered
@@ -58,7 +61,11 @@ template:
 		--set ingress.enabled=true \
 		--set adminClient.enabled=true \
 		> /tmp/rendered/psono.yaml
-	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,digitalocean-ccm,digitalocean-csi,psono}.yaml"
+	@$(HELM) template hermes hermes-agent \
+		--namespace hermes \
+		--set secrets.existingSecret=hermes-credentials \
+		> /tmp/rendered/hermes-agent.yaml
+	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,digitalocean-ccm,digitalocean-csi,psono,hermes-agent}.yaml"
 
 unittest:
 	@for c in $(CHARTS); do \
@@ -103,6 +110,15 @@ sync-do-csi:
 
 check:
 	@./scripts/sync-upstream.sh check
+	@./scripts/sync-image-digest.sh hermes-agent check
+
+# Re-resolve the digest hermes-agent pins for its current tag.
+hermes-digest:
+	@./scripts/sync-image-digest.sh hermes-agent
+
+# Move hermes-agent to the newest upstream tag and re-pin the digest.
+hermes-digest-latest:
+	@./scripts/sync-image-digest.sh hermes-agent latest
 
 docs:
 	@command -v helm-docs >/dev/null 2>&1 || { echo "install helm-docs: https://github.com/norwoodj/helm-docs"; exit 1; }

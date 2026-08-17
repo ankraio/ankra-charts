@@ -1,0 +1,52 @@
+{{ include "hermes-agent.fullname" . }} ({{ .Chart.Name }}-{{ .Chart.Version }}, Hermes {{ .Chart.AppVersion }})
+
+Image:
+  {{ include "hermes-agent.image" . }}
+
+{{- if .Values.operator.enabled }}
+
+Operator-ready mode: this release renders {{ len .Values.operator.tenants }} HermesTenant
+resource(s) and no workload. A controller that reconciles hermes.ai/v1alpha1
+HermesTenant objects has to be running in the cluster for anything to start.
+
+  kubectl get hermestenants -A
+{{- else }}
+
+Watch it come up:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "hermes-agent.fullname" . }}
+  kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "hermes-agent.fullname" . }}
+
+Secrets:
+{{- if .Values.externalSecret.enabled }}
+  Delivered by the External Secrets Operator into {{ include "hermes-agent.secretName" . }}.
+{{- else if .Values.secrets.existingSecret }}
+  Read from the existing Secret {{ .Values.secrets.existingSecret }}.
+{{- else if include "hermes-agent.hasInlineSecrets" . }}
+  WARNING: rendered from inline values into {{ include "hermes-agent.secretName" . }}.
+  They are readable in the Helm release Secret and in whatever holds your values
+  file. Move them to secrets.existingSecret or externalSecret.enabled.
+{{- else }}
+  No API keys are configured, so Hermes has no model provider credentials and
+  the gateway will not be able to call a model. Point secrets.existingSecret at
+  a Secret holding e.g. OPENROUTER_API_KEY, or enable externalSecret.
+{{- end }}
+
+Network:
+{{- if .Values.networkPolicy.enabled }}
+  A NetworkPolicy restricts this pod to DNS{{ if .Values.networkPolicy.egress.allowPublicInternet }} and outbound {{ range $index, $port := .Values.networkPolicy.egress.ports }}{{ if $index }}, {{ end }}{{ $port.protocol }}/{{ $port.port }}{{ end }}, with these
+  destinations excluded: {{ join ", " .Values.networkPolicy.egress.excludedCidrs }}{{ end }}.
+  This is only enforced if your CNI implements NetworkPolicy (Cilium, Calico,
+  Antrea, ...). On a CNI that ignores it, the policy is decoration - check with:
+
+    kubectl -n {{ .Release.Namespace }} describe networkpolicy {{ include "hermes-agent.fullname" . }}
+{{- else }}
+  WARNING: networkPolicy.enabled=false. This agent runs a shell and a browser
+  with unrestricted egress, including to the cloud metadata endpoint.
+{{- end }}
+{{- if not .Values.hardening.enabled }}
+
+WARNING: hardening.enabled=false - every render-time guardrail in this chart is
+switched off. Do not run this configuration in a shared or production cluster.
+{{- end }}
+{{- end }}

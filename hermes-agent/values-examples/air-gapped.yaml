@@ -1,0 +1,53 @@
+# Air-gapped overlay: image from an internal mirror, no public egress at all,
+# and the model served by an in-cluster gateway.
+#
+# Mirror the image first, keeping the digest:
+#
+#   crane copy \
+#     docker.io/nousresearch/hermes-agent:v2026.8.16 \
+#     harbor.internal/mirror/hermes-agent:v2026.8.16
+#
+# then re-resolve the digest in the mirror and set it below.
+
+image:
+  registry: harbor.internal
+  repository: mirror/hermes-agent
+  tag: v2026.8.16
+  digest: sha256:f8f548d87d16634d1ad9e3777280f3f577ba2358703f04e18e74007ffd3621bf
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: harbor-pull
+
+secrets:
+  existingSecret: hermes-credentials
+
+config:
+  values:
+    model:
+      default: qwen3
+      provider: openai_compatible
+      base_url: http://llm-gateway.llm.svc.cluster.local:8080/v1
+
+# No route to the internet; only DNS and the in-cluster gateway.
+networkPolicy:
+  enabled: true
+  allowDns: true
+  egress:
+    allowPublicInternet: false
+    extra:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: llm
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: llm-gateway
+        ports:
+          - protocol: TCP
+            port: 8080
+
+# Runtime package installs need a registry the cluster cannot reach.
+npm:
+  enabled: false
+  packages: []

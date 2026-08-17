@@ -1,0 +1,351 @@
+nameOverride: ""
+fullnameOverride: ""
+
+# Render-time guardrails. Each flag turns one hardening rule from "enforced"
+# into "your problem"; every one of them fails the render with an explanation
+# instead of silently shipping a weaker Deployment.
+hardening:
+  enabled: true
+  # Permit API keys supplied as plain values (secrets.<KEY>) instead of an
+  # existing Secret or an ExternalSecret.
+  allowInlineSecrets: false
+  # Permit image.tag without image.digest.
+  allowMutableImageTag: false
+  # Permit root, writable root filesystem, added capabilities, privilege
+  # escalation, host namespaces or a mounted ServiceAccount token.
+  allowPrivilegedRuntime: false
+  # Permit "*" in rbac.rules apiGroups/resources/verbs.
+  allowWildcardRbac: false
+  # Permit egress to RFC1918 / carrier-grade-NAT ranges (cluster-internal
+  # services, other tenants, private networks).
+  allowClusterInternalEgress: false
+  # Permit egress to 169.254.0.0/16 - the cloud instance metadata service.
+  allowMetadataEndpointEgress: false
+  # Permit running with networkPolicy.enabled=false.
+  allowUnrestrictedNetwork: false
+
+image:
+  registry: docker.io
+  repository: nousresearch/hermes-agent
+  # Tag is documentation; digest is what is pulled. Keep both in step.
+  tag: v2026.8.16
+  digest: sha256:f8f548d87d16634d1ad9e3777280f3f577ba2358703f04e18e74007ffd3621bf
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Hermes stores mutable state under HERMES_HOME, so a single replica is the
+# only safe topology while persistence is enabled.
+replicaCount: 1
+revisionHistoryLimit: 5
+
+strategy:
+  type: Recreate
+
+# The image entrypoint bootstraps Hermes and execs `hermes`, so these args
+# become `hermes <args...>`.
+command: []
+args:
+  - gateway
+  - run
+workingDir: /opt/hermes
+
+bootstrap:
+  enabled: true
+  # When true, overwrite the persisted config/SOUL with Helm-rendered content.
+  # When false, seed only if the file does not already exist in the volume.
+  overwrite: true
+  # Consume bootstrap data from an externally managed ConfigMap instead of the
+  # chart-managed one.
+  existingConfigMap: ""
+  configKey: config.yaml
+  soulKey: SOUL.md
+
+config:
+  # Raw YAML string rendered through tpl. Takes precedence over config.values.
+  raw: ""
+  # Partial Hermes config.yaml written to HERMES_HOME/config.yaml.
+  values:
+    model:
+      default: anthropic/claude-opus-4.6
+      provider: auto
+      base_url: https://openrouter.ai/api/v1
+    agent:
+      max_turns: 90
+      gateway_timeout: 1800
+      restart_drain_timeout: 60
+      tool_use_enforcement: auto
+    terminal:
+      backend: local
+      cwd: .
+      timeout: 180
+    display:
+      tool_progress: all
+      interim_assistant_messages: true
+    browser:
+      inactivity_timeout: 120
+      command_timeout: 30
+      allow_private_urls: false
+    compression:
+      enabled: true
+      threshold: 0.5
+      target_ratio: 0.2
+      protect_last_n: 20
+    security:
+      redact_secrets: true
+      tirith_enabled: true
+      # Fail closed: if the policy engine errors, deny rather than proceed.
+      tirith_fail_open: false
+
+soul:
+  text: ""
+
+env:
+  WEB_TOOLS_DEBUG: "false"
+  VISION_TOOLS_DEBUG: "false"
+  MOA_TOOLS_DEBUG: "false"
+  IMAGE_TOOLS_DEBUG: "false"
+  HERMES_HUMAN_DELAY_MODE: "off"
+  GATEWAY_ALLOW_ALL_USERS: "false"
+  WHATSAPP_ENABLED: "false"
+
+extraEnv: []
+extraEnvFrom: []
+
+secrets:
+  # Preferred: a Secret you already manage (SOPS, Vault, ESO, sealed-secrets).
+  existingSecret: ""
+  annotations: {}
+  # Any other key here becomes a Secret entry, e.g. OPENROUTER_API_KEY.
+  # Refused unless hardening.allowInlineSecrets=true - plain API keys in values
+  # end up in the Helm release Secret, in Git, and in shell history.
+
+externalSecret:
+  enabled: false
+  # external-secrets.io/v1beta1 was removed in ESO 0.17; v1 is current.
+  apiVersion: external-secrets.io/v1
+  name: ""
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: ""
+  target:
+    name: ""
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      type: Opaque
+      metadata:
+        annotations: {}
+        labels: {}
+  data: []
+  dataFrom: []
+  annotations: {}
+  labels: {}
+
+operator:
+  enabled: false
+  controllerClass: hermes.ai/default
+  installCustomResources: true
+  defaultChartValues: {}
+  tenants: []
+
+tenant:
+  id: ""
+  labels: {}
+
+apiServer:
+  enabled: false
+  host: "0.0.0.0"
+  port: 8642
+  # "*" is refused; list explicit origins.
+  corsOrigins: ""
+  modelName: hermes-agent
+
+webhook:
+  enabled: false
+  port: 8644
+
+telegramWebhook:
+  enabled: false
+  url: ""
+  port: 8443
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+rbac:
+  create: false
+  clusterWide: false
+  annotations: {}
+  rules: []
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  mountPath: /opt/data
+  accessMode: ReadWriteOnce
+  size: 5Gi
+  storageClass: ""
+  annotations: {}
+
+# Extra Node packages installed into the persistent volume at startup.
+# Off by default: this pulls code from a public registry into a running pod.
+npm:
+  enabled: false
+  registry: https://registry.npmjs.org
+  # Block package lifecycle scripts (preinstall/postinstall) - the usual npm
+  # supply-chain execution path.
+  ignoreScripts: true
+  packages: []
+
+browser:
+  shm:
+    enabled: true
+    mountPath: /dev/shm
+    sizeLimit: 1Gi
+
+service:
+  enabled: false
+  type: ClusterIP
+  annotations: {}
+  labels: {}
+  sessionAffinity: None
+  externalTrafficPolicy: ""
+  internalTrafficPolicy: ""
+  loadBalancerSourceRanges: []
+  # When empty, enabled apiServer/webhook/telegramWebhook listeners are exposed
+  # on their configured ports. Explicit entries override that.
+  ports: []
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: hermes.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  servicePortNumber: null
+
+virtualService:
+  enabled: false
+  gateways: []
+  hosts: []
+  timeout: "3600s"
+  servicePortNumber: null
+
+# Default posture: deny all ingress, allow DNS, allow HTTPS to the public
+# internet only. RFC1918, CGNAT, loopback and the 169.254.0.0/16 metadata
+# endpoint are excluded, so a compromised agent cannot reach cloud instance
+# credentials or pivot into the cluster network.
+networkPolicy:
+  enabled: true
+  allowDns: true
+  dnsNamespace: kube-system
+  ingress:
+    # Allow same-namespace clients to reach the exposed service ports.
+    allowSameNamespace: true
+    allowedNamespaces: []
+    extra: []
+  egress:
+    allowPublicInternet: true
+    ports:
+      - protocol: TCP
+        port: 443
+    # Additional destinations that punch through the CIDR exclusions above,
+    # e.g. an in-cluster model gateway. Raw NetworkPolicyEgressRule entries.
+    extra: []
+    excludedCidrs:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 169.254.0.0/16
+      - 100.64.0.0/10
+      - 127.0.0.0/8
+    # Emit a second ipBlock for IPv6 (::/0 minus ULA/link-local/loopback).
+    ipv6: false
+    excludedCidrsIPv6:
+      - fc00::/7
+      - fe80::/10
+      - ::1/128
+
+tenantIsolation:
+  enabled: false
+  allowSameNamespace: true
+  authorizedNamespaces: []
+  additionalEgress: []
+  podAntiAffinity:
+    enabled: false
+    type: preferredDuringSchedulingIgnoredDuringExecution
+    topologyKey: kubernetes.io/hostname
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+# Raw probe specs copied onto the container. When apiServer.enabled=true and a
+# probe is left empty, a tcpSocket probe against the API port is used.
+probes:
+  liveness: {}
+  readiness: {}
+  startup: {}
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+    ephemeral-storage: 1Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+    ephemeral-storage: 4Gi
+
+terminationGracePeriodSeconds: 120
+
+podAnnotations: {}
+deploymentAnnotations: {}
+podLabels: {}
+
+# Keeps every Service in the namespace out of the agent's environment.
+enableServiceLinks: false
+
+# Set to false on clusters with user namespaces (k8s >= 1.33) enabled.
+hostUsers: null
+
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  privileged: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+priorityClassName: ""
+runtimeClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+extraVolumes: []
+extraVolumeMounts: []
+extraInitContainers: []
+extraContainers: []
+extraObjects: []

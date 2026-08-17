@@ -1,0 +1,322 @@
+name: charts-hermes-lint
+
+# Gate for hermes-agent/**: lint, render every overlay, validate against the
+# Kubernetes schemas, run the helm-unittest suites, scan the rendered manifests
+# for misconfiguration, prove the pinned image digest still exists, and finish
+# with a server-side dry-run install on kind.
+#
+# Third-party actions are pinned by commit SHA - a tag can be moved.
+
+on:
+  pull_request:
+    paths:
+      - "hermes-agent/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-hermes-lint.yml"
+      - ".github/workflows/charts-hermes-sync.yml"
+  push:
+    paths:
+      - "hermes-agent/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-hermes-lint.yml"
+      - ".github/workflows/charts-hermes-sync.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: charts-hermes-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CHART: hermes-agent
+  HELM_VERSION: v3.14.0
+
+jobs:
+  shellcheck:
+    name: shellcheck scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+
+  lint:
+    name: lint / render / kubeconform / unittest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.2
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          KUBECONFORM_VERSION=v0.6.7
+          curl -fsSL -o /tmp/kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          sudo tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: helm lint (strict)
+        run: |
+          set -euo pipefail
+          helm lint --strict "${CHART}"
+          for overlay in "${CHART}"/values-examples/*.yaml; do
+            echo "==> ${overlay}"
+            helm lint --strict "${CHART}" --values "${overlay}"
+          done
+
+      - name: helm template (every overlay)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rendered
+          helm template ci "${CHART}" --namespace hermes \
+            --set secrets.existingSecret=hermes-credentials \
+            > "/tmp/rendered/${CHART}-defaults.yaml"
+          for overlay in "${CHART}"/values-examples/*.yaml; do
+            name="$(basename "${overlay}" .yaml)"
+            helm template ci "${CHART}" --namespace hermes --values "${overlay}" \
+              > "/tmp/rendered/${CHART}-${name}.yaml"
+            echo "${name}: $(grep -c '^kind:' "/tmp/rendered/${CHART}-${name}.yaml") resources"
+          done
+
+      - name: kubeconform
+        run: |
+          set -euo pipefail
+          kubeconform \
+            -strict -summary -verbose \
+            -kubernetes-version 1.31.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{ .Group }}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \
+            -ignore-missing-schemas \
+            /tmp/rendered/*.yaml
+
+      - name: helm unittest
+        run: helm unittest "${CHART}"
+
+      - name: Upload rendered manifests
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rendered-manifests
+          path: /tmp/rendered/
+          retention-days: 7
+
+  guardrails:
+    name: hardening guardrails hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      # helm-unittest covers this too; this job is the belt-and-braces check
+      # that the shipped chart cannot be rendered into a weak Deployment
+      # without an explicit waiver, and it fails loudly in the PR checks list.
+      - name: Weak configurations must be refused
+        run: |
+          set -uo pipefail
+          status=0
+          refuses() {
+            local description="$1"
+            shift
+            if helm template ci "${CHART}" --namespace hermes "$@" >/dev/null 2>&1; then
+              echo "::error::${description} was accepted but should have been refused"
+              status=1
+            else
+              echo "refused: ${description}"
+            fi
+          }
+          refuses "unpinned image"                 --set image.digest=
+          refuses "inline API key"                 --set secrets.OPENROUTER_API_KEY=ci-placeholder
+          refuses "no NetworkPolicy"               --set networkPolicy.enabled=false
+          refuses "root user"                      --set podSecurityContext.runAsUser=0
+          refuses "writable root filesystem"       --set securityContext.readOnlyRootFilesystem=false
+          refuses "privilege escalation"           --set securityContext.allowPrivilegeEscalation=true
+          refuses "mounted ServiceAccount token"   --set serviceAccount.automountServiceAccountToken=true
+          refuses "metadata endpoint reachable"    --set 'networkPolicy.egress.excludedCidrs={10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}'
+          refuses "cluster network reachable"      --set 'networkPolicy.egress.excludedCidrs={169.254.0.0/16}'
+          refuses "wildcard CORS"                  --set secrets.existingSecret=h --set apiServer.enabled=true --set apiServer.corsOrigins='*'
+          refuses "unknown values key"             --set secrets.existingSecret=h --set totallyNotAValue=1
+          exit "${status}"
+
+      - name: The shipped defaults must still render
+        run: |
+          set -euo pipefail
+          helm template ci "${CHART}" --namespace hermes \
+            --set secrets.existingSecret=hermes-credentials > /dev/null
+          echo "defaults render cleanly"
+
+  scan:
+    name: trivy misconfiguration scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Render the production overlay
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/scan
+          helm template ci "${CHART}" --namespace hermes \
+            --values "${CHART}/values-examples/production.yaml" \
+            > /tmp/scan/manifests.yaml
+
+      - name: trivy config
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: /tmp/scan/manifests.yaml
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          format: table
+
+  image-pin:
+    name: pinned image digest resolves
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Install yq
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: values.yaml, Chart.yaml and the registry must agree
+        run: |
+          set -euo pipefail
+          registry="$(yq -r '.image.registry' "${CHART}/values.yaml")"
+          repository="$(yq -r '.image.repository' "${CHART}/values.yaml")"
+          tag="$(yq -r '.image.tag' "${CHART}/values.yaml")"
+          digest="$(yq -r '.image.digest' "${CHART}/values.yaml")"
+          app_version="$(yq -r '.appVersion' "${CHART}/Chart.yaml")"
+          annotated="$(yq -r '.annotations["artifacthub.io/images"]' "${CHART}/Chart.yaml" | yq -r '.[0].image')"
+          expected="${registry}/${repository}:${tag}@${digest}"
+
+          echo "values.yaml : ${expected}"
+          echo "Chart.yaml  : ${annotated}"
+          echo "appVersion  : ${app_version}"
+
+          if [[ "${app_version}" != "${tag}" ]]; then
+            echo "::error::Chart.yaml appVersion (${app_version}) does not match image.tag (${tag})"
+            exit 1
+          fi
+          if [[ "${annotated}" != "${expected}" ]]; then
+            echo "::error::artifacthub.io/images annotation is stale; run scripts/sync-image-digest.sh ${CHART}"
+            exit 1
+          fi
+
+          ./scripts/sync-image-digest.sh "${CHART}" check
+          if ! git diff --quiet --exit-code; then
+            echo "::error::check mode should never write; something is wrong with the sync script"
+            exit 1
+          fi
+          ./scripts/sync-image-digest.sh "${CHART}"
+          if ! git diff --quiet --exit-code; then
+            echo "::error::the pinned tag no longer resolves to the pinned digest - the tag moved"
+            git --no-pager diff
+            exit 1
+          fi
+          echo "pinned digest still matches the registry"
+
+  install-dry-run:
+    # A real `helm install --wait` cannot pass here: Hermes needs a model
+    # provider key and outbound network before it reports Ready. A server-side
+    # dry-run still exercises the apiserver's schema validation, admission and
+    # RBAC checks, which is what we want from CI.
+    name: helm install --dry-run=server (kind ${{ matrix.k8s }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [lint, guardrails]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - k8s: "1.27"
+            node: "kindest/node:v1.27.16@sha256:2d21a61643eafc439905e18705b8186f3296384750a835ad7a005dceb9546d20"
+          - k8s: "1.29"
+            node: "kindest/node:v1.29.14@sha256:8703bd94ee24e51b778d5556ae310c6c0fa67d761fae6379c8e0bb480e6fea29"
+          - k8s: "1.31"
+            node: "kindest/node:v1.31.6@sha256:28b7cbb993dfe093c76641a0c95807637213c9109b761f1d422c2400e22b8e87"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Create kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          node_image: ${{ matrix.node }}
+          cluster_name: ct
+
+      - name: Create the namespace and a stand-in Secret
+        run: |
+          set -euo pipefail
+          kubectl create namespace hermes-ci
+          kubectl -n hermes-ci create secret generic hermes-credentials \
+            --from-literal=OPENROUTER_API_KEY=ci \
+            --from-literal=API_SERVER_KEY=ci
+
+      - name: helm install --dry-run=server (defaults)
+        run: |
+          set -euo pipefail
+          helm install hermes "${CHART}" \
+            --namespace hermes-ci \
+            --dry-run=server \
+            --set secrets.existingSecret=hermes-credentials
+
+      - name: helm install --dry-run=server (API server + Ingress)
+        run: |
+          set -euo pipefail
+          helm install hermes-api "${CHART}" \
+            --namespace hermes-ci \
+            --dry-run=server \
+            --set secrets.existingSecret=hermes-credentials \
+            --set apiServer.enabled=true \
+            --set service.enabled=true \
+            --set ingress.enabled=true \
+            --set ingress.className=nginx
+
+      - name: Pre-install the HermesTenant CRD
+        # Helm only auto-installs crds/ on a real install; with --dry-run=server
+        # the apiserver rejects the custom resources unless the CRD is present.
+        run: |
+          set -euo pipefail
+          kubectl apply --server-side --force-conflicts -f "${CHART}/crds/"
+          kubectl wait --for=condition=Established --timeout=60s \
+            crd/hermestenants.hermes.ai
+
+      - name: helm install --dry-run=server (operator mode)
+        run: |
+          set -euo pipefail
+          helm install hermes-operator "${CHART}" \
+            --namespace hermes-ci \
+            --dry-run=server \
+            --values "${CHART}/values-examples/operator.yaml" \
+            --set 'operator.tenants[0].namespace=hermes-ci' \
+            --set 'operator.tenants[1].namespace=hermes-ci'

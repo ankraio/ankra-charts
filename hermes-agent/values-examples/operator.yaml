@@ -1,0 +1,31 @@
+# Operator-ready mode: this release renders HermesTenant custom resources and
+# no workload. A controller that reconciles hermes.ai/v1alpha1 HermesTenant
+# objects has to be running in the cluster - this chart does not ship one.
+
+operator:
+  enabled: true
+  controllerClass: hermes.ai/platform
+  installCustomResources: true
+  defaultChartValues:
+    secrets:
+      existingSecret: hermes-credentials
+    networkPolicy:
+      enabled: true
+    apiServer:
+      enabled: true
+      port: 8642
+  tenants:
+    - name: hermes-acme
+      namespace: tenant-acme
+      tenantId: acme
+      chartValues:
+        tenant:
+          id: acme
+        persistence:
+          size: 20Gi
+    - name: hermes-globex
+      namespace: tenant-globex
+      tenantId: globex
+      chartValues:
+        tenant:
+          id: globex
