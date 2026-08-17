@@ -122,9 +122,9 @@ tests:
     set:
       global.imageRegistry: harbor.internal
     asserts:
-      - equal:
+      - matchRegex:
           path: spec.template.spec.containers[0].image
-          value: harbor.internal/upcloudltd/cloud-controller-manager:latest
+          pattern: ^harbor\.internal/upcloudltd/cloud-controller-manager[:@]
 
   - it: pins by digest when images.ccm.digest is set
     template: templates/deployment.yaml

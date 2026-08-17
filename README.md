@@ -216,25 +216,65 @@ GitHub Actions workflows under `.github/workflows/`:
 | [`charts-hermes-sync.yml`](.github/workflows/charts-hermes-sync.yml) | Daily `47 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-image-digest.sh hermes-agent latest`, bumps the chart patch version and opens a rolling PR. Labels the PR `needs-review,security` when the pinned **tag moved** rather than a new release appearing. |
 | [`charts-publish.yml`](.github/workflows/charts-publish.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` + `helm push` each chart to `oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>`, then sign it with cosign (keyless) and attach an SPDX SBOM attestation. |
 | [`charts-pages.yml`](.github/workflows/charts-pages.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` each chart and publish `index.yaml` + `.tgz` + a cosign bundle per package to the `gh-pages` branch (the `helm repo add` HTTP repo; auto-tracked by ArtifactHub). |
+| [`charts-artifacthub-verify.yml`](.github/workflows/charts-artifacthub-verify.yml) | Hourly cron + after each `charts-pages` run + `workflow_dispatch` | Checks that the Helm repo is registered on Artifact Hub and that every version in the published `index.yaml` is actually listed there. Needs no credentials. |
 | [`secret-scan.yml`](.github/workflows/secret-scan.yml) | Every PR / push to `main` + weekly cron + `workflow_dispatch` | Scans the full git history and working tree for committed secrets with the pinned [`gitleaks`](https://github.com/gitleaks/gitleaks) binary. Config: [`.gitleaks.toml`](.gitleaks.toml); false positives: [`.gitleaksignore`](.gitleaksignore). |
 
-### ArtifactHub (automated)
+## Publishing to Artifact Hub
 
-The `charts-pages` workflow discovers chart directories automatically and, when
-these repository secrets are set, registers the GitHub Pages Helm repo on
-ArtifactHub and keeps `artifacthub-repo.yml` in sync:
+Publishing is pull-based. Artifact Hub is pointed at the GitHub Pages Helm repo
+**once**, and from then on it re-reads `index.yaml` roughly every 30 minutes and
+lists every new chart version by itself. `charts-pages` regenerates that
+`index.yaml` on every chart change, so once the repository is registered there is
+no per-chart and no per-release step: bump `version:` in a chart's `Chart.yaml`,
+merge to `main`, and the new version appears on Artifact Hub on its own.
 
-| Secret | Description |
-|---|---|
-| `ARTIFACTHUB_API_KEY_ID` | Authorization key ID from [ArtifactHub → Control Panel → Authorization keys](https://artifacthub.io/control-panel/authorization-keys) (create under your user account; org repos are managed via org permissions). |
-| `ARTIFACTHUB_API_KEY_SECRET` | Matching secret shown once when the key is created. |
+A new top-level chart directory is discovered automatically by
+`scripts/discover-charts.sh` and needs no Artifact Hub UI step of its own.
+
+### One-time bootstrap
+
+The single Artifact Hub repository entry
+(`ankra/ankra-charts` → `https://ankraio.github.io/ankra-charts`) covers every
+chart. Register it either way:
+
+**Option A - let CI do it.** Create an authorization key under
+[Artifact Hub → Control Panel → Authorization keys](https://artifacthub.io/control-panel/authorization-keys)
+as a member of the `ankra` organization, then:
 
 ```bash
 gh secret set ARTIFACTHUB_API_KEY_ID -R ankraio/ankra-charts
 gh secret set ARTIFACTHUB_API_KEY_SECRET -R ankraio/ankra-charts
+gh workflow run charts-pages.yml -R ankraio/ankra-charts
 ```
 
-One ArtifactHub repository entry (`ankra/ankra-charts` → `https://ankraio.github.io/ankra-charts`) indexes every chart in the Helm repo. Adding a new top-level chart directory is picked up automatically - no manual ArtifactHub UI step per chart.
+`charts-pages` then registers the repository, writes the resulting
+`repositoryID` into `artifacthub-repo.yml` on `gh-pages`, and claims ownership so
+the packages show up under the verified `ankra` publisher.
+
+**Option B - register it by hand.** Artifact Hub → Control Panel → Repositories →
+Add, with kind `Helm charts`, name `ankra-charts`, display name `Ankra Charts`,
+URL `https://ankraio.github.io/ankra-charts`. Tracking starts immediately; the
+API-key secrets stay optional (they are only needed for CI to manage the entry).
+
+Without either, charts still publish to the Pages Helm repo and to GHCR, but
+they are **not listed on Artifact Hub** — `charts-pages` says so in its job
+summary rather than passing silently.
+
+### Verification
+
+Artifact Hub drops a version it dislikes (a malformed annotation is enough)
+without failing anything on the publishing side, and then refuses to reprocess
+it until the `index.yaml` digest changes — so a chart can stay unlisted
+indefinitely while every workflow here is green.
+[`charts-artifacthub-verify.yml`](.github/workflows/charts-artifacthub-verify.yml)
+closes that loop: hourly, and after each `charts-pages` run, it checks that the
+repository is registered and that every version in the published `index.yaml` is
+actually live on Artifact Hub, failing loudly when one is missing. It needs no
+credentials and can be run locally:
+
+```bash
+bash scripts/artifacthub-verify.sh
+```
 
 The sync script (`scripts/sync-upstream.sh`) is idempotent - re-running it
 with the same upstream version produces zero git diff. Exit codes:
