@@ -1,0 +1,1 @@
+{{- include "hermes-agent.validate" . -}}

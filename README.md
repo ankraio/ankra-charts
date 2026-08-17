@@ -9,6 +9,7 @@ In-tree Helm charts maintained by the Ankra platform team.
 | [`cloudflare-operator`](cloudflare-operator/README.md) | Cloudflare Tunnel operator (Tunnel / ClusterTunnel / TunnelBinding / AccessTunnel CRDs) — plus optional `ClusterOriginIssuer` for the cert-manager Origin CA external issuer. | Vendored from upstream [`adyanth/cloudflare-operator`](https://github.com/adyanth/cloudflare-operator); auto-bumped daily. |
 | [`digitalocean-ccm`](digitalocean-ccm/README.md) | DigitalOcean Cloud Controller Manager - provisions DO Load Balancers, manages node lifecycle, clears the `uninitialized` cloud-provider taint. | Vendored from upstream [`digitalocean/digitalocean-cloud-controller-manager`](https://github.com/digitalocean/digitalocean-cloud-controller-manager) release manifests (no upstream chart exists); auto-bumped daily. |
 | [`digitalocean-csi`](digitalocean-csi/README.md) | DigitalOcean CSI block-storage driver - controller StatefulSet, node DaemonSet, snapshot-controller, snapshot CRDs, four `do-block-storage*` StorageClasses. | Vendored from upstream [`digitalocean/csi-digitalocean`](https://github.com/digitalocean/csi-digitalocean) release manifests (no upstream chart exists); auto-bumped daily. |
+| [`hermes-agent`](hermes-agent/README.md) | Nous Research [Hermes Agent](https://github.com/NousResearch/hermes-agent) - LLM agent gateway with an optional OpenAI-compatible API server. Digest-pinned, non-root, egress-restricted by default, with render-time hardening guardrails. | Ankra-maintained; image `docker.io/nousresearch/hermes-agent`, digest re-pinned daily. |
 | [`psono`](psono/README.md) | Self-hosted [Psono](https://psono.com/) password manager — server, web client and optional admin client behind a single Ingress (Traefik by default). Bring your own PostgreSQL + Secrets. | Hand-written from Psono [server install docs](https://doc.psono.com/admin/installation/install-server-ce.html); images `psono/psono-{server,client,admin-client}`. |
 
 ## Install via `helm repo add` (recommended)
@@ -44,6 +45,12 @@ helm install digitalocean-ccm ankra/digitalocean-ccm --version 0.1.0 -n kube-sys
 helm install digitalocean-csi ankra/digitalocean-csi --version 0.1.0 -n kube-system \
   --set credentials.create=false \
   --set credentials.existingSecret=digitalocean
+
+# Hermes Agent - the API keys have to come from a Secret you already manage.
+kubectl -n hermes create secret generic hermes-credentials \
+  --from-literal=OPENROUTER_API_KEY="$OPENROUTER_API_KEY"
+helm install hermes ankra/hermes-agent --version 0.1.0 -n hermes --create-namespace \
+  --set secrets.existingSecret=hermes-credentials
 ```
 
 ## Install from GHCR (OCI)
@@ -81,6 +88,12 @@ helm install digitalocean-csi oci://ghcr.io/ankraio/ankra-charts/digitalocean-cs
   --version 0.1.0 -n kube-system \
   --set credentials.create=false \
   --set credentials.existingSecret=digitalocean-ccm-credentials
+
+# Hermes Agent (LLM agent gateway) — see hermes-agent/README.md for the
+# Secret it expects and the guardrails it enforces.
+helm install hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
+  --version 0.1.0 -n hermes --create-namespace \
+  --set secrets.existingSecret=hermes-credentials
 
 # Psono (self-hosted password manager) — requires the BYO Secrets described
 # in psono/README.md to already exist in the target namespace.
@@ -122,6 +135,36 @@ Private clusters need a registry login first:
 
 ```bash
 helm registry login ghcr.io -u <github-user> -p <github-pat-with-read:packages>
+```
+
+## Verifying a published chart
+
+Charts pushed to GHCR are signed with [cosign](https://docs.sigstore.dev/) using
+keyless GitHub OIDC - there is no long-lived signing key to steal - and carry an
+SPDX SBOM attestation. The identity in the certificate is the workflow that
+published them.
+
+```bash
+cosign verify oci://ghcr.io/ankraio/ankra-charts/<chart>:<version> \
+  --certificate-identity-regexp '^https://github\.com/ankraio/ankra-charts/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+cosign verify-attestation --type spdxjson \
+  oci://ghcr.io/ankraio/ankra-charts/<chart>:<version> \
+  --certificate-identity-regexp '^https://github\.com/ankraio/ankra-charts/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The GitHub Pages repo publishes a cosign bundle beside every package, so
+`helm repo add` consumers can verify the same way:
+
+```bash
+curl -fsSLO https://ankraio.github.io/ankra-charts/<chart>-<version>.tgz
+curl -fsSLO https://ankraio.github.io/ankra-charts/<chart>-<version>.tgz.cosign.bundle
+cosign verify-blob <chart>-<version>.tgz \
+  --bundle <chart>-<version>.tgz.cosign.bundle \
+  --certificate-identity-regexp '^https://github\.com/ankraio/ankra-charts/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ## Install from source (local checkout)
@@ -169,8 +212,10 @@ GitHub Actions workflows under `.github/workflows/`:
 | [`charts-cloudflare-operator-lint.yml`](.github/workflows/charts-cloudflare-operator-lint.yml) | PR / push under `cloudflare-operator/**` | `shellcheck`, `helm lint`, `helm template` (4 overlays), `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31 (cert-manager pre-installed). |
 | [`charts-digitalocean-sync.yml`](.github/workflows/charts-digitalocean-sync.yml) | Daily `37 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-upstream.sh do-ccm` / `do-csi` against the upstream DigitalOcean release feeds and opens a rolling PR. |
 | [`charts-digitalocean-lint.yml`](.github/workflows/charts-digitalocean-lint.yml) | PR / push under `digitalocean-{ccm,csi}/**` | `shellcheck`, `helm lint`, `helm template`, `kubeconform`, `helm-unittest`, `helm install --dry-run=server` on Kind across K8s 1.27 / 1.29 / 1.31. |
-| [`charts-publish.yml`](.github/workflows/charts-publish.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` + `helm push` each chart to `oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>`. |
-| [`charts-pages.yml`](.github/workflows/charts-pages.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` each chart and publish `index.yaml` + `.tgz` to the `gh-pages` branch (the `helm repo add` HTTP repo; auto-tracked by ArtifactHub). |
+| [`charts-hermes-lint.yml`](.github/workflows/charts-hermes-lint.yml) | PR / push under `hermes-agent/**` | `shellcheck`, `helm lint --strict` (every overlay), `helm template`, `kubeconform`, `helm-unittest`, a guardrails job that asserts weak configurations are still refused, `trivy config` (fails on HIGH/CRITICAL), a check that the pinned image digest still resolves, and `helm install --dry-run=server` on Kind across K8s 1.27 / 1.29 / 1.31. |
+| [`charts-hermes-sync.yml`](.github/workflows/charts-hermes-sync.yml) | Daily `47 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-image-digest.sh hermes-agent latest`, bumps the chart patch version and opens a rolling PR. Labels the PR `needs-review,security` when the pinned **tag moved** rather than a new release appearing. |
+| [`charts-publish.yml`](.github/workflows/charts-publish.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` + `helm push` each chart to `oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>`, then sign it with cosign (keyless) and attach an SPDX SBOM attestation. |
+| [`charts-pages.yml`](.github/workflows/charts-pages.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` each chart and publish `index.yaml` + `.tgz` + a cosign bundle per package to the `gh-pages` branch (the `helm repo add` HTTP repo; auto-tracked by ArtifactHub). |
 | [`charts-artifacthub-verify.yml`](.github/workflows/charts-artifacthub-verify.yml) | Hourly cron + after each `charts-pages` run + `workflow_dispatch` | Checks that the Helm repo is registered on Artifact Hub and that every version in the published `index.yaml` is actually listed there. Needs no credentials. |
 | [`secret-scan.yml`](.github/workflows/secret-scan.yml) | Every PR / push to `main` + weekly cron + `workflow_dispatch` | Scans the full git history and working tree for committed secrets with the pinned [`gitleaks`](https://github.com/gitleaks/gitleaks) binary. Config: [`.gitleaks.toml`](.gitleaks.toml); false positives: [`.gitleaksignore`](.gitleaksignore). |
 
@@ -263,6 +308,7 @@ helm unittest cloudflare-operator
 helm unittest digitalocean-ccm
 helm unittest digitalocean-csi
 helm unittest psono
+helm unittest hermes-agent
 
 # Sync a chart to a specific upstream version.
 ./scripts/sync-upstream.sh csi v1.5.0
@@ -270,6 +316,10 @@ helm unittest psono
 ./scripts/sync-upstream.sh cloudflare v0.13.1
 ./scripts/sync-upstream.sh do-ccm v0.1.67
 ./scripts/sync-upstream.sh do-csi v4.17.0
+
+# Re-pin the hermes-agent image digest (check | <tag> | latest).
+./scripts/sync-image-digest.sh hermes-agent check
+./scripts/sync-image-digest.sh hermes-agent latest
 
 # Or simply `make test` from this repo root.
 make test
@@ -286,6 +336,8 @@ ankra-charts/                        (this repo root)
 ├── Makefile
 ├── .github/workflows/               (GitHub Actions - must live here)
 ├── scripts/sync-upstream.sh
+├── scripts/sync-image-digest.sh
+├── hermes-agent/                    (hand-written, image digest synced daily)
 ├── upcloud-ccm/
 ├── upcloud-csi/
 ├── cloudflare-operator/

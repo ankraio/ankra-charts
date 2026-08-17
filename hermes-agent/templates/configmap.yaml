@@ -1,0 +1,21 @@
+{{- if not .Values.operator.enabled }}
+{{- if not .Values.bootstrap.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hermes-agent.configMapName" . }}
+  labels:
+    {{- include "hermes-agent.labels" . | nindent 4 }}
+data:
+  {{ .Values.bootstrap.configKey }}: |
+    {{- if .Values.config.raw }}
+    {{- tpl .Values.config.raw . | nindent 4 }}
+    {{- else }}
+    {{- tpl (toYaml .Values.config.values) . | nindent 4 }}
+    {{- end }}
+  {{- if .Values.soul.text }}
+  {{ .Values.bootstrap.soulKey }}: |
+    {{- tpl .Values.soul.text . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

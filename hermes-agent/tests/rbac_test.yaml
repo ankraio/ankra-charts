@@ -1,0 +1,91 @@
+suite: rbac and service account
+templates:
+  - templates/rbac.yaml
+  - templates/serviceaccount.yaml
+release:
+  name: ut
+  namespace: hermes
+set:
+  secrets.existingSecret: hermes-credentials
+tests:
+  - it: creates a ServiceAccount with no token mounted and no RBAC
+    template: templates/serviceaccount.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+
+  - it: creates a namespaced Role and RoleBinding on request
+    template: templates/rbac.yaml
+    set:
+      rbac.create: true
+      rbac.rules:
+        - apiGroups: [""]
+          resources: ["configmaps"]
+          verbs: ["get", "list"]
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Role
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: hermes
+        documentIndex: 0
+      - isKind:
+          of: RoleBinding
+        documentIndex: 1
+      - equal:
+          path: roleRef.kind
+          value: Role
+        documentIndex: 1
+      - equal:
+          path: subjects[0].name
+          value: ut-hermes-agent
+        documentIndex: 1
+
+  - it: creates a ClusterRole and ClusterRoleBinding when asked to go cluster-wide
+    template: templates/rbac.yaml
+    set:
+      rbac.create: true
+      rbac.clusterWide: true
+      rbac.rules:
+        - apiGroups: [""]
+          resources: ["nodes"]
+          verbs: ["get"]
+    asserts:
+      - isKind:
+          of: ClusterRole
+        documentIndex: 0
+      - notExists:
+          path: metadata.namespace
+        documentIndex: 0
+      - isKind:
+          of: ClusterRoleBinding
+        documentIndex: 1
+      - equal:
+          path: subjects[0].namespace
+          value: hermes
+        documentIndex: 1
+
+  - it: fails when RBAC is requested with no rules
+    template: templates/rbac.yaml
+    set:
+      rbac.create: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "requires at least one entry in rbac.rules"
+
+  - it: can reuse an externally managed ServiceAccount
+    template: templates/serviceaccount.yaml
+    set:
+      serviceAccount.create: false
+      serviceAccount.name: platform-hermes
+    asserts:
+      - hasDocuments:
+          count: 0

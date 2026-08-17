@@ -1,0 +1,77 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: hermestenants.hermes.ai
+  annotations:
+    # Helm never upgrades or removes resources under crds/. Apply changes to
+    # this file with `kubectl apply --server-side -f hermes-agent/crds/`.
+    ankra.io/managed-by: hermes-agent chart
+spec:
+  group: hermes.ai
+  scope: Namespaced
+  names:
+    plural: hermestenants
+    singular: hermestenant
+    kind: HermesTenant
+    shortNames:
+      - htenant
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Tenant
+          type: string
+          jsonPath: .spec.tenant.id
+        - name: Release
+          type: string
+          jsonPath: .spec.release.name
+        - name: Controller
+          type: string
+          jsonPath: .spec.controllerClass
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - release
+                - tenant
+              properties:
+                controllerClass:
+                  type: string
+                  description: Selects which controller reconciles this tenant.
+                release:
+                  type: object
+                  required:
+                    - name
+                    - namespace
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                tenant:
+                  type: object
+                  required:
+                    - id
+                  properties:
+                    id:
+                      type: string
+                    labels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                chartValues:
+                  type: object
+                  description: Chart values the controller renders for this tenant.
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}

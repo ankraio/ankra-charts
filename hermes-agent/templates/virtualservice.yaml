@@ -1,0 +1,27 @@
+{{- if not .Values.operator.enabled }}
+{{- if .Values.virtualService.enabled }}
+{{- if eq (len .Values.virtualService.hosts) 0 }}
+{{- fail "virtualService.enabled=true requires at least one entry in virtualService.hosts" }}
+{{- end }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "hermes-agent.fullname" . }}
+  labels:
+    {{- include "hermes-agent.labels" . | nindent 4 }}
+spec:
+  hosts:
+    {{- toYaml .Values.virtualService.hosts | nindent 4 }}
+  {{- with .Values.virtualService.gateways }}
+  gateways:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  http:
+    - route:
+        - destination:
+            host: {{ printf "%s.%s.svc.cluster.local" (include "hermes-agent.fullname" .) .Release.Namespace }}
+            port:
+              number: {{ default (include "hermes-agent.primaryServicePortNumber" .) .Values.virtualService.servicePortNumber }}
+      timeout: {{ .Values.virtualService.timeout | quote }}
+{{- end }}
+{{- end }}

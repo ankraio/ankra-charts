@@ -1,0 +1,49 @@
+{{- if not .Values.operator.enabled }}
+{{- if .Values.service.enabled }}
+{{- $servicePorts := include "hermes-agent.servicePorts" . | fromJsonArray -}}
+{{- if eq (len $servicePorts) 0 }}
+{{- fail "service.enabled=true requires either an entry in service.ports or an enabled apiServer/webhook/telegramWebhook listener to expose" }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hermes-agent.fullname" . }}
+  labels:
+    {{- include "hermes-agent.labels" . | nindent 4 }}
+    {{- with .Values.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  sessionAffinity: {{ .Values.service.sessionAffinity }}
+  {{- if and (eq .Values.service.type "LoadBalancer") (gt (len .Values.service.loadBalancerSourceRanges) 0) }}
+  loadBalancerSourceRanges:
+    {{- toYaml .Values.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+  {{- if and (or (eq .Values.service.type "LoadBalancer") (eq .Values.service.type "NodePort")) .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.service.externalTrafficPolicy }}
+  {{- end }}
+  {{- if and (ne .Values.service.type "ExternalName") .Values.service.internalTrafficPolicy }}
+  internalTrafficPolicy: {{ .Values.service.internalTrafficPolicy }}
+  {{- end }}
+  ports:
+    {{- range $index, $port := $servicePorts }}
+    - name: {{ default (printf "port-%d" $index) $port.name }}
+      port: {{ $port.port }}
+      targetPort: {{ default $port.port $port.targetPort }}
+      protocol: {{ default "TCP" $port.protocol }}
+      {{- with $port.appProtocol }}
+      appProtocol: {{ . | quote }}
+      {{- end }}
+      {{- with $port.nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+    {{- end }}
+  selector:
+    {{- include "hermes-agent.selectorLabels" . | nindent 4 }}
+{{- end }}
+{{- end }}

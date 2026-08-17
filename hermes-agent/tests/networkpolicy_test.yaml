@@ -1,0 +1,168 @@
+suite: networkpolicy
+templates:
+  - templates/networkpolicy.yaml
+release:
+  name: ut
+  namespace: hermes
+tests:
+  - it: is on by default and covers both directions
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+            - Egress
+
+  - it: denies all ingress while nothing is exposed
+    asserts:
+      - notExists:
+          path: spec.ingress
+
+  - it: allows DNS to kube-system only
+    asserts:
+      - equal:
+          path: spec.egress[0].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: kube-system
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: UDP
+            port: 53
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: TCP
+            port: 53
+
+  - it: allows public HTTPS while excluding the metadata endpoint and private networks
+    asserts:
+      - equal:
+          path: spec.egress[1].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 169.254.0.0/16
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 10.0.0.0/8
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 172.16.0.0/12
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 192.168.0.0/16
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 100.64.0.0/10
+      - contains:
+          path: spec.egress[1].ports
+          content:
+            protocol: TCP
+            port: 443
+
+  - it: skips the IPv6 block unless it is asked for
+    asserts:
+      - lengthEqual:
+          path: spec.egress[1].to
+          count: 1
+
+  - it: adds an IPv6 block with the same exclusions on request
+    set:
+      networkPolicy.egress.ipv6: true
+    asserts:
+      - equal:
+          path: spec.egress[1].to[1].ipBlock.cidr
+          value: "::/0"
+      - contains:
+          path: spec.egress[1].to[1].ipBlock.except
+          content: fe80::/10
+
+  - it: opens the exposed ports to the release namespace when a Service exists
+    set:
+      secrets.existingSecret: hermes-credentials
+      apiServer.enabled: true
+      service.enabled: true
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].namespaceSelector.matchExpressions[0].values
+          value:
+            - hermes
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: TCP
+            port: 8642
+
+  - it: adds explicitly authorised namespaces
+    set:
+      secrets.existingSecret: hermes-credentials
+      apiServer.enabled: true
+      service.enabled: true
+      networkPolicy.ingress.allowedNamespaces:
+        - platform
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].namespaceSelector.matchExpressions[0].values
+          value:
+            - hermes
+            - platform
+
+  - it: keeps the release namespace out when same-namespace ingress is turned off
+    set:
+      secrets.existingSecret: hermes-credentials
+      apiServer.enabled: true
+      service.enabled: true
+      networkPolicy.ingress.allowSameNamespace: false
+      networkPolicy.ingress.allowedNamespaces:
+        - platform
+    asserts:
+      - equal:
+          path: spec.ingress[0].from[0].namespaceSelector.matchExpressions[0].values
+          value:
+            - platform
+
+  - it: appends caller-supplied egress rules after the built-in ones
+    set:
+      secrets.existingSecret: hermes-credentials
+      networkPolicy.egress.extra:
+        - to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: llm-gateway
+          ports:
+            - protocol: TCP
+              port: 8080
+    asserts:
+      - equal:
+          path: spec.egress[2].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: llm-gateway
+
+  - it: still renders a tenant policy when the general policy is waived off
+    set:
+      hardening.allowUnrestrictedNetwork: true
+      secrets.existingSecret: hermes-credentials
+      networkPolicy.enabled: false
+      tenantIsolation.enabled: true
+      tenant.id: acme
+      apiServer.enabled: true
+      service.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+
+  - it: renders nothing in operator mode
+    set:
+      operator.enabled: true
+      operator.tenants:
+        - name: tenant-a
+    asserts:
+      - hasDocuments:
+          count: 0

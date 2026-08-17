@@ -1,0 +1,31 @@
+{{- if and .Values.operator.enabled .Values.operator.installCustomResources }}
+{{- include "hermes-agent.validate" . -}}
+{{- range $tenant := .Values.operator.tenants }}
+---
+apiVersion: hermes.ai/v1alpha1
+kind: HermesTenant
+metadata:
+  name: {{ $tenant.name }}
+  namespace: {{ default $.Release.Namespace $tenant.namespace }}
+  labels:
+    {{- include "hermes-agent.labels" $ | nindent 4 }}
+    {{- with $tenant.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  controllerClass: {{ default $.Values.operator.controllerClass $tenant.controllerClass | quote }}
+  release:
+    name: {{ default $tenant.name $tenant.releaseName | quote }}
+    namespace: {{ default $.Release.Namespace $tenant.namespace | quote }}
+  tenant:
+    id: {{ default $tenant.name $tenant.tenantId | quote }}
+    {{- with $tenant.labels }}
+    labels:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  chartValues:
+    {{- $base := deepCopy ($.Values.operator.defaultChartValues | default dict) -}}
+    {{- $merged := mergeOverwrite $base ($tenant.chartValues | default dict) -}}
+    {{- toYaml $merged | nindent 4 }}
+{{- end }}
+{{- end }}

@@ -32,6 +32,9 @@ concurrency:
 
 permissions:
   contents: write
+  # Keyless cosign signing of the published packages needs a workload identity
+  # token, so HTTP repo consumers can verify a .tgz the same way OCI users can.
+  id-token: write
 
 env:
   PAGES_URL: https://ankraio.github.io/ankra-charts
@@ -91,10 +94,27 @@ jobs:
             helm package "${chart}" --destination .cr-packages
           done <<< "${{ steps.charts.outputs.charts }}"
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign the packages
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          for package in .cr-packages/*.tgz; do
+            cosign sign-blob "${package}" --bundle "${package}.cosign.bundle"
+            cosign verify-blob "${package}" \
+              --bundle "${package}.cosign.bundle" \
+              --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          done
+
       - name: Update the Pages Helm repo index
         run: |
           set -euo pipefail
           cp -f .cr-packages/*.tgz gh-pages/
+          cp -f .cr-packages/*.cosign.bundle gh-pages/
           helm repo index gh-pages --url "${PAGES_URL}" --merge gh-pages/index.yaml
 
       - name: Ensure ArtifactHub metadata file exists
@@ -165,6 +185,15 @@ jobs:
             echo "helm repo add ankra ${PAGES_URL}"
             echo "helm repo update"
             echo "helm search repo ankra"
+            echo '```'
+            echo
+            echo "Each package is published with a cosign bundle next to it:"
+            echo
+            echo '```bash'
+            echo "cosign verify-blob <chart>-<version>.tgz \\"
+            echo "  --bundle <chart>-<version>.tgz.cosign.bundle \\"
+            echo "  --certificate-identity-regexp '^https://github\.com/${{ github.repository }}/' \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
             echo '```'
             echo
             echo "### Artifact Hub"

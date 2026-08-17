@@ -1,0 +1,95 @@
+suite: operator mode
+templates:
+  - templates/hermes-tenants.yaml
+release:
+  name: ut
+  namespace: hermes
+tests:
+  - it: renders no custom resources in direct mode
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders one HermesTenant per tenant
+    set:
+      operator.enabled: true
+      operator.tenants:
+        - name: tenant-a
+          tenantId: acme
+        - name: tenant-b
+          namespace: tenant-b
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: HermesTenant
+        documentIndex: 0
+      - equal:
+          path: spec.tenant.id
+          value: acme
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: hermes
+        documentIndex: 0
+      - equal:
+          path: spec.tenant.id
+          value: tenant-b
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: tenant-b
+        documentIndex: 1
+
+  - it: layers per-tenant values over the shared defaults
+    set:
+      operator.enabled: true
+      operator.defaultChartValues:
+        apiServer:
+          enabled: true
+          port: 8642
+        networkPolicy:
+          enabled: true
+      operator.tenants:
+        - name: tenant-a
+          chartValues:
+            apiServer:
+              port: 9000
+    asserts:
+      - equal:
+          path: spec.chartValues.apiServer.port
+          value: 9000
+      - equal:
+          path: spec.chartValues.apiServer.enabled
+          value: true
+      - equal:
+          path: spec.chartValues.networkPolicy.enabled
+          value: true
+
+  - it: carries the controller class down to each tenant
+    set:
+      operator.enabled: true
+      operator.controllerClass: hermes.ai/platform
+      operator.tenants:
+        - name: tenant-a
+        - name: tenant-b
+          controllerClass: hermes.ai/edge
+    asserts:
+      - equal:
+          path: spec.controllerClass
+          value: hermes.ai/platform
+        documentIndex: 0
+      - equal:
+          path: spec.controllerClass
+          value: hermes.ai/edge
+        documentIndex: 1
+
+  - it: renders nothing when custom resources are turned off
+    set:
+      operator.enabled: true
+      operator.installCustomResources: false
+      operator.tenants:
+        - name: tenant-a
+    asserts:
+      - hasDocuments:
+          count: 0

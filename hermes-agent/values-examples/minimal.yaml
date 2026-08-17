@@ -1,0 +1,12 @@
+# Smallest configuration that satisfies the chart's guardrails.
+#
+# Create the Secret first, then install:
+#
+#   kubectl -n hermes create secret generic hermes-credentials \
+#     --from-literal=OPENROUTER_API_KEY="$OPENROUTER_API_KEY"
+#
+#   helm install hermes ankra/hermes-agent -n hermes --create-namespace \
+#     -f hermes-agent/values-examples/minimal.yaml
+
+secrets:
+  existingSecret: hermes-credentials

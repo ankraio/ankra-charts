@@ -1,0 +1,37 @@
+# One release per tenant. Each agent is pinned to its tenant label, kept off
+# its siblings' nodes, and reachable only from that tenant's namespaces.
+#
+#   helm install hermes-acme ankra/hermes-agent -n tenant-acme \
+#     -f hermes-agent/values-examples/multi-tenant.yaml \
+#     --set tenant.id=acme
+
+tenant:
+  id: acme
+  labels:
+    ankra.io/tier: standard
+
+tenantIsolation:
+  enabled: true
+  allowSameNamespace: true
+  authorizedNamespaces:
+    - platform-control
+  podAntiAffinity:
+    enabled: true
+    type: requiredDuringSchedulingIgnoredDuringExecution
+    topologyKey: kubernetes.io/hostname
+
+secrets:
+  existingSecret: hermes-credentials
+
+apiServer:
+  enabled: true
+
+service:
+  enabled: true
+
+networkPolicy:
+  enabled: true
+  ingress:
+    allowSameNamespace: true
+    allowedNamespaces:
+      - platform-control

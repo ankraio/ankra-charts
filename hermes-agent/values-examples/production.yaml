@@ -1,0 +1,75 @@
+# Production overlay: credentials from the External Secrets Operator, the
+# OpenAI-compatible API server behind an Ingress, and egress restricted to the
+# model provider's port only.
+
+externalSecret:
+  enabled: true
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault
+  dataFrom:
+    - extract:
+        key: platform/hermes-agent
+
+apiServer:
+  enabled: true
+  port: 8642
+  # Only the origins that actually call the gateway.
+  corsOrigins: https://console.example.com
+  modelName: hermes-agent
+
+service:
+  enabled: true
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  hosts:
+    - host: hermes.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: hermes-agent-tls
+      hosts:
+        - hermes.example.com
+
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClass: fast-ssd
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 2Gi
+    ephemeral-storage: 2Gi
+  limits:
+    cpu: "4"
+    memory: 8Gi
+    ephemeral-storage: 8Gi
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingress:
+    allowSameNamespace: false
+    # Only the ingress controller reaches the API server.
+    allowedNamespaces:
+      - ingress-nginx
+  egress:
+    allowPublicInternet: true
+    ports:
+      - protocol: TCP
+        port: 443
+
+podAnnotations:
+  ankra.io/owner: platform-team

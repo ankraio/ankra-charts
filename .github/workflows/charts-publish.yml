@@ -8,6 +8,10 @@ name: charts-publish
 # Each chart is published independently; pushing the same chart+version twice
 # is treated as a no-op (the step checks GHCR before packaging). Chart
 # directories are discovered automatically via scripts/discover-charts.sh.
+#
+# Every pushed artifact is signed with cosign (keyless, GitHub OIDC) and carries
+# an SPDX SBOM attestation, so consumers can prove a chart came from this
+# repository's workflow. Verification instructions are in README.md.
 
 on:
   push:
@@ -32,6 +36,8 @@ concurrency:
 permissions:
   contents: read
   packages: write
+  # Keyless cosign signing needs a workload identity token.
+  id-token: write
 
 env:
   OCI_REGISTRY: ghcr.io/${{ github.repository_owner }}/ankra-charts
@@ -130,7 +136,12 @@ jobs:
               ;;
           esac
 
+      - name: Install cosign
+        if: steps.exists.outputs.skip == 'false'
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
       - name: Package and push to GHCR (OCI)
+        id: push
         if: steps.exists.outputs.skip == 'false'
         run: |
           set -euo pipefail
@@ -138,7 +149,57 @@ jobs:
           pkg="$(helm package "${{ matrix.chart }}" --destination /tmp/packages \
                   | awk '{print $NF}')"
           echo "Packaged ${pkg}"
-          helm push "${pkg}" "oci://${OCI_REGISTRY}"
+          helm push "${pkg}" "oci://${OCI_REGISTRY}" 2>&1 | tee /tmp/helm-push.log
+          digest="$(awk '/^Digest:/ {print $2}' /tmp/helm-push.log)"
+          if [[ -z "${digest}" ]]; then
+            echo "::error::helm push did not report a digest; refusing to sign an unknown artifact"
+            exit 1
+          fi
+          echo "package=${pkg}" >> "$GITHUB_OUTPUT"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "signing_ref=${OCI_REGISTRY}/${{ steps.meta.outputs.chart_name }}@${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate an SBOM for the chart
+        if: steps.exists.outputs.skip == 'false'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: ${{ matrix.chart }}
+          format: spdx-json
+          output-file: /tmp/sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Sign and attest the pushed chart
+        if: steps.exists.outputs.skip == 'false'
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          # `helm registry login` writes to Helm's own credentials file, which
+          # cosign does not read. Log cosign in separately.
+          echo "${{ secrets.GITHUB_TOKEN }}" | cosign login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+          cosign sign "${{ steps.push.outputs.signing_ref }}"
+          cosign attest \
+            --type spdxjson \
+            --predicate /tmp/sbom.spdx.json \
+            "${{ steps.push.outputs.signing_ref }}"
+
+      - name: Verify what we just published
+        if: steps.exists.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${{ steps.push.outputs.signing_ref }}" > /dev/null
+          cosign verify-attestation \
+            --type spdxjson \
+            --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${{ steps.push.outputs.signing_ref }}" > /dev/null
+          echo "signature and SBOM attestation verified"
 
       - name: Summary
         if: always()
@@ -149,12 +210,20 @@ jobs:
             if [[ "${{ steps.exists.outputs.skip }}" == "true" ]]; then
               echo "Already published - skipped."
             else
-              echo "Published \`${{ steps.meta.outputs.oci_ref }}\`."
+              echo "Published \`${{ steps.meta.outputs.oci_ref }}\` (\`${{ steps.push.outputs.digest }}\`), signed and attested."
               echo
               echo '```bash'
               echo "helm install ${{ steps.meta.outputs.chart_name }} \\"
               echo "  ${{ steps.meta.outputs.oci_ref }} \\"
               echo "  --version ${{ steps.meta.outputs.chart_version }}"
+              echo '```'
+              echo
+              echo "Verify:"
+              echo
+              echo '```bash'
+              echo "cosign verify ${{ steps.push.outputs.signing_ref }} \\"
+              echo "  --certificate-identity-regexp '^https://github\.com/${{ github.repository }}/' \\"
+              echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
               echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
