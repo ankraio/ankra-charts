@@ -305,24 +305,39 @@ jobs:
 
       - name: The agent process must not be root
         run: |
-          set -euo pipefail
+          # No `set -e`: the probe is expected to come back empty while
+          # s6-overlay is still bringing the service up, and aborting on the
+          # first miss is what made this step fail on a pod that was fine.
+          set -uo pipefail
           pod="$(kubectl -n hermes get pods -l app.kubernetes.io/name=hermes-agent -o name | head -1)"
           # Not `id -u`: kubectl exec starts a new process as the container
           # user, which is root here. s6-overlay supervises as root and drops
           # only its services, so the hermes process itself has to be inspected.
-          uid="$(kubectl -n hermes exec "${pod}" -c hermes-agent -- sh -c '
+          probe='
             for entry in /proc/[0-9]*; do
               [ "$(cat "$entry/comm" 2>/dev/null)" = "hermes" ] || continue
               sed -n "s/^Uid:[[:space:]]*\([0-9]*\).*/\1/p" "$entry/status"
               exit 0
             done
             exit 1
-          ')"
-          echo "hermes process uid=${uid}"
+          '
+          # Ready only means the container started: the chart configures no
+          # readiness probe unless apiServer is enabled, so the supervised
+          # hermes service can still be a few seconds behind.
+          uid=""
+          for _ in $(seq 1 24); do
+            uid="$(kubectl -n hermes exec "${pod}" -c hermes-agent -- sh -c "${probe}" 2>/dev/null)"
+            if [[ -n "${uid}" ]]; then
+              break
+            fi
+            sleep 5
+          done
           if [[ -z "${uid}" ]]; then
-            echo "::error::no hermes process found in the container"
+            echo "::error::no hermes process appeared within 120s"
+            kubectl -n hermes exec "${pod}" -c hermes-agent -- ps -eo user,uid,pid,comm || true
             exit 1
           fi
+          echo "hermes process uid=${uid}"
           if [[ "${uid}" == "0" ]]; then
             echo "::error::the hermes process is running as root; HERMES_UID did not take effect"
             exit 1
