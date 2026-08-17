@@ -49,7 +49,7 @@ helm install digitalocean-csi ankra/digitalocean-csi --version 0.1.0 -n kube-sys
 # Hermes Agent - the API keys have to come from a Secret you already manage.
 kubectl -n hermes create secret generic hermes-credentials \
   --from-literal=OPENROUTER_API_KEY="$OPENROUTER_API_KEY"
-helm install hermes ankra/hermes-agent --version 0.1.0 -n hermes --create-namespace \
+helm install hermes ankra/hermes-agent --version 0.1.1 -n hermes --create-namespace \
   --set secrets.existingSecret=hermes-credentials
 ```
 
@@ -92,7 +92,7 @@ helm install digitalocean-csi oci://ghcr.io/ankraio/ankra-charts/digitalocean-cs
 # Hermes Agent (LLM agent gateway) — see hermes-agent/README.md for the
 # Secret it expects and the guardrails it enforces.
 helm install hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
-  --version 0.1.0 -n hermes --create-namespace \
+  --version 0.1.1 -n hermes --create-namespace \
   --set secrets.existingSecret=hermes-credentials
 
 # Psono (self-hosted password manager) — requires the BYO Secrets described

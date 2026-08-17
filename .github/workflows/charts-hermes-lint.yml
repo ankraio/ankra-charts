@@ -242,6 +242,113 @@ jobs:
           fi
           echo "pinned digest still matches the registry"
 
+  smoke:
+    # The gate that was missing when 0.1.0 shipped a chart that could not boot.
+    # --dry-run=server validates manifests against the apiserver but never runs
+    # the image, so a securityContext the image rejects passed every check.
+    # This actually starts the container and waits for Ready.
+    name: kind smoke test (real install)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint, guardrails]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Create kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          node_image: "kindest/node:v1.31.6@sha256:28b7cbb993dfe093c76641a0c95807637213c9109b761f1d422c2400e22b8e87"
+          cluster_name: smoke
+
+      - name: Namespace and a stand-in Secret
+        run: |
+          set -euo pipefail
+          kubectl create namespace hermes
+          # PodSecurity baseline, not restricted: the image enters as root.
+          kubectl label namespace hermes \
+            pod-security.kubernetes.io/enforce=baseline \
+            pod-security.kubernetes.io/warn=baseline
+          kubectl -n hermes create secret generic hermes-credentials \
+            --from-literal=OPENAI_API_KEY=ci-placeholder \
+            --from-literal=OPENAI_BASE_URL=https://example.invalid/v1
+
+      - name: helm install --wait
+        run: |
+          set -euo pipefail
+          # No PVC: kind has no default RWO provisioner worth waiting on here,
+          # and the bootstrap path this test exercises is identical.
+          helm install hermes "${CHART}" \
+            --namespace hermes \
+            --set secrets.existingSecret=hermes-credentials \
+            --set persistence.enabled=false \
+            --wait --timeout 10m
+
+      - name: The pod must be Running, not restarting
+        run: |
+          set -euo pipefail
+          kubectl -n hermes get pods -o wide
+          kubectl -n hermes wait --for=condition=Ready pod \
+            -l app.kubernetes.io/name=hermes-agent --timeout=300s
+          restarts="$(kubectl -n hermes get pods \
+            -l app.kubernetes.io/name=hermes-agent \
+            -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')"
+          echo "restartCount=${restarts}"
+          if [[ "${restarts}" != "0" ]]; then
+            echo "::error::the container restarted ${restarts} time(s); it is not starting cleanly"
+            kubectl -n hermes logs -l app.kubernetes.io/name=hermes-agent --tail=100 --previous || true
+            exit 1
+          fi
+
+      - name: The agent process must not be root
+        run: |
+          # No `set -e`: the probe is expected to come back empty while
+          # s6-overlay is still bringing the service up, and aborting on the
+          # first miss is what made this step fail on a pod that was fine.
+          set -uo pipefail
+          pod="$(kubectl -n hermes get pods -l app.kubernetes.io/name=hermes-agent -o name | head -1)"
+          # Not `id -u`: kubectl exec starts a new process as the container
+          # user, which is root here. s6-overlay supervises as root and drops
+          # only its services, so the hermes process itself has to be inspected.
+          probe='
+            for entry in /proc/[0-9]*; do
+              [ "$(cat "$entry/comm" 2>/dev/null)" = "hermes" ] || continue
+              sed -n "s/^Uid:[[:space:]]*\([0-9]*\).*/\1/p" "$entry/status"
+              exit 0
+            done
+            exit 1
+          '
+          # Ready only means the container started: the chart configures no
+          # readiness probe unless apiServer is enabled, so the supervised
+          # hermes service can still be a few seconds behind.
+          uid=""
+          for _ in $(seq 1 24); do
+            uid="$(kubectl -n hermes exec "${pod}" -c hermes-agent -- sh -c "${probe}" 2>/dev/null)"
+            if [[ -n "${uid}" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ -z "${uid}" ]]; then
+            echo "::error::no hermes process appeared within 120s"
+            kubectl -n hermes exec "${pod}" -c hermes-agent -- ps -eo user,uid,pid,comm || true
+            exit 1
+          fi
+          echo "hermes process uid=${uid}"
+          if [[ "${uid}" == "0" ]]; then
+            echo "::error::the hermes process is running as root; HERMES_UID did not take effect"
+            exit 1
+          fi
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          kubectl -n hermes describe pods || true
+          kubectl -n hermes logs -l app.kubernetes.io/name=hermes-agent --tail=200 || true
+
   install-dry-run:
     # A real `helm install --wait` cannot pass here: Hermes needs a model
     # provider key and outbound network before it reports Ready. A server-side

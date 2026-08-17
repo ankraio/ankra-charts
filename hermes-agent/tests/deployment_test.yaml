@@ -27,15 +27,32 @@ tests:
           path: spec.template.spec.containers[0].image
           pattern: "^harbor\\.internal/mirror/hermes-agent:"
 
-  - it: runs unprivileged with a read-only root filesystem
+  - it: drops to a non-root uid the way the image supports
     template: templates/deployment.yaml
     asserts:
-      - equal:
-          path: spec.template.spec.securityContext.runAsNonRoot
-          value: true
-      - equal:
+      # The image enters as root and remaps its own user, so no UID is pinned;
+      # HERMES_UID is what it drops to.
+      - notExists:
           path: spec.template.spec.securityContext.runAsUser
+      - notExists:
+          path: spec.template.spec.securityContext.runAsNonRoot
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
           value: 1000
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HERMES_UID
+            value: "1000"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HERMES_GID
+            value: "1000"
+
+  - it: keeps the root filesystem read-only with a writable /run for s6-overlay
+    template: templates/deployment.yaml
+    asserts:
       - equal:
           path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
           value: true
@@ -45,9 +62,33 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].securityContext.capabilities.drop
           content: ALL
+      # s6-overlay cannot hand the agent to HERMES_UID without these; anything
+      # beyond them is refused by the hardening guard.
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.add
+          value:
+            - CHOWN
+            - DAC_OVERRIDE
+            - SETGID
+            - SETUID
       - equal:
           path: spec.template.spec.containers[0].securityContext.seccompProfile.type
           value: RuntimeDefault
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: run
+            mountPath: /run
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: run
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: S6_READ_ONLY_ROOT
+            value: "1"
 
   - it: keeps the ServiceAccount token and Service environment out of the pod
     template: templates/deployment.yaml

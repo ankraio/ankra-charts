@@ -27,7 +27,7 @@ kubectl -n hermes create secret generic hermes-credentials \
   --from-literal=OPENROUTER_API_KEY="$OPENROUTER_API_KEY"
 
 helm install hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
-  --version 0.1.0 -n hermes \
+  --version 0.1.1 -n hermes \
   --set secrets.existingSecret=hermes-credentials
 ```
 
@@ -54,7 +54,8 @@ loosening one is a visible line in your values file.
 |---|---|
 | The image is pinned by digest, not just by tag | `hardening.allowMutableImageTag` |
 | API keys come from `secrets.existingSecret` or an ExternalSecret, never inline values | `hardening.allowInlineSecrets` |
-| Non-root, `runAsNonRoot`, read-only root filesystem, `ALL` capabilities dropped, no privilege escalation, no added capabilities | `hardening.allowPrivilegedRuntime` |
+| The agent drops to a non-root uid (`env.HERMES_UID`), read-only root filesystem, `ALL` capabilities dropped, no privilege escalation, no added capabilities | `hardening.allowPrivilegedRuntime` |
+| `runAsUser` is not pinned, and `runAsNonRoot: true` is refused — see below | `hardening.enabled: false` |
 | No ServiceAccount token mounted - Hermes never calls the Kubernetes API | `hardening.allowPrivilegedRuntime` |
 | `rbac.rules` may not contain `*` | `hardening.allowWildcardRbac` |
 | A NetworkPolicy is present | `hardening.allowUnrestrictedNetwork` |
@@ -66,6 +67,34 @@ loosening one is a visible line in your values file.
 
 `hardening.enabled=false` turns all of it off at once. It exists for local
 experiments and is not a supported way to run this chart.
+
+### Why the pod enters as root
+
+The upstream image runs `s6-overlay` as PID 1, and its bootstrap refuses a
+pinned non-root UID outright:
+
+```
+[stage2] ERROR: container started with --user 1000 (an arbitrary, non-hermes UID).
+... the baked /opt/hermes install tree is intentionally root-owned and
+non-writable, so a pinned --user UID cannot repair startup state
+```
+
+Its supported model is the inverse: enter as root, remap the `hermes` user to
+`HERMES_UID`/`HERMES_GID`, chown the data volume, then drop to that user. So the
+chart sets `env.HERMES_UID: "1000"` and does **not** set `runAsUser`; the
+hardening guard checks that `HERMES_UID` is non-zero rather than asserting
+`runAsNonRoot`, and pinning a UID is refused at render time with this reason.
+
+Two consequences:
+
+- The namespace needs PodSecurity **`baseline`**, not `restricted`.
+- The root filesystem still stays read-only. s6-overlay only needs a writable
+  `/run`, which the chart mounts as an emptyDir with `S6_READ_ONLY_ROOT=1`.
+- Four capabilities are added back on top of `drop: [ALL]`: `CHOWN`,
+  `DAC_OVERRIDE`, `SETGID`, `SETUID`. s6-overlay needs them to chown its service
+  directories and setuid into the hermes user. Without them the agent is dead
+  but the pod still reports Ready, because s6 keeps PID 1 alive. Verified
+  minimal against the image; the guard rejects anything beyond these four.
 
 ### The network default, concretely
 
@@ -116,7 +145,7 @@ Two defaults differ from the Hermes sample configuration on purpose:
 
 ```bash
 helm upgrade hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
-  -n hermes --version 0.1.0 \
+  -n hermes --version 0.1.1 \
   --set secrets.existingSecret=hermes-credentials \
   --set apiServer.enabled=true \
   --set service.enabled=true
@@ -158,12 +187,12 @@ Every chart pushed to GHCR is signed with cosign (keyless, GitHub OIDC) and
 carries an SPDX SBOM attestation:
 
 ```bash
-cosign verify oci://ghcr.io/ankraio/ankra-charts/hermes-agent:0.1.0 \
+cosign verify oci://ghcr.io/ankraio/ankra-charts/hermes-agent:0.1.1 \
   --certificate-identity-regexp '^https://github\.com/ankraio/ankra-charts/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 cosign verify-attestation --type spdxjson \
-  oci://ghcr.io/ankraio/ankra-charts/hermes-agent:0.1.0 \
+  oci://ghcr.io/ankraio/ankra-charts/hermes-agent:0.1.1 \
   --certificate-identity-regexp '^https://github\.com/ankraio/ankra-charts/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
@@ -172,10 +201,10 @@ The GitHub Pages repo publishes a cosign bundle next to each package, so HTTP
 consumers can verify too:
 
 ```bash
-curl -fsSLO https://ankraio.github.io/ankra-charts/hermes-agent-0.1.0.tgz
-curl -fsSLO https://ankraio.github.io/ankra-charts/hermes-agent-0.1.0.tgz.cosign.bundle
-cosign verify-blob hermes-agent-0.1.0.tgz \
-  --bundle hermes-agent-0.1.0.tgz.cosign.bundle \
+curl -fsSLO https://ankraio.github.io/ankra-charts/hermes-agent-0.1.1.tgz
+curl -fsSLO https://ankraio.github.io/ankra-charts/hermes-agent-0.1.1.tgz.cosign.bundle
+cosign verify-blob hermes-agent-0.1.1.tgz \
+  --bundle hermes-agent-0.1.1.tgz.cosign.bundle \
   --certificate-identity-regexp '^https://github\.com/ankraio/ankra-charts/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```

@@ -101,6 +101,14 @@ soul:
   text: ""
 
 env:
+  # The image bootstraps as root under s6-overlay, then remaps its own hermes
+  # user and drops to it. Its bootstrap refuses a pinned non-root UID, so this -
+  # not podSecurityContext.runAsUser - is how the agent ends up unprivileged.
+  # Must be non-zero. Treat it as a request rather than a guarantee: the image
+  # falls back to its baked-in uid (10000) when it cannot honour the remap, so
+  # assert "not root" rather than a specific uid.
+  HERMES_UID: "1000"
+  HERMES_GID: "1000"
   WEB_TOOLS_DEBUG: "false"
   VISION_TOOLS_DEBUG: "false"
   MOA_TOOLS_DEBUG: "false"
@@ -318,22 +326,34 @@ enableServiceLinks: false
 # Set to false on clusters with user namespaces (k8s >= 1.33) enabled.
 hostUsers: null
 
+# No runAsUser/runAsNonRoot here on purpose: this image must enter as root and
+# drops to env.HERMES_UID itself. Pinning a UID makes its bootstrap exit(1).
 podSecurityContext:
-  runAsUser: 1000
-  runAsGroup: 1000
   fsGroup: 1000
   fsGroupChangePolicy: OnRootMismatch
-  runAsNonRoot: true
   seccompProfile:
     type: RuntimeDefault
 
 securityContext:
   allowPrivilegeEscalation: false
+  # Kept read-only: s6-overlay writes only to /run, which the chart mounts as an
+  # emptyDir, with S6_READ_ONLY_ROOT telling it to expect exactly that.
   readOnlyRootFilesystem: true
   privileged: false
   capabilities:
     drop:
       - ALL
+    # s6-overlay needs these four to hand the agent over to HERMES_UID: chown
+    # its service directories and the data volume, then setuid/setgid into the
+    # hermes user. Verified minimal against the image - without DAC_OVERRIDE the
+    # main-hermes service starts and immediately stops, and because s6 keeps
+    # PID 1 alive the pod still reports Ready. All four are permitted by the
+    # PodSecurity "baseline" profile.
+    add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
   seccompProfile:
     type: RuntimeDefault
 

@@ -69,18 +69,31 @@ needs a weaker posture has to say so explicitly, in values, under review.
 {{- end -}}
 
 {{- if not .Values.operator.enabled -}}
-{{- if not $hardening.allowPrivilegedRuntime -}}
 {{- $podSecurityContext := .Values.podSecurityContext | default dict -}}
 {{- $securityContext := .Values.securityContext | default dict -}}
+
+{{/*
+The image enters as root under s6-overlay and drops to env.HERMES_UID itself;
+its stage2 bootstrap exits non-zero on a pinned UID with "container started
+with --user <n> (an arbitrary, non-hermes UID)". Catch that here rather than in
+a CrashLoopBackOff.
+*/}}
+{{- if or (hasKey $podSecurityContext "runAsUser") (hasKey $securityContext "runAsUser") -}}
+{{- fail "do not pin runAsUser: this image must enter as root and remaps its own user to env.HERMES_UID/HERMES_GID. A pinned UID makes its bootstrap fail with \"an arbitrary, non-hermes UID\". Set env.HERMES_UID instead, or hardening.enabled=false if you run an image that supports a pinned UID." -}}
+{{- end -}}
+{{- if eq ($podSecurityContext.runAsNonRoot | toString) "true" -}}
+{{- fail "podSecurityContext.runAsNonRoot=true cannot work with this image: it needs to enter as root to remap its user and chown the data volume. The agent still ends up unprivileged via env.HERMES_UID." -}}
+{{- end -}}
+
+{{- if not $hardening.allowPrivilegedRuntime -}}
 {{- $capabilities := $securityContext.capabilities | default dict -}}
-{{- if ne ($podSecurityContext.runAsNonRoot | toString) "true" -}}
-{{- fail "podSecurityContext.runAsNonRoot must be true (waive with hardening.allowPrivilegedRuntime=true)." -}}
-{{- end -}}
-{{- if eq ($podSecurityContext.runAsUser | toString) "0" -}}
-{{- fail "podSecurityContext.runAsUser must not be 0 (waive with hardening.allowPrivilegedRuntime=true)." -}}
-{{- end -}}
-{{- if eq ($securityContext.runAsUser | toString) "0" -}}
-{{- fail "securityContext.runAsUser must not be 0 (waive with hardening.allowPrivilegedRuntime=true)." -}}
+{{/*
+Entering as root is forced by the image, so the meaningful guard is that it
+actually drops to a non-root uid afterwards.
+*/}}
+{{- $hermesUID := (.Values.env | default dict).HERMES_UID | toString -}}
+{{- if or (eq $hermesUID "") (eq $hermesUID "0") (eq $hermesUID "<no value>") -}}
+{{- fail "env.HERMES_UID must be set to a non-zero uid: it is what the container drops to after bootstrap, and without it Hermes keeps running as root (waive with hardening.allowPrivilegedRuntime=true)." -}}
 {{- end -}}
 {{- if eq ($securityContext.privileged | toString) "true" -}}
 {{- fail "securityContext.privileged must not be true (waive with hardening.allowPrivilegedRuntime=true)." -}}
@@ -94,8 +107,16 @@ needs a weaker posture has to say so explicitly, in values, under review.
 {{- if not (has "ALL" ($capabilities.drop | default list)) -}}
 {{- fail "securityContext.capabilities.drop must contain ALL (waive with hardening.allowPrivilegedRuntime=true)." -}}
 {{- end -}}
-{{- if gt (len ($capabilities.add | default list)) 0 -}}
-{{- fail "securityContext.capabilities.add must stay empty (waive with hardening.allowPrivilegedRuntime=true)." -}}
+{{/*
+The image cannot de-privilege itself without CHOWN/DAC_OVERRIDE/SETGID/SETUID,
+so an empty add list is not achievable here. Guard the shape that matters
+instead: nothing beyond that bootstrap set.
+*/}}
+{{- $bootstrapCapabilities := list "CHOWN" "DAC_OVERRIDE" "SETGID" "SETUID" -}}
+{{- range $capability := ($capabilities.add | default list) -}}
+{{- if not (has $capability $bootstrapCapabilities) -}}
+{{- fail (printf "securityContext.capabilities.add may only contain the capabilities s6-overlay needs to drop privileges (%s); %s is not one of them (waive with hardening.allowPrivilegedRuntime=true)." (join ", " $bootstrapCapabilities) $capability) -}}
+{{- end -}}
 {{- end -}}
 {{- if eq (.Values.serviceAccount.automountServiceAccountToken | toString) "true" -}}
 {{- fail "serviceAccount.automountServiceAccountToken must be false: Hermes does not call the Kubernetes API, and a mounted token is a ready-made privilege escalation path for an agent that executes tools (waive with hardening.allowPrivilegedRuntime=true)." -}}
