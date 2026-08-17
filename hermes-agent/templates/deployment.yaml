@@ -77,6 +77,12 @@ spec:
           args:
             - |
               set -eu
+              # fsGroup sets the group of the volume but not its owner, and the
+              # image only chowns paths it creates, so a pre-existing volume
+              # root stays root-owned and the agent cannot write its state
+              # there. This init container is root and does not go through the
+              # image entrypoint, so it can put that right.
+              chown -R "${HERMES_UID}:${HERMES_GID}" {{ $mountPath | quote }}
               mkdir -p {{ printf "%s/home" $mountPath | quote }}
               if [ -f {{ $bootstrapConfigPath | quote }} ]; then
                 if [ "{{ $overwrite }}" = "true" ] || [ ! -f {{ printf "%s/config.yaml" $mountPath | quote }} ]; then
@@ -91,6 +97,10 @@ spec:
           env:
             - name: HERMES_HOME
               value: {{ $mountPath | quote }}
+            - name: HERMES_UID
+              value: {{ (.Values.env | default dict).HERMES_UID | default "10000" | quote }}
+            - name: HERMES_GID
+              value: {{ (.Values.env | default dict).HERMES_GID | default "10000" | quote }}
           volumeMounts:
             - name: data
               mountPath: {{ $mountPath }}

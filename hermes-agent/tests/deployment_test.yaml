@@ -36,19 +36,37 @@ tests:
           path: spec.template.spec.securityContext.runAsUser
       - notExists:
           path: spec.template.spec.securityContext.runAsNonRoot
+      # 10000 is the image's native hermes uid. Asking for anything else means
+      # rewriting /etc/passwd, which readOnlyRootFilesystem forbids, so the
+      # remap would silently no-op and leave fsGroup disagreeing with the uid
+      # that actually owns the volume.
       - equal:
           path: spec.template.spec.securityContext.fsGroup
-          value: 1000
+          value: 10000
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: HERMES_UID
-            value: "1000"
+            value: "10000"
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: HERMES_GID
-            value: "1000"
+            value: "10000"
+
+  - it: hands the data volume to the agent before it starts
+    template: templates/deployment.yaml
+    asserts:
+      # fsGroup sets the volume's group but not its owner, and the image only
+      # chowns what it creates, so a pre-existing volume root stays root-owned.
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'chown -R "\$\{HERMES_UID\}:\$\{HERMES_GID\}"'
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: HERMES_UID
+            value: "10000"
 
   - it: keeps the root filesystem read-only with a writable /run for s6-overlay
     template: templates/deployment.yaml

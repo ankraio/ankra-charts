@@ -2,6 +2,30 @@
 
 All notable changes to the `hermes-agent` chart.
 
+## 0.1.2 - 2026-08-17
+
+### Fixed
+
+- **The agent could not write its own state on a PersistentVolume.** 0.1.1 started
+  and reported Ready, then failed with
+  `PermissionError: [Errno 13] Permission denied: '/opt/data/gateway_state.json'`
+  followed by `no such gateway 'default'`. Two causes, both only visible against
+  a real PVC:
+  - `HERMES_UID` silently does nothing when `readOnlyRootFilesystem: true`.
+    Remapping the user means rewriting `/etc/passwd`, which the read-only root
+    forbids, so the agent keeps the image's native uid/gid **10000** while
+    `fsGroup: 1000` owned the volume. The chart now asks for 10000, making the
+    remap a deliberate no-op rather than an accidental one, and keeps `fsGroup`
+    in agreement.
+  - `fsGroup` sets a volume's group but never its owner, and the image only
+    chowns paths it creates, so a pre-existing volume root stays root-owned. The
+    bootstrap init container now runs `chown -R "$HERMES_UID:$HERMES_GID"` on the
+    data volume. It runs as root and does not go through the image entrypoint,
+    so it is the right place for it.
+
+Verified on a real cluster: pod Running, 0 restarts, gateway up, Telegram adapter
+connected and command menu registered.
+
 ## 0.1.1 - 2026-08-17
 
 ### Fixed
