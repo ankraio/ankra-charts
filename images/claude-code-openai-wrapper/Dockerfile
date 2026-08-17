@@ -1,4 +1,4 @@
-# ghcr.io/ankraio/claude-code-openai-wrapper
+# ghcr.io/ankraio/images/claude-code-openai-wrapper
 #
 # Upstream (github.com/RichardAtCT/claude-code-openai-wrapper) publishes no
 # container image and its checked-in Dockerfile is a development setup: root,

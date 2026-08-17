@@ -313,8 +313,8 @@ jobs:
         run: |
           set -euo pipefail
           kubectl -n claude run api-probe --rm -i --restart=Never \
-            --image=ghcr.io/ankraio/claude-code-openai-wrapper:v2.3.0 \
-            --overrides='{"spec":{"imagePullSecrets":[{"name":"ghcr-pull"}],"securityContext":{"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"api-probe","image":"ghcr.io/ankraio/claude-code-openai-wrapper:v2.3.0","command":["python","-c","import json,urllib.request;base=\"http://claude-wrapper-claude-code-openai-wrapper.claude.svc:8000\";health=json.load(urllib.request.urlopen(base+\"/health\",timeout=10));print(health);assert health[\"status\"]==\"healthy\";request=urllib.request.Request(base+\"/v1/models\",headers={\"Authorization\":\"Bearer ci-token\"});models=json.load(urllib.request.urlopen(request,timeout=10));print([m[\"id\"] for m in models[\"data\"]][:3]);assert models[\"data\"]"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}}]}}'
+            --image=ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0 \
+            --overrides='{"spec":{"imagePullSecrets":[{"name":"ghcr-pull"}],"securityContext":{"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"api-probe","image":"ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0","command":["python","-c","import json,urllib.request;base=\"http://claude-wrapper-claude-code-openai-wrapper.claude.svc:8000\";health=json.load(urllib.request.urlopen(base+\"/health\",timeout=10));print(health);assert health[\"status\"]==\"healthy\";request=urllib.request.Request(base+\"/v1/models\",headers={\"Authorization\":\"Bearer ci-token\"});models=json.load(urllib.request.urlopen(request,timeout=10));print([m[\"id\"] for m in models[\"data\"]][:3]);assert models[\"data\"]"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}}]}}'
 
       - name: Logs on failure
         if: failure()

@@ -15,7 +15,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: "^ghcr.io/ankraio/claude-code-openai-wrapper:v[0-9.]+@sha256:[a-f0-9]{64}$"
+          pattern: "^ghcr.io/ankraio/images/claude-code-openai-wrapper:v[0-9.]+@sha256:[a-f0-9]{64}$"
 
   - it: renders the server environment with plain integers
     template: templates/deployment.yaml

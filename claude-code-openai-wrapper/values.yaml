@@ -33,7 +33,7 @@ hardening:
 # --reload). See images/claude-code-openai-wrapper/ in this repository.
 image:
   registry: ghcr.io
-  repository: ankraio/claude-code-openai-wrapper
+  repository: ankraio/images/claude-code-openai-wrapper
   # Tag is documentation; digest is what is pulled. Keep both in step.
   tag: v2.3.0
   digest: sha256:1f3a5f0338f4ffd07fc7f573699b708be8bb2c06db53513234a47adf74f1ff4d

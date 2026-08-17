@@ -9,7 +9,7 @@ All notable changes to the `claude-code-openai-wrapper` chart.
 - Initial release, wrapping upstream v2.3.0.
 - **Ankra-built image**: upstream publishes no container image and its own
   Dockerfile is a development setup (root, `--reload`). The chart pins
-  `ghcr.io/ankraio/claude-code-openai-wrapper` by digest - multi-arch, non-root
+  `ghcr.io/ankraio/images/claude-code-openai-wrapper` by digest - multi-arch, non-root
   (uid 10001), dependencies from upstream's `poetry.lock` with hash
   verification, built in this repository from the pinned upstream tag.
 - **Hardening guardrails** (`hardening.*`): digest pinning, no inline secrets,

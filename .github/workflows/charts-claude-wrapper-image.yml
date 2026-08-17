@@ -1,6 +1,6 @@
 name: charts-claude-wrapper-image
 
-# Builds ghcr.io/ankraio/claude-code-openai-wrapper from the upstream ref
+# Builds ghcr.io/ankraio/images/claude-code-openai-wrapper from the upstream ref
 # pinned in images/claude-code-openai-wrapper/Dockerfile and pushes a
 # multi-arch (amd64/arm64), cosign-signed image. Upstream publishes no
 # container image of its own, so this repository is the image's source of
@@ -15,7 +15,7 @@ name: charts-claude-wrapper-image
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude-code-openai-wrapper-chart]
     paths:
       - "images/claude-code-openai-wrapper/**"
       - ".github/workflows/charts-claude-wrapper-image.yml"
@@ -31,7 +31,7 @@ permissions:
   id-token: write
 
 env:
-  IMAGE: ghcr.io/ankraio/claude-code-openai-wrapper
+  IMAGE: ghcr.io/ankraio/images/claude-code-openai-wrapper
 
 jobs:
   build-push:
