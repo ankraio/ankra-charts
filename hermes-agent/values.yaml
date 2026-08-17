@@ -102,9 +102,11 @@ soul:
 
 env:
   # The image bootstraps as root under s6-overlay, then remaps its own hermes
-  # user to these ids and drops to them. Its bootstrap refuses a pinned
-  # non-root UID, so this - not podSecurityContext.runAsUser - is how the agent
-  # ends up unprivileged. Must be non-zero.
+  # user and drops to it. Its bootstrap refuses a pinned non-root UID, so this -
+  # not podSecurityContext.runAsUser - is how the agent ends up unprivileged.
+  # Must be non-zero. Treat it as a request rather than a guarantee: the image
+  # falls back to its baked-in uid (10000) when it cannot honour the remap, so
+  # assert "not root" rather than a specific uid.
   HERMES_UID: "1000"
   HERMES_GID: "1000"
   WEB_TOOLS_DEBUG: "false"
