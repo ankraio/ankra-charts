@@ -30,9 +30,12 @@ artifacthub_request() {
   fi
 }
 
+# Look up by URL alone: the URL is unique across Artifact Hub, and combining it
+# with org= returns nothing for a repository whose ownership has not been
+# established yet, which would make this re-register an entry that exists.
 find_repository_id() {
   artifacthub_request GET \
-    "/repositories/search?org=${artifacthub_organization}&url=${pages_url}" \
+    "/repositories/search?url=${pages_url}" \
     | jq -r '.[0].repository_id // empty'
 }
 

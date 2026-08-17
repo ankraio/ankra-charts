@@ -63,9 +63,14 @@ fi
 printf 'Verifying %s chart version(s) from %s\n\n' \
   "$(printf '%s\n' "${published_versions}" | wc -l | tr -d ' ')" "${index_source}"
 
+# Look the repository up by URL alone. The URL is unique across Artifact Hub, and
+# combining it with org= silently returns nothing for a freshly added repository
+# — the org filter only picks it up once ownership has been established, so an
+# org-scoped query reports a registered repo as missing.
 repository_json="$(curl -sSfL \
-  "${artifacthub_api_base}/repositories/search?org=${artifacthub_organization}&url=${pages_url}")"
+  "${artifacthub_api_base}/repositories/search?url=${pages_url}")"
 repository_id="$(printf '%s' "${repository_json}" | jq -r '.[0].repository_id // empty')"
+repository_organization="$(printf '%s' "${repository_json}" | jq -r '.[0].organization_name // empty')"
 
 if [[ -z "${repository_id}" ]]; then
   cat >&2 <<EOF
@@ -87,7 +92,12 @@ EOF
   exit 2
 fi
 
-printf 'Repository registered: %s (id %s)\n' "${repository_name}" "${repository_id}"
+printf 'Repository registered: %s (id %s, org %s)\n' \
+  "${repository_name}" "${repository_id}" "${repository_organization:-unknown}"
+
+if [[ -n "${repository_organization}" && "${repository_organization}" != "${artifacthub_organization}" ]]; then
+  report_failure "${pages_url} is registered under organization '${repository_organization}', expected '${artifacthub_organization}'"
+fi
 
 # Tracking errors are reported but not fatal on their own: Artifact Hub keeps
 # the last error around after a bad version is withdrawn from the index, which
