@@ -1,0 +1,382 @@
+name: charts-claude-wrapper-lint
+
+# Gate for claude-code-openai-wrapper/**: lint, render every overlay, validate
+# against the Kubernetes schemas, run the helm-unittest suites, scan the
+# rendered manifests for misconfiguration, prove the pinned image digest still
+# exists, and finish with a real install on kind under the PodSecurity
+# "restricted" profile.
+#
+# Third-party actions are pinned by commit SHA - a tag can be moved.
+
+on:
+  pull_request:
+    paths:
+      - "claude-code-openai-wrapper/**"
+      - "images/claude-code-openai-wrapper/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-claude-wrapper-lint.yml"
+      - ".github/workflows/charts-claude-wrapper-image.yml"
+  push:
+    paths:
+      - "claude-code-openai-wrapper/**"
+      - "images/claude-code-openai-wrapper/**"
+      - "scripts/**"
+      - "Makefile"
+      - "README.md"
+      - ".github/workflows/charts-claude-wrapper-lint.yml"
+      - ".github/workflows/charts-claude-wrapper-image.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: charts-claude-wrapper-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  CHART: claude-code-openai-wrapper
+  HELM_VERSION: v3.14.0
+
+jobs:
+  lint:
+    name: lint / render / kubeconform / unittest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.5.2
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          KUBECONFORM_VERSION=v0.6.7
+          curl -fsSL -o /tmp/kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          sudo tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: helm lint (strict)
+        run: |
+          set -euo pipefail
+          helm lint --strict "${CHART}" --set secrets.existingSecret=claude-credentials
+          for overlay in "${CHART}"/values-examples/*.yaml; do
+            echo "==> ${overlay}"
+            helm lint --strict "${CHART}" --values "${overlay}"
+          done
+
+      - name: helm template (every overlay)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rendered
+          helm template ci "${CHART}" --namespace claude \
+            --set secrets.existingSecret=claude-credentials \
+            > "/tmp/rendered/${CHART}-defaults.yaml"
+          for overlay in "${CHART}"/values-examples/*.yaml; do
+            name="$(basename "${overlay}" .yaml)"
+            helm template ci "${CHART}" --namespace claude --values "${overlay}" \
+              > "/tmp/rendered/${CHART}-${name}.yaml"
+            echo "${name}: $(grep -c '^kind:' "/tmp/rendered/${CHART}-${name}.yaml") resources"
+          done
+
+      - name: kubeconform
+        run: |
+          set -euo pipefail
+          kubeconform \
+            -strict -summary -verbose \
+            -kubernetes-version 1.31.0 \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{ .Group }}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \
+            -ignore-missing-schemas \
+            /tmp/rendered/*.yaml
+
+      - name: helm unittest
+        run: helm unittest "${CHART}"
+
+      - name: Upload rendered manifests
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rendered-manifests
+          path: /tmp/rendered/
+          retention-days: 7
+
+  guardrails:
+    name: hardening guardrails hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      # helm-unittest covers this too; this job is the belt-and-braces check
+      # that the shipped chart cannot be rendered into a weak Deployment
+      # without an explicit waiver, and it fails loudly in the PR checks list.
+      - name: Weak configurations must be refused
+        run: |
+          set -uo pipefail
+          status=0
+          refuses() {
+            local description="$1"
+            shift
+            if helm template ci "${CHART}" --namespace claude "$@" >/dev/null 2>&1; then
+              echo "::error::${description} was accepted but should have been refused"
+              status=1
+            else
+              echo "refused: ${description}"
+            fi
+          }
+          refuses "no Claude credential source"
+          refuses "unpinned image"                 --set secrets.existingSecret=s --set image.digest=
+          refuses "inline API key"                 --set secrets.ANTHROPIC_API_KEY=ci-placeholder
+          refuses "no NetworkPolicy"               --set secrets.existingSecret=s --set networkPolicy.enabled=false
+          refuses "root user"                      --set secrets.existingSecret=s --set podSecurityContext.runAsUser=0
+          refuses "writable root filesystem"       --set secrets.existingSecret=s --set securityContext.readOnlyRootFilesystem=false
+          refuses "privilege escalation"           --set secrets.existingSecret=s --set securityContext.allowPrivilegeEscalation=true
+          refuses "mounted ServiceAccount token"   --set secrets.existingSecret=s --set serviceAccount.automountServiceAccountToken=true
+          refuses "metadata endpoint reachable"    --set secrets.existingSecret=s --set 'networkPolicy.egress.excludedCidrs={10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}'
+          refuses "cluster network reachable"      --set secrets.existingSecret=s --set 'networkPolicy.egress.excludedCidrs={169.254.0.0/16}'
+          refuses "wildcard CORS"                  --set secrets.existingSecret=s --set 'server.corsOrigins={*}'
+          refuses "unauthenticated Ingress"        --set hardening.allowInlineSecrets=true --set secrets.ANTHROPIC_API_KEY=ci-placeholder --set ingress.enabled=true
+          refuses "unknown values key"             --set secrets.existingSecret=s --set totallyNotAValue=1
+          exit "${status}"
+
+      - name: The shipped defaults must still render
+        run: |
+          set -euo pipefail
+          helm template ci "${CHART}" --namespace claude \
+            --set secrets.existingSecret=claude-credentials > /dev/null
+          echo "defaults render cleanly"
+
+  scan:
+    name: trivy misconfiguration scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Render the production overlay
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/scan
+          helm template ci "${CHART}" --namespace claude \
+            --values "${CHART}/values-examples/production.yaml" \
+            > /tmp/scan/manifests.yaml
+
+      - name: trivy config
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: /tmp/scan/manifests.yaml
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          format: table
+
+  image-pin:
+    name: pinned image digest resolves
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Install yq
+        run: |
+          set -euo pipefail
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: values.yaml, Chart.yaml and the registry must agree
+        run: |
+          set -euo pipefail
+          registry="$(yq -r '.image.registry' "${CHART}/values.yaml")"
+          repository="$(yq -r '.image.repository' "${CHART}/values.yaml")"
+          tag="$(yq -r '.image.tag' "${CHART}/values.yaml")"
+          digest="$(yq -r '.image.digest' "${CHART}/values.yaml")"
+          app_version="$(yq -r '.appVersion' "${CHART}/Chart.yaml")"
+          annotated="$(yq -r '.annotations["artifacthub.io/images"]' "${CHART}/Chart.yaml" | yq -r '.[0].image')"
+          expected="${registry}/${repository}:${tag}@${digest}"
+
+          echo "values.yaml : ${expected}"
+          echo "Chart.yaml  : ${annotated}"
+          echo "appVersion  : ${app_version}"
+
+          if [[ "${app_version}" != "${tag}" ]]; then
+            echo "::error::Chart.yaml appVersion (${app_version}) does not match image.tag (${tag})"
+            exit 1
+          fi
+          if [[ "${annotated}" != "${expected}" ]]; then
+            echo "::error::artifacthub.io/images annotation is stale; run scripts/sync-image-digest.sh ${CHART}"
+            exit 1
+          fi
+
+          ./scripts/sync-image-digest.sh "${CHART}" check
+          if ! git diff --quiet --exit-code; then
+            echo "::error::check mode should never write; something is wrong with the sync script"
+            exit 1
+          fi
+          ./scripts/sync-image-digest.sh "${CHART}"
+          if ! git diff --quiet --exit-code; then
+            echo "::error::the pinned tag no longer resolves to the pinned digest - the tag moved"
+            git --no-pager diff
+            exit 1
+          fi
+          echo "pinned digest still matches the registry"
+
+  smoke:
+    # --dry-run=server validates manifests against the apiserver but never runs
+    # the image; this actually starts the container and waits for Ready, which
+    # also exercises the /health probes. The pull goes through a token-backed
+    # pull Secret so it works before the GHCR package is public.
+    name: kind smoke test (real install)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint, guardrails]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Create kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          node_image: "kindest/node:v1.31.6@sha256:28b7cbb993dfe093c76641a0c95807637213c9109b761f1d422c2400e22b8e87"
+          cluster_name: smoke
+
+      - name: Namespace and a stand-in Secret
+        run: |
+          set -euo pipefail
+          kubectl create namespace claude
+          # The chart's defaults satisfy the PodSecurity "restricted" profile.
+          kubectl label namespace claude \
+            pod-security.kubernetes.io/enforce=restricted \
+            pod-security.kubernetes.io/warn=restricted
+          kubectl -n claude create secret generic claude-credentials \
+            --from-literal=ANTHROPIC_API_KEY=ci-placeholder \
+            --from-literal=API_KEY=ci-token
+
+      - name: helm install --wait
+        run: |
+          set -euo pipefail
+          helm install claude-wrapper "${CHART}" \
+            --namespace claude \
+            --set secrets.existingSecret=claude-credentials \
+            --wait --timeout 10m
+
+      - name: The pod must be Ready, not restarting, and non-root
+        run: |
+          set -euo pipefail
+          kubectl -n claude get pods -o wide
+          kubectl -n claude wait --for=condition=Ready pod \
+            -l app.kubernetes.io/name=claude-code-openai-wrapper --timeout=300s
+          restarts="$(kubectl -n claude get pods \
+            -l app.kubernetes.io/name=claude-code-openai-wrapper \
+            -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')"
+          echo "restartCount=${restarts}"
+          if [[ "${restarts}" != "0" ]]; then
+            echo "::error::the container restarted ${restarts} time(s); it is not starting cleanly"
+            kubectl -n claude logs -l app.kubernetes.io/name=claude-code-openai-wrapper --tail=100 --previous || true
+            exit 1
+          fi
+          pod="$(kubectl -n claude get pods -l app.kubernetes.io/name=claude-code-openai-wrapper -o name | head -1)"
+          uid="$(kubectl -n claude exec "${pod}" -c claude-code-openai-wrapper -- id -u)"
+          echo "container uid=${uid}"
+          if [[ "${uid}" != "10001" ]]; then
+            echo "::error::expected the fixed non-root uid 10001, got ${uid}"
+            exit 1
+          fi
+
+      - name: /health and /v1/models must answer through the Service
+        run: |
+          set -euo pipefail
+          kubectl -n claude run api-probe --rm -i --restart=Never \
+            --image=ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0 \
+            --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"api-probe","image":"ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0","command":["python","-c","import json,urllib.request;base=\"http://claude-wrapper-claude-code-openai-wrapper.claude.svc:8000\";health=json.load(urllib.request.urlopen(base+\"/health\",timeout=10));print(health);assert health[\"status\"]==\"healthy\";request=urllib.request.Request(base+\"/v1/models\",headers={\"Authorization\":\"Bearer ci-token\"});models=json.load(urllib.request.urlopen(request,timeout=10));print([m[\"id\"] for m in models[\"data\"]][:3]);assert models[\"data\"]"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}}]}}'
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          kubectl -n claude describe pods || true
+          kubectl -n claude logs -l app.kubernetes.io/name=claude-code-openai-wrapper --tail=200 || true
+
+  install-dry-run:
+    # A server-side dry-run exercises the apiserver's schema validation and
+    # admission on every supported minor without needing image pulls.
+    name: helm install --dry-run=server (kind ${{ matrix.k8s }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [lint, guardrails]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - k8s: "1.27"
+            node: "kindest/node:v1.27.16@sha256:2d21a61643eafc439905e18705b8186f3296384750a835ad7a005dceb9546d20"
+          - k8s: "1.29"
+            node: "kindest/node:v1.29.14@sha256:8703bd94ee24e51b778d5556ae310c6c0fa67d761fae6379c8e0bb480e6fea29"
+          - k8s: "1.31"
+            node: "kindest/node:v1.31.6@sha256:28b7cbb993dfe093c76641a0c95807637213c9109b761f1d422c2400e22b8e87"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Create kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          node_image: ${{ matrix.node }}
+          cluster_name: ct
+
+      - name: Create the namespace and a stand-in Secret
+        run: |
+          set -euo pipefail
+          kubectl create namespace claude-ci
+          kubectl -n claude-ci create secret generic claude-credentials \
+            --from-literal=ANTHROPIC_API_KEY=ci-placeholder \
+            --from-literal=API_KEY=ci-token
+
+      - name: helm install --dry-run=server (defaults)
+        run: |
+          set -euo pipefail
+          helm install claude-wrapper "${CHART}" \
+            --namespace claude-ci \
+            --dry-run=server \
+            --set secrets.existingSecret=claude-credentials
+
+      - name: helm install --dry-run=server (Ingress)
+        run: |
+          set -euo pipefail
+          helm install claude-wrapper-ingress "${CHART}" \
+            --namespace claude-ci \
+            --dry-run=server \
+            --set secrets.existingSecret=claude-credentials \
+            --set ingress.enabled=true \
+            --set ingress.className=nginx
+
+      - name: helm install --dry-run=server (Bedrock via IRSA)
+        run: |
+          set -euo pipefail
+          helm install claude-wrapper-bedrock "${CHART}" \
+            --namespace claude-ci \
+            --dry-run=server \
+            --values "${CHART}/values-examples/bedrock.yaml"

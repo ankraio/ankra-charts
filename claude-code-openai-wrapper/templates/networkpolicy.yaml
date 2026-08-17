@@ -1,0 +1,57 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $egressValues := .Values.networkPolicy.egress -}}
+
+{{- $allowedNamespaces := list -}}
+{{- if .Values.networkPolicy.ingress.allowSameNamespace -}}
+{{- $allowedNamespaces = append $allowedNamespaces .Release.Namespace -}}
+{{- end -}}
+{{- $allowedNamespaces = concat $allowedNamespaces .Values.networkPolicy.ingress.allowedNamespaces | uniq | sortAlpha -}}
+
+{{- $ingressRules := list -}}
+{{- if gt (len $allowedNamespaces) 0 -}}
+{{- $ingressPorts := list (dict "protocol" "TCP" "port" (.Values.server.port | int)) -}}
+{{- $namespaceSelector := dict "namespaceSelector" (dict "matchExpressions" (list (dict "key" "kubernetes.io/metadata.name" "operator" "In" "values" $allowedNamespaces))) -}}
+{{- $ingressRules = append $ingressRules (dict "from" (list $namespaceSelector) "ports" $ingressPorts) -}}
+{{- end -}}
+{{- $ingressRules = concat $ingressRules .Values.networkPolicy.ingress.extra -}}
+
+{{- $egressRules := list -}}
+{{- if .Values.networkPolicy.allowDns -}}
+{{- $dnsSelector := dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" .Values.networkPolicy.dnsNamespace)) -}}
+{{- $dnsPorts := list (dict "protocol" "UDP" "port" 53) (dict "protocol" "TCP" "port" 53) -}}
+{{- $egressRules = append $egressRules (dict "to" (list $dnsSelector) "ports" $dnsPorts) -}}
+{{- end -}}
+{{- if $egressValues.allowPublicInternet -}}
+{{- $publicPorts := list -}}
+{{- range $egressValues.ports -}}
+{{- $publicPorts = append $publicPorts (dict "protocol" (default "TCP" .protocol) "port" (.port | int)) -}}
+{{- end -}}
+{{- $ipBlocks := list (dict "ipBlock" (dict "cidr" "0.0.0.0/0" "except" $egressValues.excludedCidrs)) -}}
+{{- if $egressValues.ipv6 -}}
+{{- $ipBlocks = append $ipBlocks (dict "ipBlock" (dict "cidr" "::/0" "except" $egressValues.excludedCidrsIPv6)) -}}
+{{- end -}}
+{{- $egressRules = append $egressRules (dict "to" $ipBlocks "ports" $publicPorts) -}}
+{{- end -}}
+{{- $egressRules = concat $egressRules $egressValues.extra -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "claude-code-openai-wrapper.fullname" . }}
+  labels:
+    {{- include "claude-code-openai-wrapper.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "claude-code-openai-wrapper.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  {{- if gt (len $ingressRules) 0 }}
+  ingress:
+    {{- toYaml $ingressRules | nindent 4 }}
+  {{- end }}
+  {{- if gt (len $egressRules) 0 }}
+  egress:
+    {{- toYaml $egressRules | nindent 4 }}
+  {{- end }}
+{{- end }}

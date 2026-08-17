@@ -1,0 +1,214 @@
+suite: hardening guardrails
+templates:
+  - templates/validate.yaml
+release:
+  name: ut
+  namespace: claude
+tests:
+  - it: renders clean with an existing Secret
+    set:
+      secrets.existingSecret: claude-credentials
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses to run without any Claude credential source
+    asserts:
+      - failedTemplate:
+          errorPattern: "auth.method=api-key requires an ANTHROPIC_API_KEY"
+
+  - it: refuses a mutable image tag
+    set:
+      secrets.existingSecret: s
+      image.digest: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "image.digest is empty"
+
+  - it: accepts a mutable image tag once it is waived
+    set:
+      secrets.existingSecret: s
+      image.digest: ""
+      hardening.allowMutableImageTag: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses inline API keys and names the offending keys
+    set:
+      secrets.ANTHROPIC_API_KEY: ci-placeholder
+    asserts:
+      - failedTemplate:
+          errorPattern: "inline secret values are refused .*ANTHROPIC_API_KEY"
+
+  - it: accepts inline API keys once they are waived
+    set:
+      hardening.allowInlineSecrets: true
+      secrets.ANTHROPIC_API_KEY: ci-placeholder
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses an Ingress without the wrapper's API_KEY protection
+    set:
+      hardening.allowInlineSecrets: true
+      secrets.ANTHROPIC_API_KEY: ci-placeholder
+      ingress.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "ingress.enabled=true requires an API_KEY"
+
+  - it: accepts an Ingress when the Secret is managed externally
+    set:
+      secrets.existingSecret: s
+      ingress.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: accepts an unauthenticated Ingress only with the waiver
+    set:
+      hardening.allowInlineSecrets: true
+      hardening.allowUnauthenticatedIngress: true
+      secrets.ANTHROPIC_API_KEY: ci-placeholder
+      ingress.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses a wildcard CORS origin
+    set:
+      secrets.existingSecret: s
+      server.corsOrigins:
+        - "*"
+    asserts:
+      - failedTemplate:
+          errorPattern: "server.corsOrigins contains"
+
+  - it: refuses to run without a NetworkPolicy
+    set:
+      secrets.existingSecret: s
+      networkPolicy.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "networkPolicy.enabled=false leaves the wrapper free"
+
+  - it: refuses egress to the cloud metadata endpoint
+    set:
+      secrets.existingSecret: s
+      networkPolicy.egress.excludedCidrs:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    asserts:
+      - failedTemplate:
+          errorPattern: "must exclude 169.254.0.0/16"
+
+  - it: refuses egress into the cluster network
+    set:
+      secrets.existingSecret: s
+      networkPolicy.egress.excludedCidrs:
+        - 169.254.0.0/16
+    asserts:
+      - failedTemplate:
+          errorPattern: "must exclude 10.0.0.0/8"
+
+  - it: refuses a root user
+    set:
+      secrets.existingSecret: s
+      podSecurityContext.runAsUser: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "podSecurityContext.runAsUser must be a non-zero uid"
+
+  - it: refuses runAsNonRoot false
+    set:
+      secrets.existingSecret: s
+      podSecurityContext.runAsNonRoot: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "podSecurityContext.runAsNonRoot must be true"
+
+  - it: refuses a writable root filesystem
+    set:
+      secrets.existingSecret: s
+      securityContext.readOnlyRootFilesystem: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "securityContext.readOnlyRootFilesystem must be true"
+
+  - it: refuses privilege escalation
+    set:
+      secrets.existingSecret: s
+      securityContext.allowPrivilegeEscalation: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "securityContext.allowPrivilegeEscalation must be false"
+
+  - it: refuses added capabilities
+    set:
+      secrets.existingSecret: s
+      securityContext.capabilities.add:
+        - NET_BIND_SERVICE
+    asserts:
+      - failedTemplate:
+          errorPattern: "securityContext.capabilities.add must stay empty"
+
+  - it: refuses a mounted ServiceAccount token
+    set:
+      secrets.existingSecret: s
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "serviceAccount.automountServiceAccountToken must be false"
+
+  - it: refuses bedrock without a region
+    set:
+      secrets.existingSecret: s
+      auth.method: bedrock
+    asserts:
+      - failedTemplate:
+          errorPattern: "auth.method=bedrock requires auth.bedrock.region"
+
+  - it: refuses vertex without a project
+    set:
+      secrets.existingSecret: s
+      auth.method: vertex
+      auth.vertex.region: europe-west4
+    asserts:
+      - failedTemplate:
+          errorPattern: "auth.method=vertex requires auth.vertex.projectId"
+
+  - it: bedrock needs no Anthropic key
+    set:
+      auth.method: bedrock
+      auth.bedrock.region: eu-central-1
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses externalSecret combined with existingSecret
+    set:
+      secrets.existingSecret: s
+      externalSecret.enabled: true
+      externalSecret.secretStoreRef.name: vault
+    asserts:
+      - failedTemplate:
+          errorPattern: "mutually exclusive"
+
+  - it: refuses externalSecret without a secretStoreRef name
+    set:
+      externalSecret.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "requires externalSecret.secretStoreRef.name"
+
+  - it: hardening off skips the guardrails but not the runtime rules
+    set:
+      hardening.enabled: false
+      secrets.existingSecret: s
+      networkPolicy.enabled: false
+      image.digest: ""
+    asserts:
+      - hasDocuments:
+          count: 0

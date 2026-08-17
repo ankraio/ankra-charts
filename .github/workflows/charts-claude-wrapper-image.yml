@@ -1,0 +1,99 @@
+name: charts-claude-wrapper-image
+
+# Builds ghcr.io/ankraio/images/claude-code-openai-wrapper from the upstream ref
+# pinned in images/claude-code-openai-wrapper/Dockerfile and pushes a
+# multi-arch (amd64/arm64), cosign-signed image. Upstream publishes no
+# container image of its own, so this repository is the image's source of
+# truth.
+#
+# The chart pins the image by digest, so pushing a new image changes nothing
+# until scripts/sync-image-digest.sh claude-code-openai-wrapper re-pins it and
+# the chart version is bumped - which is deliberate: an image rebuild has to
+# arrive as a reviewable chart release.
+#
+# Third-party actions are pinned by commit SHA - a tag can be moved.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "images/claude-code-openai-wrapper/**"
+      - ".github/workflows/charts-claude-wrapper-image.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: charts-claude-wrapper-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  IMAGE: ghcr.io/ankraio/images/claude-code-openai-wrapper
+
+jobs:
+  build-push:
+    name: build and push the wrapper image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Read the pinned upstream version
+        id: upstream
+        run: |
+          set -euo pipefail
+          commit="$(sed -n 's/^ARG UPSTREAM_COMMIT=\([0-9a-f]\{40\}\)$/\1/p' \
+            images/claude-code-openai-wrapper/Dockerfile | head -1)"
+          tag="$(sed -n 's/^# \(v[0-9.]*\) - the commit is what gets fetched.*$/\1/p' \
+            images/claude-code-openai-wrapper/Dockerfile | head -1)"
+          if [[ -z "${commit}" || -z "${tag}" ]]; then
+            echo "::error::could not read UPSTREAM_COMMIT or its tag comment from the Dockerfile"
+            exit 1
+          fi
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "building upstream ${tag} (${commit})"
+
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push (amd64 + arm64)
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: images/claude-code-openai-wrapper
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ env.IMAGE }}:${{ steps.upstream.outputs.tag }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign the pushed image (keyless OIDC)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          cosign sign "${IMAGE}@${{ steps.push.outputs.digest }}"
+
+      - name: What to do next
+        run: |
+          set -euo pipefail
+          echo "pushed  ${IMAGE}:${{ steps.upstream.outputs.tag }}"
+          echo "digest  ${{ steps.push.outputs.digest }}"
+          echo
+          echo "The chart keeps pulling its previously pinned digest. To roll it:"
+          echo "  ./scripts/sync-image-digest.sh claude-code-openai-wrapper"
+          echo "  bump version: in claude-code-openai-wrapper/Chart.yaml"
+          echo "  open a PR"

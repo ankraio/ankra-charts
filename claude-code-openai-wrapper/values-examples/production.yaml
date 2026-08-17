@@ -1,0 +1,71 @@
+# Production overlay: credentials from the External Secrets Operator (both the
+# Anthropic key and the wrapper's own API_KEY bearer token), the API behind an
+# Ingress, and ingress locked to the controller's namespace.
+
+externalSecret:
+  enabled: true
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault
+  # The extracted key must provide ANTHROPIC_API_KEY and API_KEY.
+  dataFrom:
+    - extract:
+        key: platform/claude-code-openai-wrapper
+
+# Two replicas serve stateless chat completions fine; ClientIP affinity keeps
+# session-continuity requests (session_id) on the pod that holds them.
+replicaCount: 2
+
+service:
+  enabled: true
+  type: ClusterIP
+  sessionAffinity: ClientIP
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+    # Streaming chat completions hold the connection open.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+  hosts:
+    - host: claude-api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: claude-code-openai-wrapper-tls
+      hosts:
+        - claude-api.example.com
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  ingress:
+    allowSameNamespace: false
+    # Only the ingress controller reaches the API.
+    allowedNamespaces:
+      - ingress-nginx
+  egress:
+    allowPublicInternet: true
+    ports:
+      - protocol: TCP
+        port: 443
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+    ephemeral-storage: 1Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+    ephemeral-storage: 4Gi
+
+podAnnotations:
+  ankra.io/owner: platform-team
