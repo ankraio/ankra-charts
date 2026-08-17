@@ -2,7 +2,7 @@ apiVersion: v2
 name: hermes-agent
 description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root, egress-restricted by default, with managed-secret and supply-chain guardrails.
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "v2026.8.16"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
@@ -54,5 +54,5 @@ annotations:
     - name: hermes-agent
       image: docker.io/nousresearch/hermes-agent:v2026.8.16@sha256:f8f548d87d16634d1ad9e3777280f3f577ba2358703f04e18e74007ffd3621bf
   artifacthub.io/changes: |
-    - kind: added
-      description: "Initial Ankra-maintained Hermes Agent chart: digest-pinned image, managed-secret-only default, default-deny NetworkPolicy that blocks RFC1918 and the cloud metadata endpoint, and render-time hardening guards."
+    - kind: fixed
+      description: "0.1.0 could not start: the image runs s6-overlay as PID 1 and its bootstrap refuses a pinned non-root UID, so the hardened podSecurityContext produced a CrashLoopBackOff. The pod now enters as root and drops to env.HERMES_UID, keeps a read-only root filesystem via a writable /run, and pinning runAsUser is refused at render time with an explanation."

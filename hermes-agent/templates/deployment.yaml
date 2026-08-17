@@ -165,6 +165,10 @@ spec:
               value: {{ $mountPath | quote }}
             - name: HOME
               value: {{ printf "%s/home" $mountPath | quote }}
+            # s6-overlay refuses to start on a read-only root filesystem unless
+            # it is told to expect one; /run below is the writable path it needs.
+            - name: S6_READ_ONLY_ROOT
+              value: "1"
             {{- if $npmEnabled }}
             - name: PATH
               value: {{ printf "%s/npm-global/bin:/opt/hermes/bin:/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" $mountPath | quote }}
@@ -262,6 +266,8 @@ spec:
               mountPath: {{ $mountPath }}
             - name: tmp
               mountPath: /tmp
+            - name: run
+              mountPath: /run
             {{- if .Values.browser.shm.enabled }}
             - name: dshm
               mountPath: {{ .Values.browser.shm.mountPath }}
@@ -284,6 +290,8 @@ spec:
           configMap:
             name: {{ include "hermes-agent.bootstrapConfigMapName" . }}
         - name: tmp
+          emptyDir: {}
+        - name: run
           emptyDir: {}
         {{- if .Values.browser.shm.enabled }}
         - name: dshm

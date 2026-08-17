@@ -65,19 +65,41 @@ tests:
       - failedTemplate:
           errorPattern: "must exclude 10.0.0.0/8"
 
-  - it: refuses to run as root
+  - it: refuses a pinned UID, which this image cannot boot with
     set:
-      podSecurityContext.runAsUser: 0
+      podSecurityContext.runAsUser: 1000
     asserts:
       - failedTemplate:
-          errorPattern: "podSecurityContext.runAsUser must not be 0"
+          errorPattern: "do not pin runAsUser"
 
-  - it: refuses runAsNonRoot=false
+  - it: refuses a pinned UID on the container too
     set:
-      podSecurityContext.runAsNonRoot: false
+      securityContext.runAsUser: 1000
     asserts:
       - failedTemplate:
-          errorPattern: "podSecurityContext.runAsNonRoot must be true"
+          errorPattern: "do not pin runAsUser"
+
+  - it: refuses runAsNonRoot=true, which this image cannot satisfy
+    set:
+      podSecurityContext.runAsNonRoot: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "cannot work with this image"
+
+  - it: refuses an agent left running as root
+    set:
+      env.HERMES_UID: "0"
+    asserts:
+      - failedTemplate:
+          errorPattern: "HERMES_UID must be set to a non-zero uid"
+
+  - it: accepts running as root once it is waived
+    set:
+      env.HERMES_UID: "0"
+      hardening.allowPrivilegedRuntime: true
+    asserts:
+      - hasDocuments:
+          count: 0
 
   - it: refuses a writable root filesystem
     set:
@@ -222,7 +244,7 @@ tests:
       hardening.enabled: false
       image.digest: ""
       networkPolicy.enabled: false
-      podSecurityContext.runAsUser: 0
+      env.HERMES_UID: "0"
       secrets.OPENROUTER_API_KEY: ci-placeholder
     asserts:
       - hasDocuments:

@@ -2,6 +2,37 @@
 
 All notable changes to the `hermes-agent` chart.
 
+## 0.1.1 - 2026-08-17
+
+### Fixed
+
+- **0.1.0 could not start.** The image runs s6-overlay as PID 1 and its stage2
+  bootstrap refuses a pinned non-root UID outright ("container started with
+  --user 1000 (an arbitrary, non-hermes UID) ... the baked /opt/hermes install
+  tree is intentionally root-owned and non-writable"). The hardened
+  `podSecurityContext` from 0.1.0 therefore produced a CrashLoopBackOff on every
+  install. The pod now enters as root and drops to `env.HERMES_UID` /
+  `env.HERMES_GID` (1000 by default), which is the model the image supports.
+- The root filesystem stays read-only: s6-overlay only needs a writable `/run`,
+  which is now an emptyDir, with `S6_READ_ONLY_ROOT=1` telling it to expect that.
+- Pinning `podSecurityContext.runAsUser` or `securityContext.runAsUser` is now
+  refused at render time with the reason, instead of failing in the pod. Setting
+  `podSecurityContext.runAsNonRoot: true` is refused for the same reason.
+- The runtime guard that used to assert `runAsNonRoot` now asserts what is
+  actually meaningful for this image: `env.HERMES_UID` must be non-zero, so the
+  agent cannot be left running as root.
+
+### Changed
+
+- The chart's namespace needs PodSecurity `baseline`, not `restricted`, because
+  the container enters as root. `values-examples/` and the README say so.
+
+### Added
+
+- A kind smoke test in CI that installs the chart against the real image and
+  waits for the pod to become Ready. 0.1.0 shipped because CI only ran
+  `helm install --dry-run=server`, which never executes the image.
+
 ## 0.1.0 - 2026-08-16
 
 Initial release. Hermes Agent `v2026.8.16`.

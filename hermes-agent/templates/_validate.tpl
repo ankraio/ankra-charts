@@ -69,18 +69,31 @@ needs a weaker posture has to say so explicitly, in values, under review.
 {{- end -}}
 
 {{- if not .Values.operator.enabled -}}
-{{- if not $hardening.allowPrivilegedRuntime -}}
 {{- $podSecurityContext := .Values.podSecurityContext | default dict -}}
 {{- $securityContext := .Values.securityContext | default dict -}}
+
+{{/*
+The image enters as root under s6-overlay and drops to env.HERMES_UID itself;
+its stage2 bootstrap exits non-zero on a pinned UID with "container started
+with --user <n> (an arbitrary, non-hermes UID)". Catch that here rather than in
+a CrashLoopBackOff.
+*/}}
+{{- if or (hasKey $podSecurityContext "runAsUser") (hasKey $securityContext "runAsUser") -}}
+{{- fail "do not pin runAsUser: this image must enter as root and remaps its own user to env.HERMES_UID/HERMES_GID. A pinned UID makes its bootstrap fail with \"an arbitrary, non-hermes UID\". Set env.HERMES_UID instead, or hardening.enabled=false if you run an image that supports a pinned UID." -}}
+{{- end -}}
+{{- if eq ($podSecurityContext.runAsNonRoot | toString) "true" -}}
+{{- fail "podSecurityContext.runAsNonRoot=true cannot work with this image: it needs to enter as root to remap its user and chown the data volume. The agent still ends up unprivileged via env.HERMES_UID." -}}
+{{- end -}}
+
+{{- if not $hardening.allowPrivilegedRuntime -}}
 {{- $capabilities := $securityContext.capabilities | default dict -}}
-{{- if ne ($podSecurityContext.runAsNonRoot | toString) "true" -}}
-{{- fail "podSecurityContext.runAsNonRoot must be true (waive with hardening.allowPrivilegedRuntime=true)." -}}
-{{- end -}}
-{{- if eq ($podSecurityContext.runAsUser | toString) "0" -}}
-{{- fail "podSecurityContext.runAsUser must not be 0 (waive with hardening.allowPrivilegedRuntime=true)." -}}
-{{- end -}}
-{{- if eq ($securityContext.runAsUser | toString) "0" -}}
-{{- fail "securityContext.runAsUser must not be 0 (waive with hardening.allowPrivilegedRuntime=true)." -}}
+{{/*
+Entering as root is forced by the image, so the meaningful guard is that it
+actually drops to a non-root uid afterwards.
+*/}}
+{{- $hermesUID := (.Values.env | default dict).HERMES_UID | toString -}}
+{{- if or (eq $hermesUID "") (eq $hermesUID "0") (eq $hermesUID "<no value>") -}}
+{{- fail "env.HERMES_UID must be set to a non-zero uid: it is what the container drops to after bootstrap, and without it Hermes keeps running as root (waive with hardening.allowPrivilegedRuntime=true)." -}}
 {{- end -}}
 {{- if eq ($securityContext.privileged | toString) "true" -}}
 {{- fail "securityContext.privileged must not be true (waive with hardening.allowPrivilegedRuntime=true)." -}}
