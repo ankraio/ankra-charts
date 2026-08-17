@@ -303,14 +303,28 @@ jobs:
             exit 1
           fi
 
-      - name: Hermes must have dropped out of root
+      - name: The agent process must not be root
         run: |
           set -euo pipefail
           pod="$(kubectl -n hermes get pods -l app.kubernetes.io/name=hermes-agent -o name | head -1)"
-          uid="$(kubectl -n hermes exec "${pod}" -c hermes-agent -- id -u)"
-          echo "hermes runs as uid ${uid}"
+          # Not `id -u`: kubectl exec starts a new process as the container
+          # user, which is root here. s6-overlay supervises as root and drops
+          # only its services, so the hermes process itself has to be inspected.
+          uid="$(kubectl -n hermes exec "${pod}" -c hermes-agent -- sh -c '
+            for entry in /proc/[0-9]*; do
+              [ "$(cat "$entry/comm" 2>/dev/null)" = "hermes" ] || continue
+              sed -n "s/^Uid:[[:space:]]*\([0-9]*\).*/\1/p" "$entry/status"
+              exit 0
+            done
+            exit 1
+          ')"
+          echo "hermes process uid=${uid}"
+          if [[ -z "${uid}" ]]; then
+            echo "::error::no hermes process found in the container"
+            exit 1
+          fi
           if [[ "${uid}" == "0" ]]; then
-            echo "::error::the agent is still running as root; HERMES_UID did not take effect"
+            echo "::error::the hermes process is running as root; HERMES_UID did not take effect"
             exit 1
           fi
 
