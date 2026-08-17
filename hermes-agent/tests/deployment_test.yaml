@@ -62,6 +62,15 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].securityContext.capabilities.drop
           content: ALL
+      # s6-overlay cannot hand the agent to HERMES_UID without these; anything
+      # beyond them is refused by the hardening guard.
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.add
+          value:
+            - CHOWN
+            - DAC_OVERRIDE
+            - SETGID
+            - SETUID
       - equal:
           path: spec.template.spec.containers[0].securityContext.seccompProfile.type
           value: RuntimeDefault

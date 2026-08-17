@@ -341,6 +341,17 @@ securityContext:
   capabilities:
     drop:
       - ALL
+    # s6-overlay needs these four to hand the agent over to HERMES_UID: chown
+    # its service directories and the data volume, then setuid/setgid into the
+    # hermes user. Verified minimal against the image - without DAC_OVERRIDE the
+    # main-hermes service starts and immediately stops, and because s6 keeps
+    # PID 1 alive the pod still reports Ready. All four are permitted by the
+    # PodSecurity "baseline" profile.
+    add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
   seccompProfile:
     type: RuntimeDefault
 

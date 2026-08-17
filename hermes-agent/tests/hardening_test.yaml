@@ -122,13 +122,25 @@ tests:
       - failedTemplate:
           errorPattern: "privileged must not be true"
 
-  - it: refuses added capabilities
+  - it: refuses capabilities beyond the s6 bootstrap set
     set:
       securityContext.capabilities.add:
+        - CHOWN
         - NET_ADMIN
     asserts:
       - failedTemplate:
-          errorPattern: "capabilities.add must stay empty"
+          errorPattern: "NET_ADMIN is not one of them"
+
+  - it: accepts the s6 bootstrap capabilities
+    set:
+      securityContext.capabilities.add:
+        - CHOWN
+        - DAC_OVERRIDE
+        - SETGID
+        - SETUID
+    asserts:
+      - hasDocuments:
+          count: 0
 
   - it: refuses a mounted ServiceAccount token
     set:

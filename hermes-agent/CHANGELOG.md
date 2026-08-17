@@ -15,6 +15,15 @@ All notable changes to the `hermes-agent` chart.
   `env.HERMES_GID` (1000 by default), which is the model the image supports.
 - The root filesystem stays read-only: s6-overlay only needs a writable `/run`,
   which is now an emptyDir, with `S6_READ_ONLY_ROOT=1` telling it to expect that.
+- `capabilities.drop: [ALL]` alone left the agent dead but *reported healthy*:
+  without CHOWN/DAC_OVERRIDE/SETGID/SETUID, s6-overlay cannot chown its service
+  directories or setuid into the hermes user, so `main-hermes` starts and
+  immediately stops (`s6-applyuidgid: fatal: unable to set supplementary group
+  list: Operation not permitted`) while s6 keeps PID 1 alive and Kubernetes
+  still reports Ready with zero restarts. Those four capabilities are now added
+  back; verified minimal against the image, and all four are permitted by the
+  PodSecurity `baseline` profile. The hardening guard now rejects anything
+  *beyond* that set rather than requiring an empty list.
 - Pinning `podSecurityContext.runAsUser` or `securityContext.runAsUser` is now
   refused at render time with the reason, instead of failing in the pod. Setting
   `podSecurityContext.runAsNonRoot: true` is refused for the same reason.

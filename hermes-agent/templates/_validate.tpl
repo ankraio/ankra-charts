@@ -107,8 +107,16 @@ actually drops to a non-root uid afterwards.
 {{- if not (has "ALL" ($capabilities.drop | default list)) -}}
 {{- fail "securityContext.capabilities.drop must contain ALL (waive with hardening.allowPrivilegedRuntime=true)." -}}
 {{- end -}}
-{{- if gt (len ($capabilities.add | default list)) 0 -}}
-{{- fail "securityContext.capabilities.add must stay empty (waive with hardening.allowPrivilegedRuntime=true)." -}}
+{{/*
+The image cannot de-privilege itself without CHOWN/DAC_OVERRIDE/SETGID/SETUID,
+so an empty add list is not achievable here. Guard the shape that matters
+instead: nothing beyond that bootstrap set.
+*/}}
+{{- $bootstrapCapabilities := list "CHOWN" "DAC_OVERRIDE" "SETGID" "SETUID" -}}
+{{- range $capability := ($capabilities.add | default list) -}}
+{{- if not (has $capability $bootstrapCapabilities) -}}
+{{- fail (printf "securityContext.capabilities.add may only contain the capabilities s6-overlay needs to drop privileges (%s); %s is not one of them (waive with hardening.allowPrivilegedRuntime=true)." (join ", " $bootstrapCapabilities) $capability) -}}
+{{- end -}}
 {{- end -}}
 {{- if eq (.Values.serviceAccount.automountServiceAccountToken | toString) "true" -}}
 {{- fail "serviceAccount.automountServiceAccountToken must be false: Hermes does not call the Kubernetes API, and a mounted token is a ready-made privilege escalation path for an agent that executes tools (waive with hardening.allowPrivilegedRuntime=true)." -}}

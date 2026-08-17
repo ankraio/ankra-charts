@@ -90,6 +90,11 @@ Two consequences:
 - The namespace needs PodSecurity **`baseline`**, not `restricted`.
 - The root filesystem still stays read-only. s6-overlay only needs a writable
   `/run`, which the chart mounts as an emptyDir with `S6_READ_ONLY_ROOT=1`.
+- Four capabilities are added back on top of `drop: [ALL]`: `CHOWN`,
+  `DAC_OVERRIDE`, `SETGID`, `SETUID`. s6-overlay needs them to chown its service
+  directories and setuid into the hermes user. Without them the agent is dead
+  but the pod still reports Ready, because s6 keeps PID 1 alive. Verified
+  minimal against the image; the guard rejects anything beyond these four.
 
 ### The network default, concretely
 
