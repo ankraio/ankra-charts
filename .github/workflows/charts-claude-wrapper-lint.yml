@@ -261,7 +261,7 @@ jobs:
           node_image: "kindest/node:v1.31.6@sha256:28b7cbb993dfe093c76641a0c95807637213c9109b761f1d422c2400e22b8e87"
           cluster_name: smoke
 
-      - name: Namespace, stand-in Secret, pull Secret
+      - name: Namespace and a stand-in Secret
         run: |
           set -euo pipefail
           kubectl create namespace claude
@@ -272,10 +272,6 @@ jobs:
           kubectl -n claude create secret generic claude-credentials \
             --from-literal=ANTHROPIC_API_KEY=ci-placeholder \
             --from-literal=API_KEY=ci-token
-          kubectl -n claude create secret docker-registry ghcr-pull \
-            --docker-server=ghcr.io \
-            --docker-username=x \
-            --docker-password='${{ github.token }}'
 
       - name: helm install --wait
         run: |
@@ -283,7 +279,6 @@ jobs:
           helm install claude-wrapper "${CHART}" \
             --namespace claude \
             --set secrets.existingSecret=claude-credentials \
-            --set 'imagePullSecrets[0].name=ghcr-pull' \
             --wait --timeout 10m
 
       - name: The pod must be Ready, not restarting, and non-root
@@ -314,7 +309,7 @@ jobs:
           set -euo pipefail
           kubectl -n claude run api-probe --rm -i --restart=Never \
             --image=ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0 \
-            --overrides='{"spec":{"imagePullSecrets":[{"name":"ghcr-pull"}],"securityContext":{"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"api-probe","image":"ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0","command":["python","-c","import json,urllib.request;base=\"http://claude-wrapper-claude-code-openai-wrapper.claude.svc:8000\";health=json.load(urllib.request.urlopen(base+\"/health\",timeout=10));print(health);assert health[\"status\"]==\"healthy\";request=urllib.request.Request(base+\"/v1/models\",headers={\"Authorization\":\"Bearer ci-token\"});models=json.load(urllib.request.urlopen(request,timeout=10));print([m[\"id\"] for m in models[\"data\"]][:3]);assert models[\"data\"]"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}}]}}'
+            --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":10001,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"api-probe","image":"ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0","command":["python","-c","import json,urllib.request;base=\"http://claude-wrapper-claude-code-openai-wrapper.claude.svc:8000\";health=json.load(urllib.request.urlopen(base+\"/health\",timeout=10));print(health);assert health[\"status\"]==\"healthy\";request=urllib.request.Request(base+\"/v1/models\",headers={\"Authorization\":\"Bearer ci-token\"});models=json.load(urllib.request.urlopen(request,timeout=10));print([m[\"id\"] for m in models[\"data\"]][:3]);assert models[\"data\"]"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}}]}}'
 
       - name: Logs on failure
         if: failure()

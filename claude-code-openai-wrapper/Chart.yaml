@@ -53,7 +53,7 @@ annotations:
     url: https://github.com/ankraio/ankra-charts#verifying-a-published-chart
   artifacthub.io/images: |
     - name: claude-code-openai-wrapper
-      image: ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0@sha256:1f3a5f0338f4ffd07fc7f573699b708be8bb2c06db53513234a47adf74f1ff4d
+      image: ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0@sha256:c4eaf91cc413aaafe2f6d4849666fab43a51da6dd4f76c624bdefa9d3b0be797
   artifacthub.io/changes: |
     - kind: added
       description: "Initial release: upstream v2.3.0 behind an Ankra-built, digest-pinned, non-root image (upstream publishes no container image), with render-time hardening guardrails, a default-deny NetworkPolicy, managed-secret and ExternalSecret support, and required API-key protection on any Ingress."

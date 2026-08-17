@@ -15,7 +15,7 @@ name: charts-claude-wrapper-image
 
 on:
   push:
-    branches: [main, claude-code-openai-wrapper-chart]
+    branches: [main]
     paths:
       - "images/claude-code-openai-wrapper/**"
       - ".github/workflows/charts-claude-wrapper-image.yml"
