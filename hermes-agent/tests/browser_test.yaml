@@ -1,0 +1,102 @@
+suite: browser stack - CDP sidecar and MCP servers
+release:
+  name: ut
+  namespace: hermes
+tests:
+  - it: ships no browser sidecar by default
+    templates:
+      - templates/deployment.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: hermes-agent
+
+  - it: runs the Chromium sidecar on the address the agent already probes
+    templates:
+      - templates/deployment.yaml
+    set:
+      browser.cdp.enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: browser-cdp
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --remote-debugging-address=127.0.0.1
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --remote-debugging-port=9222
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.tcpSocket.port
+          value: 9222
+
+  - it: pulls the sidecar by digest, not by tag
+    templates:
+      - templates/deployment.yaml
+    set:
+      browser.cdp.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[1].image
+          pattern: "^docker.io/chromedp/headless-shell@sha256:[0-9a-f]{64}$"
+
+  - it: keeps the sidecar unprivileged and non-root
+    templates:
+      - templates/deployment.yaml
+    set:
+      browser.cdp.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[1].securityContext.capabilities.drop
+          content: ALL
+
+  - it: writes no mcp.json when no server is declared
+    templates:
+      - templates/configmap.yaml
+    asserts:
+      - isNull:
+          path: data["mcp.json"]
+
+  - it: renders declared MCP servers in the shape the agent validates
+    templates:
+      - templates/configmap.yaml
+    set:
+      mcp.servers.camoufox.command: npx
+      mcp.servers.camoufox.args:
+        - "-y"
+        - "@playwright/mcp@latest"
+    asserts:
+      - matchRegex:
+          path: data["mcp.json"]
+          pattern: '"\$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"'
+      - matchRegex:
+          path: data["mcp.json"]
+          pattern: '"mcpServers"'
+      - matchRegex:
+          path: data["mcp.json"]
+          pattern: '"command": "npx"'
+
+  - it: seeds mcp.json into the agent home alongside config.yaml
+    templates:
+      - templates/deployment.yaml
+    set:
+      mcp.servers.camoufox.command: npx
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].args[0]
+          pattern: 'cp "/bootstrap/mcp.json" "/opt/data/mcp.json"'

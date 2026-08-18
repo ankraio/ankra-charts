@@ -141,6 +141,51 @@ Two defaults differ from the Hermes sample configuration on purpose:
 | `security.tirith_fail_open` | `false` | Upstream fails open: if the policy engine errors, the request proceeds unchecked. |
 | `browser.allow_private_urls` | `false` | Second line of defence behind the NetworkPolicy - the browser tool should not fetch cluster-internal URLs. |
 
+## Giving the agent a browser
+
+The image enables a `browser` toolset that attaches to a Chromium over the
+DevTools Protocol at `http://127.0.0.1:9222`, and ships no browser binary. Until
+something listens there the toolset is enabled with nothing behind it.
+
+```bash
+helm upgrade hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
+  -n hermes --version 0.1.4 \
+  --set secrets.existingSecret=hermes-credentials \
+  --set browser.cdp.enabled=true
+```
+
+That runs a digest-pinned `chromedp/headless-shell` beside the agent in the same
+pod: the debugger binds loopback, so the agent reaches it and the cluster cannot.
+The container is non-root, unprivileged, read-only-root and drops every
+capability; Chromium's own sandbox needs privileges this chart will not grant, so
+`--no-sandbox` is passed and the container hardening carries the weight instead.
+
+For browsers the built-in toolset cannot drive, use MCP. **Camoufox** - a
+hardened Firefox whose fingerprint and input timing read as a person rather than
+a headless robot - speaks Playwright, not CDP, so it cannot back the built-in
+toolset and comes in as an MCP server instead:
+
+```yaml
+mcp:
+  servers:
+    camoufox:
+      command: npx
+      args: ["-y", "@playwright/mcp@latest", "--browser=firefox", "--isolated"]
+      env:
+        PLAYWRIGHT_FIREFOX_EXECUTABLE_PATH: /opt/data/camoufox/camoufox
+```
+
+`mcp.servers` is rendered to `mcp.json` in the agent home by the same bootstrap
+init container that seeds `config.yaml` and `SOUL.md`, in the exact shape the
+agent validates (`$schema` and `mcpServers`, nothing else), so the server is live
+on start and no `hermes mcp add` has to be run inside the pod. Its tools arrive
+namespaced under the server name (`camoufox:browser_navigate`) and can be toggled
+with `hermes tools enable|disable`. Both halves together are
+[`values-examples/browser-stealth.yaml`](values-examples/browser-stealth.yaml).
+
+Egress still goes through the NetworkPolicy, and `browser.allow_private_urls`
+stays `false`: a browser in the pod does not become a way into the cluster.
+
 ## Exposing the API server
 
 ```bash
