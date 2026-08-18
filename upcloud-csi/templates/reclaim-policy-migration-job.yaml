@@ -1,0 +1,150 @@
+{{- include "upcloud-csi.validate" . -}}
+{{- if .Values.storageClasses.migrateReclaimPolicy -}}
+{{- $hookName := printf "%s-reclaim-migration" (include "upcloud-csi.fullname" .) -}}
+{{- $chartWide := .Values.storageClasses.reclaimPolicy -}}
+{{- $targets := list -}}
+{{- range $tier := (list "maxiops" "standard" "hdd") -}}
+  {{- $spec := index $.Values.storageClasses $tier -}}
+  {{- if $spec.enabled -}}
+    {{- $desired := $spec.reclaimPolicy | default $chartWide -}}
+    {{- $targets = append $targets (printf "%s=%s" $spec.name $desired) -}}
+  {{- end -}}
+{{- end -}}
+{{/*
+Pre-upgrade Job that reconciles the reclaimPolicy of this chart's own
+StorageClasses.
+
+A StorageClass's reclaimPolicy is immutable, so once a class exists Helm
+cannot change it: the API server rejects the update ("updates to provisioner,
+parameters, reclaimPolicy or volumeBindingMode are forbidden") and the whole
+upgrade fails. Changing the value in values.yaml would therefore break the
+addon on every cluster that already carries the old policy.
+
+This Job runs before the upgrade applies the release's resources, compares
+each chart-managed class against the policy this release wants, and deletes
+only the ones that disagree. Helm then recreates them from the templates with
+the new policy in the same upgrade. Deleting a StorageClass is safe for data:
+existing PersistentVolumes and PersistentVolumeClaims reference it by name and
+keep working - a PV carries its own reclaimPolicy, fixed when it was
+provisioned - and only new provisioning needs the class, which is back moments
+later.
+
+Steady state is a no-op: when every policy already matches, nothing is
+deleted. Set storageClasses.migrateReclaimPolicy=false to opt out and handle
+the transition by hand.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $hookName }}
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reclaim-migration-hook
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $hookName }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reclaim-migration-hook
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $hookName }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reclaim-migration-hook
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+subjects:
+  - kind: ServiceAccount
+    name: {{ $hookName }}
+    namespace: {{ include "upcloud-csi.namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $hookName }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $hookName }}
+  namespace: {{ include "upcloud-csi.namespace" . }}
+  labels:
+    {{- include "upcloud-csi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reclaim-migration-hook
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: {{ .Values.defaultClassJob.ttlSecondsAfterFinished }}
+  activeDeadlineSeconds: {{ .Values.defaultClassJob.activeDeadlineSeconds }}
+  backoffLimit: {{ .Values.defaultClassJob.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "upcloud-csi.labels" . | nindent 8 }}
+        app.kubernetes.io/component: reclaim-migration-hook
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ $hookName }}
+      automountServiceAccountToken: true
+      securityContext:
+        {{- toYaml .Values.defaultClassJob.podSecurityContext | nindent 8 }}
+      {{- with .Values.defaultClassJob.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.defaultClassJob.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "upcloud-csi.image" (dict "image" .Values.images.kubectl "context" .) }}
+          imagePullPolicy: {{ .Values.images.kubectl.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              for target in ${TARGETS}; do
+                name="${target%=*}"
+                desired="${target#*=}"
+                if ! live="$(kubectl get storageclass "${name}" -o jsonpath='{.reclaimPolicy}' 2>/dev/null)"; then
+                  echo "StorageClass ${name} is absent; the upgrade creates it with reclaimPolicy=${desired}"
+                  continue
+                fi
+                if [ "${live}" = "${desired}" ]; then
+                  echo "StorageClass ${name} already has reclaimPolicy=${desired}"
+                  continue
+                fi
+                echo "StorageClass ${name}: reclaimPolicy ${live} -> ${desired}; deleting so the upgrade recreates it"
+                kubectl delete storageclass "${name}"
+              done
+              echo "Done."
+          env:
+            - name: TARGETS
+              value: {{ join " " $targets | quote }}
+          securityContext:
+            {{- toYaml .Values.defaultClassJob.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.defaultClassJob.resources | nindent 12 }}
+{{- end }}

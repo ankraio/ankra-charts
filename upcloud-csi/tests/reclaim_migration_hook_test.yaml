@@ -1,0 +1,114 @@
+suite: reclaimPolicy migration hook
+templates:
+  - templates/reclaim-policy-migration-job.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: renders SA + ClusterRole + ClusterRoleBinding + Job by default
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: no documents when the migration is opted out
+    set:
+      storageClasses.migrateReclaimPolicy: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: targets every enabled tier with the chart-wide policy
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: TARGETS
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: upcloud-block-storage-maxiops=Retain upcloud-block-storage-standard=Retain upcloud-block-storage-hdd=Retain
+
+  - it: carries the chart-wide policy when it is flipped to Delete
+    set:
+      storageClasses.reclaimPolicy: Delete
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: upcloud-block-storage-maxiops=Delete upcloud-block-storage-standard=Delete upcloud-block-storage-hdd=Delete
+
+  - it: a per-tier override wins over the chart-wide policy
+    set:
+      storageClasses.reclaimPolicy: Delete
+      storageClasses.maxiops.reclaimPolicy: Retain
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: upcloud-block-storage-maxiops=Retain upcloud-block-storage-standard=Delete upcloud-block-storage-hdd=Delete
+
+  - it: a disabled tier is not migrated
+    set:
+      storageClasses.hdd.enabled: false
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: upcloud-block-storage-maxiops=Retain upcloud-block-storage-standard=Retain
+
+  - it: runs before the upgrade applies the release, so Helm can recreate the classes
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "10"
+
+  - it: SA and RBAC ride the same pre-upgrade event, earlier and without hook-succeeded
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+
+  - it: the hook may delete StorageClasses, and nothing else
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: rules[0].apiGroups[0]
+          value: storage.k8s.io
+      - equal:
+          path: rules[0].resources[0]
+          value: storageclasses
+      - contains:
+          path: rules[0].verbs
+          content: delete
+      - lengthEqual:
+          path: rules
+          count: 1
+
+  - it: uses the shell-capable kubectl image, not distroless
+    documentIndex: 3
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: alpine/k8s
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: /bin/sh

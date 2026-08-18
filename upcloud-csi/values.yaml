@@ -128,6 +128,13 @@ storageClasses:
   # -- ReclaimPolicy for all chart-managed StorageClasses (`Retain` matches upstream).
   # Per-tier `reclaimPolicy:` overrides this.
   reclaimPolicy: Retain
+  # -- Let the chart move existing StorageClasses onto the policy above.
+  # reclaimPolicy is immutable, so Helm cannot change a class that already
+  # exists: without this, editing the policy fails the whole upgrade. A
+  # pre-upgrade hook Job deletes only the classes whose live policy differs
+  # and the upgrade recreates them. Existing PVs and PVCs are unaffected -
+  # a PV keeps the policy it was provisioned with. No-op once policies match.
+  migrateReclaimPolicy: true
   # -- VolumeBindingMode for all chart-managed StorageClasses.
   # `WaitForFirstConsumer` is recommended when `allowedTopologies` is set so
   # the volume is provisioned in the same zone as the pod.
