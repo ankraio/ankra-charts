@@ -184,3 +184,20 @@ tests:
     asserts:
       - exists:
           path: spec.template.metadata.annotations.checksum/external-secret
+
+  - it: session mode selects the CLI auth path
+    template: templates/deployment.yaml
+    set:
+      auth.method: session
+      secrets.existingSecret: claude-session
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLAUDE_AUTH_METHOD
+            value: cli
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CLAUDE_CODE_USE_BEDROCK
+            value: "1"

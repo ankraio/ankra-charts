@@ -2,7 +2,7 @@ apiVersion: v2
 name: claude-code-openai-wrapper
 description: OpenAI API-compatible wrapper for Claude Code on Kubernetes - digest-pinned, non-root, egress-restricted by default, with managed-secret and supply-chain guardrails.
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "v2.3.0"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
@@ -56,4 +56,4 @@ annotations:
       image: ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0@sha256:c4eaf91cc413aaafe2f6d4849666fab43a51da6dd4f76c624bdefa9d3b0be797
   artifacthub.io/changes: |
     - kind: added
-      description: "Initial release: upstream v2.3.0 behind an Ankra-built, digest-pinned, non-root image (upstream publishes no container image), with render-time hardening guardrails, a default-deny NetworkPolicy, managed-secret and ExternalSecret support, and required API-key protection on any Ingress."
+      description: "auth.method=session runs the wrapper on a Claude Code subscription session (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`) instead of a metered API key. The render refuses the mode without a token, the same way api-key mode refuses without ANTHROPIC_API_KEY."

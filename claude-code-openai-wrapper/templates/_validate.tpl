@@ -13,8 +13,16 @@ needs a weaker posture has to say so explicitly, in values, under review.
 
 {{- define "claude-code-openai-wrapper.validateRuntime" -}}
 {{- $inlineSecretKeys := include "claude-code-openai-wrapper.inlineSecretKeys" . | fromJsonArray -}}
-{{- if not (has .Values.auth.method (list "api-key" "bedrock" "vertex")) -}}
-{{- fail (printf "auth.method must be api-key, bedrock or vertex; got %q." .Values.auth.method) -}}
+{{- if not (has .Values.auth.method (list "session" "api-key" "bedrock" "vertex")) -}}
+{{- fail (printf "auth.method must be session, api-key, bedrock or vertex; got %q." .Values.auth.method) -}}
+{{- end -}}
+{{/*
+session mode carries a Claude Code subscription session rather than a metered
+API key. The SDK reads CLAUDE_CODE_OAUTH_TOKEN from the environment, so the
+token has to reach the pod the same way any other credential does.
+*/}}
+{{- if and (eq .Values.auth.method "session") (not (include "claude-code-openai-wrapper.secretManagedExternally" .)) (not (has "CLAUDE_CODE_OAUTH_TOKEN" $inlineSecretKeys)) -}}
+{{- fail "auth.method=session requires a CLAUDE_CODE_OAUTH_TOKEN: generate one with `claude setup-token`, then set secrets.existingSecret, enable externalSecret, or supply secrets.CLAUDE_CODE_OAUTH_TOKEN." -}}
 {{- end -}}
 {{- if and (eq .Values.auth.method "api-key") (not (include "claude-code-openai-wrapper.secretManagedExternally" .)) (not (has "ANTHROPIC_API_KEY" $inlineSecretKeys)) -}}
 {{- fail "auth.method=api-key requires an ANTHROPIC_API_KEY: set secrets.existingSecret, enable externalSecret, or supply secrets.ANTHROPIC_API_KEY. For AWS or GCP credentials use auth.method=bedrock or vertex." -}}

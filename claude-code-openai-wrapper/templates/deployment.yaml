@@ -107,7 +107,14 @@ spec:
             - name: VERBOSE
               value: "true"
             {{- end }}
-            {{- if eq .Values.auth.method "api-key" }}
+            {{- if eq .Values.auth.method "session" }}
+            # The bundled Claude Code CLI authenticates from the subscription
+            # session in CLAUDE_CODE_OAUTH_TOKEN, which arrives through the
+            # Secret. Upstream's "cli" method deliberately does no validation
+            # of its own - it hands the whole question to the SDK.
+            - name: CLAUDE_AUTH_METHOD
+              value: cli
+            {{- else if eq .Values.auth.method "api-key" }}
             - name: CLAUDE_AUTH_METHOD
               value: api_key
             {{- else if eq .Values.auth.method "bedrock" }}
