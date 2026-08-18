@@ -2,6 +2,39 @@
 
 All notable changes to the `hermes-agent` chart.
 
+## 0.2.0 - 2026-08-18
+
+### Added
+
+- **`camofox.enabled` runs the anti-detection browser as a sidecar.** Hermes
+  routes every one of its browser tools through Camofox as soon as `CAMOFOX_URL`
+  is set, in place of agent-browser and Browserbase, so this is the difference
+  between a browser that announces itself as automation and one that does not.
+  It runs as a second container rather than inside the agent because Camoufox
+  needs GTK3, Mesa and Xvfb that the agent image does not ship - same pod, so the
+  agent reaches it on loopback with no NetworkPolicy rule and no Service. Point
+  `camofox.url` at an external Camofox to use one you already run.
+- **`mcp_servers` needs no chart change** - it is read from `config.yaml`, so it
+  can be declared in `config.values`, with `npm.packages` carrying any stdio
+  server's package onto the volume. Documented rather than templated.
+
+### Security
+
+- The sidecar image must be digest-pinned: it renders every page the agent
+  visits, so a moved tag is a code-execution change. Waiver:
+  `hardening.allowMutableImageTag=true`.
+- `camofox.securityContext` deliberately omits `runAsUser`, `runAsNonRoot` and
+  `readOnlyRootFilesystem`. Upstream bakes the Camoufox bundle into
+  `/root/.cache/camoufox` and sets no `USER`, and Firefox wants a writable
+  profile directory, so pinning them unverified would ship a CrashLoopBackOff.
+  They are left visible in values for whoever has exercised the image.
+
+### Note
+
+- `ghcr.io/ankraio/images/camofox-browser` is built by this repository from
+  upstream's pinned tag (upstream publishes no image) and is **amd64 only** -
+  the Camoufox binary architecture is a build argument there.
+
 ## 0.1.3 - 2026-08-17
 
 ### Added

@@ -172,6 +172,71 @@ one per tenant with `values-examples/multi-tenant.yaml`.
 Set `persistence.enabled=false` for a stateless gateway; the volume becomes an
 `emptyDir` and the single-writer rules no longer apply.
 
+## Camofox: the anti-detection browser
+
+Hermes ships its own browser tools, driven by agent-browser (Chrome). Sites that
+fingerprint their visitors see that for what it is. Upstream's answer is
+[Camofox](https://github.com/jo-inc/camofox-browser): Camoufox, a Firefox fork
+that spoofs its fingerprint in C++ rather than with JS shims, wrapped in a REST
+API. **Setting `CAMOFOX_URL` makes Hermes route every one of its browser tools
+through it**, in place of agent-browser and Browserbase.
+
+```yaml
+camofox:
+  enabled: true
+  image:
+    digest: sha256:...   # required; see below
+```
+
+That runs Camofox as a second container in the same pod and points the agent at
+`http://localhost:9377`. It is a sidecar rather than something inside the agent
+container for two reasons: Camoufox needs GTK3, Mesa and Xvfb, none of which the
+agent image ships, and it wants a writable home for profiles, cookies and
+traces. Same pod also means loopback — no NetworkPolicy rule and no Service.
+
+Point the agent at a Camofox you run elsewhere with `camofox.url` instead; the
+sidecar is then unnecessary and `camofox.enabled` stays false.
+
+Three things worth knowing before you turn it on:
+
+- **The image is ours.** Upstream publishes none, so this repository builds
+  `ghcr.io/ankraio/images/camofox-browser` from their pinned tag — see
+  [`images/camofox-browser/`](../images/camofox-browser). It is amd64 only,
+  because the Camoufox binary architecture is a build argument upstream.
+- **It must be digest-pinned.** This container renders every page the agent
+  visits, so a moved tag is a code-execution change; rendering fails without a
+  digest unless you set `hardening.allowMutableImageTag=true`.
+- **`camofox.securityContext` is weaker than the agent's**, deliberately and
+  visibly: upstream bakes the Camoufox bundle into `/root/.cache/camoufox` and
+  sets no `USER`, and Firefox wants a writable profile directory, so
+  `runAsUser`/`runAsNonRoot`/`readOnlyRootFilesystem` are left unset rather than
+  guessed. Tighten them in your own values once you have exercised the image.
+
+## MCP servers
+
+Hermes reads `mcp_servers` from its `config.yaml`, so servers can be declared in
+`config.values` with no chart change:
+
+```yaml
+config:
+  values:
+    mcp_servers:
+      filesystem:
+        command: npx
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/opt/data"]
+npm:
+  enabled: true
+  packages:
+    - "@modelcontextprotocol/server-filesystem"
+```
+
+`npm.enabled` matters: stdio servers need their package on disk, and the chart
+installs `npm.packages` into the data volume at startup and puts them on `PATH`.
+Leaving it off means `npx` fetches from the registry on every tool call.
+
+The dashboard also carries a catalog of remote MCP servers that install with one
+click and authenticate over OAuth per user — those are not chart configuration.
+
 ## Operator-ready mode
 
 `operator.enabled=true` renders `HermesTenant` custom resources
