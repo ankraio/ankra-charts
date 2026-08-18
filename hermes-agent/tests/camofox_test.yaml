@@ -1,0 +1,111 @@
+suite: camofox
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+  - templates/secret.yaml
+  - templates/pvc.yaml
+  - templates/validate.yaml
+release:
+  name: ut
+  namespace: hermes
+set:
+  secrets.existingSecret: hermes-credentials
+tests:
+  - it: ships nothing when camofox is disabled
+    template: templates/deployment.yaml
+    asserts:
+      # One container, and no CAMOFOX_URL: without it Hermes keeps using
+      # agent-browser, which is the pre-0.2.0 behaviour.
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CAMOFOX_URL
+          any: true
+
+  - it: runs the browser as a sidecar and points the agent at it over loopback
+    template: templates/deployment.yaml
+    set:
+      camofox.enabled: true
+      camofox.image.digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: camofox
+      # Same pod means loopback, which is why no NetworkPolicy rule and no
+      # Service are needed for the agent to reach it.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CAMOFOX_URL
+            value: http://localhost:9377
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: ghcr.io/ankraio/images/camofox-browser:v1.13.1@sha256:1111111111111111111111111111111111111111111111111111111111111111
+
+  - it: lets an external Camofox replace the sidecar target
+    template: templates/deployment.yaml
+    set:
+      camofox.enabled: true
+      camofox.image.digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+      camofox.url: http://camofox.browsers.svc.cluster.local:9377
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CAMOFOX_URL
+            value: http://camofox.browsers.svc.cluster.local:9377
+
+  - it: skips the addon download that otherwise wedges startup behind restricted egress
+    template: templates/deployment.yaml
+    set:
+      camofox.enabled: true
+      camofox.image.digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: CAMOFOX_DISABLE_DEFAULT_ADDONS
+            value: "1"
+
+  - it: gives the browser its own shm and tmp rather than sharing the agent's
+    template: templates/deployment.yaml
+    set:
+      camofox.enabled: true
+      camofox.image.digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: camofox-dshm
+            mountPath: /dev/shm
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: camofox-dshm
+            emptyDir:
+              medium: Memory
+              sizeLimit: 512Mi
+
+  - it: refuses an unpinned browser image
+    template: templates/validate.yaml
+    set:
+      camofox.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "camofox.image.digest is empty: the browser sidecar renders every page the agent visits, so a moved tag is a code-execution change. Pin a digest (scripts/sync-image-digest.sh camofox-browser) or set hardening.allowMutableImageTag=true."
+
+  - it: allows an unpinned browser image behind the named waiver
+    template: templates/deployment.yaml
+    set:
+      camofox.enabled: true
+      hardening.allowMutableImageTag: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: ghcr.io/ankraio/images/camofox-browser:v1.13.1

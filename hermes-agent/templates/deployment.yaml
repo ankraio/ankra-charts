@@ -185,6 +185,12 @@ spec:
             # it is told to expect one; /run below is the writable path it needs.
             - name: S6_READ_ONLY_ROOT
               value: "1"
+            {{- if .Values.camofox.enabled }}
+            # Setting this is what makes Hermes route every browser tool
+            # through Camofox instead of agent-browser or Browserbase.
+            - name: CAMOFOX_URL
+              value: {{ include "hermes-agent.camofoxUrl" . | quote }}
+            {{- end }}
             {{- if $npmEnabled }}
             - name: PATH
               value: {{ printf "%s/npm-global/bin:/opt/hermes/bin:/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" $mountPath | quote }}
@@ -324,6 +330,59 @@ spec:
               mountPath: {{ .Values.browser.shm.mountPath }}
             {{- end }}
         {{- end }}
+        {{- if .Values.camofox.enabled }}
+        - name: camofox
+          image: {{ include "hermes-agent.camofoxImage" . | quote }}
+          imagePullPolicy: {{ .Values.camofox.image.pullPolicy }}
+          env:
+            - name: CAMOFOX_PORT
+              value: {{ .Values.camofox.port | quote }}
+            - name: MAX_OLD_SPACE_SIZE
+              value: {{ .Values.camofox.maxOldSpaceSize | quote }}
+            {{- if not .Values.camofox.defaultAddons }}
+            - name: CAMOFOX_DISABLE_DEFAULT_ADDONS
+              value: "1"
+            {{- end }}
+            {{- range $key, $value := .Values.camofox.extraEnv }}
+            - name: {{ $key }}
+              value: {{ printf "%v" $value | quote }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ include "hermes-agent.secretName" . }}
+                optional: {{ not (include "hermes-agent.secretManagedExternally" .) }}
+          ports:
+            - name: camofox
+              containerPort: {{ .Values.camofox.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: camofox
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: camofox
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.camofox.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.camofox.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: camofox-tmp
+              mountPath: /tmp
+            {{- if .Values.camofox.shm.enabled }}
+            - name: camofox-dshm
+              mountPath: /dev/shm
+            {{- end }}
+        {{- end }}
         {{- with .Values.extraContainers }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -342,6 +401,16 @@ spec:
           emptyDir: {}
         - name: run
           emptyDir: {}
+        {{- if .Values.camofox.enabled }}
+        - name: camofox-tmp
+          emptyDir: {}
+        {{- if .Values.camofox.shm.enabled }}
+        - name: camofox-dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.camofox.shm.sizeLimit | quote }}
+        {{- end }}
+        {{- end }}
         {{- if .Values.browser.shm.enabled }}
         - name: dshm
           emptyDir:
