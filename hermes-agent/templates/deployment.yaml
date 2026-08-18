@@ -5,6 +5,7 @@
 {{- $npmEnabled := and .Values.npm.enabled (gt (len .Values.npm.packages) 0) -}}
 {{- $bootstrapConfigPath := printf "/bootstrap/%s" .Values.bootstrap.configKey -}}
 {{- $bootstrapSoulPath := printf "/bootstrap/%s" .Values.bootstrap.soulKey -}}
+{{- $bootstrapMcpPath := printf "/bootstrap/%s" .Values.bootstrap.mcpKey -}}
 {{- $overwrite := ternary "true" "false" .Values.bootstrap.overwrite -}}
 {{- $image := include "hermes-agent.image" . -}}
 apiVersion: apps/v1
@@ -92,6 +93,11 @@ spec:
               if [ -f {{ $bootstrapSoulPath | quote }} ]; then
                 if [ "{{ $overwrite }}" = "true" ] || [ ! -f {{ printf "%s/SOUL.md" $mountPath | quote }} ]; then
                   cp {{ $bootstrapSoulPath | quote }} {{ printf "%s/SOUL.md" $mountPath | quote }}
+                fi
+              fi
+              if [ -f {{ $bootstrapMcpPath | quote }} ]; then
+                if [ "{{ $overwrite }}" = "true" ] || [ ! -f {{ printf "%s/mcp.json" $mountPath | quote }} ]; then
+                  cp {{ $bootstrapMcpPath | quote }} {{ printf "%s/mcp.json" $mountPath | quote }}
                 fi
               fi
           env:
@@ -285,6 +291,39 @@ spec:
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+        {{- if .Values.browser.cdp.enabled }}
+        - name: browser-cdp
+          image: {{ include "hermes-agent.cdpImage" . | quote }}
+          imagePullPolicy: {{ .Values.browser.cdp.image.pullPolicy }}
+          args:
+            - --headless
+            - --remote-debugging-address={{ .Values.browser.cdp.address }}
+            - --remote-debugging-port={{ .Values.browser.cdp.port }}
+            {{- with .Values.browser.cdp.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: cdp
+              containerPort: {{ .Values.browser.cdp.port }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.browser.cdp.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.browser.cdp.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.browser.cdp.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.browser.shm.enabled }}
+            - name: dshm
+              mountPath: {{ .Values.browser.shm.mountPath }}
+            {{- end }}
+        {{- end }}
         {{- with .Values.extraContainers }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

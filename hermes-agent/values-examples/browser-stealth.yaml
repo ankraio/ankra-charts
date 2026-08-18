@@ -1,0 +1,48 @@
+# Browser overlay: give the agent a real browser instead of an enabled tool
+# with nothing behind it.
+#
+#   helm upgrade hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
+#     -n hermes -f values-examples/browser-stealth.yaml \
+#     --set secrets.existingSecret=hermes-credentials
+#
+# Two independent halves, either of which is useful on its own.
+
+# 1. The built-in `browser` toolset drives a Chromium over the DevTools
+#    Protocol and looks for one on http://127.0.0.1:9222. This sidecar is that
+#    Chromium, in the same pod, on exactly that address.
+browser:
+  cdp:
+    enabled: true
+  shm:
+    enabled: true
+    sizeLimit: 1Gi
+
+# 2. Anything the built-in toolset cannot do arrives over MCP. Camoufox is a
+#    hardened Firefox build whose fingerprint, timing and input look like a
+#    person rather than a headless robot, which is what gets an agent past the
+#    bot walls a plain headless Chromium trips. It speaks Playwright, not CDP,
+#    so it cannot back the built-in toolset - it comes in as an MCP server and
+#    the agent gets its tools alongside the rest.
+#
+# The command below pulls at pod start; set npm.enabled if you would rather
+# stage the package into the volume first, or point `command` at an image you
+# built with camoufox already fetched.
+mcp:
+  servers:
+    camoufox:
+      command: npx
+      args:
+        - "-y"
+        - "@playwright/mcp@latest"
+        - "--browser=firefox"
+        - "--isolated"
+      env:
+        # Point Playwright at the Camoufox build rather than stock Firefox.
+        PLAYWRIGHT_FIREFOX_EXECUTABLE_PATH: /opt/data/camoufox/camoufox
+
+# Camoufox is fetched into the persistent volume once, so restarts reuse it.
+# Drop this if you bake the browser into an image instead.
+npm:
+  enabled: true
+  packages:
+    - camoufox

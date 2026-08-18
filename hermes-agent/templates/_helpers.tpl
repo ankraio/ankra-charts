@@ -2,6 +2,35 @@
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- /*
+Renders empty when no MCP server is declared, so callers can gate on it.
+*/ -}}
+{{- define "hermes-agent.mcpServers" -}}
+{{- $servers := (.Values.mcp | default dict).servers | default dict -}}
+{{- if gt (len $servers) 0 -}}
+{{- $servers | toJson -}}
+{{- end -}}
+{{- end -}}
+
+{{- /*
+The agent validates mcp.json strictly: the document carries exactly $schema and
+mcpServers, and anything else is rejected as an invalid top-level shape.
+*/ -}}
+{{- define "hermes-agent.mcpJson" -}}
+{{- $servers := (.Values.mcp | default dict).servers | default dict -}}
+{{- dict "$schema" "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json" "mcpServers" $servers | toPrettyJson -}}
+{{- end -}}
+
+{{- define "hermes-agent.cdpImage" -}}
+{{- $image := .Values.browser.cdp.image -}}
+{{- $reference := printf "%s/%s" $image.registry $image.repository -}}
+{{- if $image.digest -}}
+{{- printf "%s@%s" $reference $image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" $reference $image.tag -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "hermes-agent.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}

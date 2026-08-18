@@ -60,6 +60,7 @@ bootstrap:
   existingConfigMap: ""
   configKey: config.yaml
   soulKey: SOUL.md
+  mcpKey: mcp.json
 
 config:
   # Raw YAML string rendered through tpl. Takes precedence over config.values.
@@ -99,6 +100,25 @@ config:
 
 soul:
   text: ""
+
+# MCP servers the agent connects to. Rendered to mcp.json in HERMES_HOME and
+# seeded by the bootstrap init container exactly like config.yaml and SOUL.md,
+# so a server declared here is live on start and no `hermes mcp add` has to be
+# run inside the pod. Each entry is one server, keyed by the name its tools
+# are namespaced under (`camoufox:browser_navigate`):
+#
+#   mcp:
+#     servers:
+#       camoufox:
+#         command: npx
+#         args: ["-y", "@playwright/mcp@latest", "--browser=firefox"]
+#       some-remote:
+#         url: https://mcp.example.com/sse
+#
+# Entries are passed through as written, so any field the MCP schema accepts
+# (command, args, env, url, headers, enabled) works.
+mcp:
+  servers: {}
 
 env:
   # The image bootstraps as root under s6-overlay, then remaps its own hermes
@@ -223,6 +243,49 @@ browser:
     enabled: true
     mountPath: /dev/shm
     sizeLimit: 1Gi
+  # The agent's built-in browser toolset drives a Chromium over the DevTools
+  # Protocol and looks for one on http://127.0.0.1:9222. The image ships no
+  # browser binary, so out of the box that toolset is enabled with nothing
+  # behind it. This sidecar is that Chromium, in the pod, on exactly the
+  # address the toolset already probes - nothing else needs wiring.
+  #
+  # Off by default: it is a second image, real memory under load, and a
+  # browser is the widest attack surface an agent can be handed.
+  cdp:
+    enabled: false
+    image:
+      registry: docker.io
+      repository: chromedp/headless-shell
+      # Tag is documentation; digest is what is pulled. Keep both in step.
+      tag: stable
+      digest: sha256:2d349b544a1ea6b5b5fd7c0fe99215ff662339c57407ee2e8c0a11af93516b04
+      pullPolicy: IfNotPresent
+    # Loopback only. The pod shares a network namespace, so the agent reaches
+    # the debugger while the cluster cannot.
+    address: 127.0.0.1
+    port: 9222
+    # Chromium's own sandbox needs privileges this chart does not grant, so the
+    # container is unprivileged, non-root and read-only instead.
+    extraArgs:
+      - --no-sandbox
+      - --disable-dev-shm-usage
+      - --disable-gpu
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 10000
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
 
 service:
   enabled: false

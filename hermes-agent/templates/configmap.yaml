@@ -17,5 +17,9 @@ data:
   {{ .Values.bootstrap.soulKey }}: |
     {{- tpl .Values.soul.text . | nindent 4 }}
   {{- end }}
+  {{- if include "hermes-agent.mcpServers" . }}
+  {{ .Values.bootstrap.mcpKey }}: |
+    {{- include "hermes-agent.mcpJson" . | nindent 4 }}
+  {{- end }}
 {{- end }}
 {{- end }}

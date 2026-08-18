@@ -2,6 +2,27 @@
 
 All notable changes to the `hermes-agent` chart.
 
+## 0.1.4 - 2026-08-18
+
+### Added
+
+- **A browser the agent can actually drive.** The image enables a `browser`
+  toolset that attaches to a Chromium over the DevTools Protocol at
+  `http://127.0.0.1:9222`, but ships no browser binary, so out of the box the
+  toolset is enabled with nothing behind it. `browser.cdp.enabled=true` puts a
+  digest-pinned headless Chromium in the pod on exactly that address - same
+  network namespace, loopback only, unprivileged, non-root, read-only root,
+  all capabilities dropped. Off by default: it is a second image and the widest
+  attack surface an agent can be handed.
+- **Declarative MCP servers.** `mcp.servers` renders `mcp.json` into the agent
+  home through the same bootstrap path as `config.yaml` and `SOUL.md`, so a
+  server is live on start instead of needing `hermes mcp add` inside the pod.
+  The document is written in the exact shape the agent validates (`$schema`
+  plus `mcpServers`, nothing else). This is the lane for browsers the built-in
+  toolset cannot drive - Camoufox speaks Playwright rather than CDP, so it
+  arrives as an MCP server; `values-examples/browser-stealth.yaml` wires both
+  halves.
+
 ## 0.1.3 - 2026-08-17
 
 ### Added
