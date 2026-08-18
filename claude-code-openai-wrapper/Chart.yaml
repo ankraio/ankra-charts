@@ -53,7 +53,7 @@ annotations:
     url: https://github.com/ankraio/ankra-charts#verifying-a-published-chart
   artifacthub.io/images: |
     - name: claude-code-openai-wrapper
-      image: ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0@sha256:c4eaf91cc413aaafe2f6d4849666fab43a51da6dd4f76c624bdefa9d3b0be797
+      image: ghcr.io/ankraio/images/claude-code-openai-wrapper:v2.3.0@sha256:fc9ae550c3da8e97bdc41e32546f16559c3acf87d1861d2a236ec2e2a18ab7e1
   artifacthub.io/changes: |
     - kind: added
       description: "auth.method=session runs the wrapper on a Claude Code subscription session (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`) instead of a metered API key. The render refuses the mode without a token, the same way api-key mode refuses without ANTHROPIC_API_KEY."
