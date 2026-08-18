@@ -2,6 +2,19 @@
 
 All notable changes to the `claude-code-openai-wrapper` chart.
 
+## 0.2.0 - 2026-08-18
+
+### Added
+
+- **`auth.method: session`** - authenticate as a Claude Code **subscription**
+  rather than a metered API key. Generate a token with `claude setup-token`
+  and supply it as `CLAUDE_CODE_OAUTH_TOKEN` in the configured Secret; the
+  chart sets upstream's `CLAUDE_AUTH_METHOD=cli`, which hands the whole
+  question to the bundled Claude Code CLI. The render refuses the mode when no
+  token is reachable, mirroring how `api-key` refuses without an
+  `ANTHROPIC_API_KEY`, so a missing credential fails at install rather than on
+  the first request.
+
 ## 0.1.0 - 2026-08-18
 
 ### Added

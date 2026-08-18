@@ -36,7 +36,7 @@ image:
   repository: ankraio/images/claude-code-openai-wrapper
   # Tag is documentation; digest is what is pulled. Keep both in step.
   tag: v2.3.0
-  digest: sha256:c4eaf91cc413aaafe2f6d4849666fab43a51da6dd4f76c624bdefa9d3b0be797
+  digest: sha256:fc9ae550c3da8e97bdc41e32546f16559c3acf87d1861d2a236ec2e2a18ab7e1
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -52,7 +52,10 @@ strategy:
   type: RollingUpdate
 
 # How the wrapper authenticates to Claude:
-#   api-key - ANTHROPIC_API_KEY from the configured Secret (recommended)
+#   session - a Claude Code subscription session, as CLAUDE_CODE_OAUTH_TOKEN in
+#             the configured Secret. Generate one with `claude setup-token`;
+#             usage is billed to the subscription, not per API token.
+#   api-key - ANTHROPIC_API_KEY from the configured Secret
 #   bedrock - AWS Bedrock; credentials from the Secret, or IRSA/pod identity
 #             via serviceAccount.annotations
 #   vertex  - Google Vertex AI; credentials via Workload Identity or a mounted

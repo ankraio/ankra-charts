@@ -212,3 +212,27 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: refuses session auth without a subscription token
+    set:
+      auth.method: session
+    asserts:
+      - failedTemplate:
+          errorPattern: "auth.method=session requires a CLAUDE_CODE_OAUTH_TOKEN"
+
+  - it: accepts session auth with the token in an existing Secret
+    set:
+      auth.method: session
+      secrets.existingSecret: claude-session
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: session auth needs no Anthropic API key
+    set:
+      auth.method: session
+      hardening.allowInlineSecrets: true
+      secrets.CLAUDE_CODE_OAUTH_TOKEN: ci-token
+    asserts:
+      - hasDocuments:
+          count: 0
