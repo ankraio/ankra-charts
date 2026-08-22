@@ -64,6 +64,10 @@ needs a weaker posture has to say so explicitly, in values, under review.
 {{- fail "image.digest is empty: a tag can be moved under you. Pin a digest (`make hermes-digest`, or scripts/sync-image-digest.sh) or set hardening.allowMutableImageTag=true." -}}
 {{- end -}}
 
+{{- if and .Values.camofox.enabled (not .Values.camofox.image.digest) (not $hardening.allowMutableImageTag) -}}
+{{- fail "camofox.image.digest is empty: the browser sidecar renders every page the agent visits, so a moved tag is a code-execution change. Pin a digest (scripts/sync-image-digest.sh camofox-browser) or set hardening.allowMutableImageTag=true." -}}
+{{- end -}}
+
 {{- if and (include "hermes-agent.hasInlineSecrets" .) (not $hardening.allowInlineSecrets) -}}
 {{- fail (printf "inline secret values are refused (%s): plain API keys in values land in the Helm release Secret, in Git and in shell history. Use secrets.existingSecret or externalSecret.enabled, or set hardening.allowInlineSecrets=true." (include "hermes-agent.inlineSecretKeys" .)) -}}
 {{- end -}}

@@ -134,6 +134,39 @@ alongside it so `kubectl describe` still shows a human-readable version.
 {{- end -}}
 
 {{/*
+Fully qualified Camofox sidecar image reference, same digest-wins rule as the
+agent image.
+*/}}
+{{- define "hermes-agent.camofoxImage" -}}
+{{- $repository := .Values.camofox.image.repository -}}
+{{- if .Values.camofox.image.registry -}}
+{{- $repository = printf "%s/%s" .Values.camofox.image.registry .Values.camofox.image.repository -}}
+{{- end -}}
+{{- $tag := .Values.camofox.image.tag -}}
+{{- if .Values.camofox.image.digest -}}
+{{- if $tag -}}
+{{- printf "%s:%s@%s" $repository $tag .Values.camofox.image.digest -}}
+{{- else -}}
+{{- printf "%s@%s" $repository .Values.camofox.image.digest -}}
+{{- end -}}
+{{- else -}}
+{{- printf "%s:%s" $repository $tag -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The URL the agent uses to reach Camofox: an explicit camofox.url wins,
+otherwise the sidecar over loopback.
+*/}}
+{{- define "hermes-agent.camofoxUrl" -}}
+{{- if .Values.camofox.url -}}
+{{- .Values.camofox.url -}}
+{{- else -}}
+{{- printf "http://localhost:%v" .Values.camofox.port -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Keys under .Values.secrets that carry an inline value, as a sorted JSON array.
 `existingSecret` and `annotations` are reserved and never treated as data.
 */}}

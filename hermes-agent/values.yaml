@@ -287,6 +287,66 @@ browser:
       seccompProfile:
         type: RuntimeDefault
 
+# Camofox is the anti-detection browser backend Hermes prefers: a Camoufox
+# (Firefox fork that spoofs its fingerprint in C++ rather than with JS shims)
+# wrapped in a REST API. Hermes routes ALL of its browser tools through it as
+# soon as CAMOFOX_URL is set, in place of agent-browser and Browserbase.
+#
+# It runs as a second container in this pod rather than inside the agent: it
+# needs GTK3, Mesa and Xvfb, which the agent image does not ship, and it wants
+# a writable home for its profiles, cookies and traces. Same pod means the
+# agent reaches it over loopback, so no NetworkPolicy rule and no Service.
+camofox:
+  enabled: false
+  image:
+    registry: ghcr.io
+    repository: ankraio/images/camofox-browser
+    # Upstream (jo-inc/camofox-browser, MIT) publishes no image; this one is
+    # built from their pinned tag by .github/workflows/charts-camofox-image.yml.
+    # Tag is documentation; digest is what is pulled. Keep both in step.
+    tag: v1.13.1
+    digest: ""
+    pullPolicy: IfNotPresent
+  # The control API port, and what CAMOFOX_URL points at.
+  port: 9377
+  # Overrides the loopback URL handed to the agent. Set this to run against a
+  # Camofox that is not this sidecar; leave empty for the sidecar.
+  url: ""
+  # uBlock Origin is fetched from addons.mozilla.org on first start, and a
+  # failed download leaves a broken addon cache that blocks startup - so it is
+  # off by default. Turn it on where that host is reliably reachable.
+  defaultAddons: false
+  # Node's V8 heap. Upstream defaults to 128MB, which is where a Firefox
+  # driver with several tabs open falls over.
+  maxOldSpaceSize: 512
+  # Kept for the browser's own /dev/shm; Firefox is unhappy in the default 64MB.
+  shm:
+    enabled: true
+    sizeLimit: 512Mi
+  # Any other CAMOFOX_*/PROXY_* variable from upstream's table. Proxy
+  # credentials belong in secrets.existingSecret, not here.
+  extraEnv: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+  # Weaker than the agent's own securityContext, deliberately and explicitly:
+  # upstream bakes the Camoufox bundle into /root/.cache/camoufox and sets no
+  # USER, and Firefox wants a writable profile directory. Pinning
+  # runAsUser/runAsNonRoot/readOnlyRootFilesystem without exercising the built
+  # image ships a CrashLoopBackOff, so they are left out until the published
+  # image has been run. Add them in your own values once you have.
+  securityContext:
+    allowPrivilegeEscalation: false
+    privileged: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
 service:
   enabled: false
   type: ClusterIP
