@@ -2,8 +2,8 @@ apiVersion: v2
 name: hermes-agent
 description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root, egress-restricted by default, with managed-secret and supply-chain guardrails.
 type: application
-version: 0.1.4
-appVersion: "v2026.8.16"
+version: 0.1.5
+appVersion: "v2026.8.19"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 
@@ -52,7 +52,7 @@ annotations:
     url: https://github.com/ankraio/ankra-charts#verifying-a-published-chart
   artifacthub.io/images: |
     - name: hermes-agent
-      image: docker.io/nousresearch/hermes-agent:v2026.8.16@sha256:f8f548d87d16634d1ad9e3777280f3f577ba2358703f04e18e74007ffd3621bf
+      image: docker.io/nousresearch/hermes-agent:v2026.8.19@sha256:3811ed13da874fba2ac99b6d492db9a203d34cb6dccf90d886948c00d0ccec09
   artifacthub.io/changes: |
     - kind: added
       description: "The data volume now carries helm.sh/resource-policy: keep by default, so `helm uninstall` no longer deletes the agent's memory, sessions and platform pairings. Set persistence.keepOnUninstall=false for the old behaviour."
