@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Print a Claude Code OAuth token for the wrapper's `auth.method: session`.
+
+The token is read from a claude-swap account (https://pypi.org/project/claude-swap/),
+which is where a machine that runs several Claude Code logins keeps them. Nothing
+is sent anywhere: it shells out to `claude-swap export`, which reads the local
+credential store, and writes the token to stdout.
+
+    claude-session-token                          # the active account's token
+    claude-session-token --account mark@ankra.ai  # a specific account
+    claude-session-token --format env             # export CLAUDE_CODE_OAUTH_TOKEN=...
+    claude-session-token --format secret | kubectl apply -f -
+    claude-session-token --format ankra           # the stack-profile apply command
+
+A `claude setup-token` token is long-lived and is what a deployment wants. A
+token captured from an interactive login expires on its own schedule and the pod
+cannot refresh it, so this warns on stderr and prints the expiry when it sees one.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import shutil
+import subprocess
+import sys
+
+PROFILE_SECRET_PARAMETER = "manifest.claude-credentials.stringData.CLAUDE_CODE_OAUTH_TOKEN"
+
+
+def fail(message: str) -> None:
+    print(f"claude-session-token: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def export_account(account: str | None) -> dict:
+    """Return the one account entry from `claude-swap export`."""
+    if shutil.which("claude-swap") is None:
+        fail("claude-swap is not on PATH - install it with `uv tool install claude-swap`")
+
+    command = ["claude-swap", "export", "-"]
+    if account is not None:
+        command += ["--account", account]
+    completed = subprocess.run(command, capture_output=True, text=True)
+    if completed.returncode != 0:
+        fail(f"claude-swap export failed: {completed.stderr.strip() or completed.stdout.strip()}")
+
+    try:
+        envelope = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        fail(f"claude-swap export did not return JSON: {error}")
+
+    accounts = envelope.get("accounts") or []
+    if not accounts:
+        fail("claude-swap has no accounts to export")
+    if account is None and len(accounts) > 1:
+        active = envelope.get("activeAccountNumber")
+        matching = [entry for entry in accounts if entry.get("number") == active]
+        if not matching:
+            names = ", ".join(str(entry.get("email")) for entry in accounts)
+            fail(f"claude-swap has no active account - pass --account (one of: {names})")
+        return matching[0]
+    return accounts[0]
+
+
+def token_from_account(entry: dict) -> tuple[str, int | None]:
+    """Return (token, expiry in epoch milliseconds or None) for one account entry.
+
+    claude-swap stores three shapes: an interactive login (accessToken plus a
+    refreshToken and expiresAt), a `claude setup-token` token (accessToken only),
+    and a managed API key (the raw sk-ant-api... string, tagged kind=api_key).
+    """
+    if entry.get("kind") == "api_key":
+        fail(
+            f"account {entry.get('email')} holds an Anthropic API key, not a Claude Code "
+            "session. Deploy the chart with auth.method=api-key and ANTHROPIC_API_KEY instead."
+        )
+
+    credentials = entry.get("credentials")
+    if not isinstance(credentials, dict):
+        fail(f"account {entry.get('email')} has no OAuth credentials stored")
+
+    oauth = credentials.get("claudeAiOauth")
+    if not isinstance(oauth, dict) or not oauth.get("accessToken"):
+        fail(f"account {entry.get('email')} has no access token stored")
+
+    expires_at = oauth.get("expiresAt")
+    return oauth["accessToken"], expires_at if isinstance(expires_at, (int, float)) else None
+
+
+def warn_about_expiry(email: str, expires_at: int | None) -> None:
+    if expires_at is None:
+        print(
+            f"claude-session-token: {email} is a long-lived token (no expiry recorded) - "
+            "good for a deployment.",
+            file=sys.stderr,
+        )
+        return
+
+    expiry = datetime.datetime.fromtimestamp(expires_at / 1000, datetime.timezone.utc)
+    remaining = expiry - datetime.datetime.now(datetime.timezone.utc)
+    hours = remaining.total_seconds() / 3600
+    when = expiry.strftime("%Y-%m-%d %H:%M UTC")
+    if hours <= 0:
+        state = "already expired"
+    else:
+        state = f"expires in {hours:.1f}h"
+    print(
+        f"claude-session-token: {email} is an interactive-login token, {state} ({when}). "
+        "The pod cannot refresh it. For anything you leave running, use `claude setup-token` "
+        "and register it with `claude-swap add-token`.",
+        file=sys.stderr,
+    )
+
+
+def render(token: str, output_format: str, namespace: str, secret_name: str,
+           profile: str, account: str | None) -> str:
+    if output_format == "token":
+        return token
+    if output_format == "env":
+        return f"export CLAUDE_CODE_OAUTH_TOKEN={token}"
+    if output_format == "secret":
+        return json.dumps(
+            {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {"name": secret_name, "namespace": namespace},
+                "type": "Opaque",
+                "stringData": {"CLAUDE_CODE_OAUTH_TOKEN": token},
+            },
+            indent=2,
+        )
+    # Deliberately token-free: the value travels through the environment, never
+    # through a command line that ps and the shell history can both read.
+    account_flag = f" --account {account}" if account else ""
+    return (
+        f'export CLAUDE_CODE_OAUTH_TOKEN="$(claude-session-token{account_flag})"\n'
+        f"ankra stack-profiles apply {profile} \\\n"
+        f"  --set-env {PROFILE_SECRET_PARAMETER}=CLAUDE_CODE_OAUTH_TOKEN"
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Print a Claude Code session token from a claude-swap account.")
+    parser.add_argument("--account", help="claude-swap slot number or email (default: the active account)")
+    parser.add_argument("--format", default="token", choices=("token", "env", "secret", "ankra"),
+                        help="how to print the token (default: token)")
+    parser.add_argument("--namespace", default="claude", help="namespace for --format secret")
+    parser.add_argument("--secret-name", default="claude-credentials", help="name for --format secret")
+    parser.add_argument("--profile", default="claude-code-session", help="profile name for --format ankra")
+    arguments = parser.parse_args()
+
+    entry = export_account(arguments.account)
+    token, expires_at = token_from_account(entry)
+    warn_about_expiry(str(entry.get("email")), expires_at)
+    print(render(token, arguments.format, arguments.namespace,
+                 arguments.secret_name, arguments.profile, arguments.account))
+
+
+if __name__ == "__main__":
+    main()
