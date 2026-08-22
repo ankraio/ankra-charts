@@ -72,6 +72,7 @@ the internet, so the chart refuses it.
 | `auth.method` | What the chart does | What you provide |
 | --- | --- | --- |
 | `api-key` (default) | Sets `CLAUDE_AUTH_METHOD=api_key` | `ANTHROPIC_API_KEY` in the configured Secret |
+| `session` | Sets `CLAUDE_AUTH_METHOD=cli`, so the bundled Claude Code CLI authenticates as a subscription | `CLAUDE_CODE_OAUTH_TOKEN` in the configured Secret |
 | `bedrock` | Sets `CLAUDE_CODE_USE_BEDROCK=1` and `AWS_REGION` from `auth.bedrock.region` | AWS credentials in the Secret, or none at all with IRSA/pod identity (`serviceAccount.annotations`) |
 | `vertex` | Sets `CLAUDE_CODE_USE_VERTEX=1`, `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION` | GCP credentials via Workload Identity, or a mounted service-account key |
 
@@ -81,6 +82,43 @@ already manage (`secrets.existingSecret`), the External Secrets Operator
 Every key of the Secret lands in the container environment verbatim, so use the
 wrapper's own variable names (`ANTHROPIC_API_KEY`, `API_KEY`,
 `AWS_ACCESS_KEY_ID`, ...).
+
+### Where the session token comes from
+
+`auth.method: session` bills usage to a Claude subscription instead of a metered
+API key, so what it needs is an OAuth token rather than an `sk-ant-api...` key.
+Two kinds of token authenticate identically and behave very differently once
+deployed:
+
+| Source | Lifetime | Use it for |
+| --- | --- | --- |
+| `claude setup-token` | long-lived, independent of your local session | anything you leave running |
+| an interactive Claude Code login | expires on its own schedule; **the pod cannot refresh it** | a demo you are watching |
+
+The second one is the trap: it authenticates on day one and the deployment goes
+quiet later with no config change to blame. Mint a setup-token instead.
+
+If you keep several Claude Code logins on one machine with
+[claude-swap](https://pypi.org/project/claude-swap/), the token is already on
+disk, and `scripts/claude-session-token` in this repository reads it out of the
+account you name:
+
+```bash
+# a Secret this chart's secrets.existingSecret can point at
+claude-session-token --account mark@ankra.ai --format secret | kubectl apply -f -
+
+# or straight into the Ankra stack profile, without the token touching a
+# command line, the shell history, or ps output
+export CLAUDE_CODE_OAUTH_TOKEN="$(claude-session-token --account 2)"
+ankra stack-profiles apply claude-code-session \
+  --set-env manifest.claude-credentials.stringData.CLAUDE_CODE_OAUTH_TOKEN=CLAUDE_CODE_OAUTH_TOKEN
+```
+
+It refuses an account holding a managed API key (that is `auth.method: api-key`,
+a different Secret key) and prints the expiry on stderr when the account holds a
+short-lived login token, so the trap above is visible before you deploy rather
+than a week later. Register a setup-token as its own claude-swap account with
+`claude-swap add-token`, and this reads that instead.
 
 ## Scaling and sessions
 
