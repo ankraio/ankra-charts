@@ -153,6 +153,10 @@ jobs:
           refuses "cluster network reachable"      --set 'networkPolicy.egress.excludedCidrs={169.254.0.0/16}'
           refuses "wildcard CORS"                  --set secrets.existingSecret=h --set apiServer.enabled=true --set apiServer.corsOrigins='*'
           refuses "unknown values key"             --set secrets.existingSecret=h --set totallyNotAValue=1
+          refuses "inline provider api_key"        --set secrets.existingSecret=h --set config.values.providers.salad.api=https://ai.salad.cloud/v1 --set config.values.providers.salad.api_key=ci-placeholder
+          refuses "provider key_env the pod lacks" --set config.values.providers.salad.api=https://ai.salad.cloud/v1 --set config.values.providers.salad.key_env=SALAD_API_KEY
+          refuses "in-cluster model, no egress"    --set secrets.existingSecret=h --set config.values.model.provider=lmstudio --set config.values.model.base_url=http://model.claude.svc:8000/v1
+          refuses "fallback entry without model"   --set secrets.existingSecret=h --set config.values.fallback_providers[0].provider=openrouter
           exit "${status}"
 
       - name: The shipped defaults must still render

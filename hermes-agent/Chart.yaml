@@ -2,7 +2,7 @@ apiVersion: v2
 name: hermes-agent
 description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root, egress-restricted by default, with managed-secret and supply-chain guardrails.
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "v2026.8.16"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
@@ -55,8 +55,10 @@ annotations:
       image: docker.io/nousresearch/hermes-agent:v2026.8.16@sha256:f8f548d87d16634d1ad9e3777280f3f577ba2358703f04e18e74007ffd3621bf
   artifacthub.io/changes: |
     - kind: added
-      description: "The data volume now carries helm.sh/resource-policy: keep by default, so `helm uninstall` no longer deletes the agent's memory, sessions and platform pairings. Set persistence.keepOnUninstall=false for the old behaviour."
+      description: "Several model endpoints at once: config.values.providers declares named OpenAI-compatible endpoints with their own key_env, model.provider picks the main one, /model switches between them, and config.values.fallback_providers is the failover chain Hermes moves to on 429/5xx/401/404 without losing the conversation. values-examples/multi-provider.yaml shows Salad plus an in-cluster Claude Code wrapper side by side."
+    - kind: security
+      description: "An inline api_key on the main model, a named provider or a fallback entry is refused unless hardening.allowInlineSecrets=true."
     - kind: fixed
-      description: "0.1.1 started but the agent could not write its state on a PersistentVolume: HERMES_UID silently no-ops under a read-only root filesystem, so the agent keeps the image's native uid 10000 while fsGroup owned the volume as 1000. The chart now aligns on 10000 and the bootstrap init container chowns the data volume."
+      description: "A model endpoint on a .svc, .cluster.local, loopback or RFC1918 address is refused at render time unless networkPolicy.egress.extra carries a rule for it: the default egress excludes private networks, so such a deployment came up green and then had every model call dropped by its own policy."
     - kind: fixed
-      description: "0.1.0 could not start: the image runs s6-overlay as PID 1 and its bootstrap refuses a pinned non-root UID, so the hardened podSecurityContext produced a CrashLoopBackOff. The pod now enters as root and drops to env.HERMES_UID, keeps a read-only root filesystem via a writable /run, and pinning runAsUser is refused at render time with an explanation."
+      description: "A key_env nothing in the release puts on the pod, a fallback entry missing provider or model, and a model.base_url contradicting a named model.provider are refused at render time instead of being silently ignored by Hermes."

@@ -2,6 +2,44 @@
 
 All notable changes to the `hermes-agent` chart.
 
+## 0.3.0 - 2026-08-23
+
+### Added
+
+- **Several model endpoints at once.** `config.values.providers` declares named
+  OpenAI-compatible endpoints, each with its own `key_env`; `model.provider`
+  picks the main one by name, `/model` switches a session between them, and
+  `config.values.fallback_providers` is the chain Hermes fails over to on
+  429/5xx/401/404 without losing the conversation. Until now the chart modelled
+  exactly one endpoint (`model.*` plus one `LM_BASE_URL`/`LM_API_KEY` pair), so
+  holding a hosted API and an in-cluster gateway side by side meant editing
+  `config.yaml` by hand on every switch. Both keys are typed in
+  `values.schema.json`, documented in the README, and shown end to end in
+  `values-examples/multi-provider.yaml` (Salad + the Claude Code wrapper).
+  Hermes `v2026.8.16`, the pinned image, already reads both keys.
+
+### Security
+
+- An inline `api_key` on the main model, a named provider or a fallback entry is
+  refused unless `hardening.allowInlineSecrets=true`, with the value path in
+  the message - it would otherwise land in the rendered `config.yaml` as well as
+  the release Secret.
+
+### Fixed
+
+- **A model endpoint the NetworkPolicy would drop is refused at render time.**
+  `model.base_url`, a provider `api` or a fallback `base_url` on a `.svc`,
+  `.cluster.local`, loopback or RFC1918 address now fails unless
+  `networkPolicy.egress.extra` (or `tenantIsolation.additionalEgress`) carries
+  a rule, the private ranges have been un-excluded, or the policy is off. The
+  default egress excludes private networks, so such a deployment came up green
+  and then had every model call dropped by its own policy - invisible on a CNI
+  that does not enforce NetworkPolicy, fatal on one that does.
+- A `key_env` that nothing in the release puts on the pod is refused when the
+  Secret is chart-managed; a fallback entry missing `provider` or `model` is
+  refused (Hermes silently skips it); `model.base_url` contradicting a named
+  `model.provider` is refused.
+
 ## 0.2.0 - 2026-08-18
 
 ### Added

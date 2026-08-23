@@ -124,7 +124,10 @@ Two things to know:
   Antrea do; some managed CNIs and plain flannel do not. On a CNI that ignores
   policies the manifest is decoration.
 - **Egress to an in-cluster model gateway needs an explicit rule**, because
-  RFC1918 is excluded. See `values-examples/air-gapped.yaml`.
+  RFC1918 is excluded. See `values-examples/air-gapped.yaml`. The chart refuses
+  to render a model endpoint on a `.svc`, `.cluster.local` or private address
+  until `networkPolicy.egress.extra` has a rule for it, so this cannot fail
+  silently at runtime.
 
 ## Configuration
 
@@ -140,6 +143,57 @@ Two defaults differ from the Hermes sample configuration on purpose:
 |---|---|---|
 | `security.tirith_fail_open` | `false` | Upstream fails open: if the policy engine errors, the request proceeds unchecked. |
 | `browser.allow_private_urls` | `false` | Second line of defence behind the NetworkPolicy - the browser tool should not fetch cluster-internal URLs. |
+
+### Several model endpoints: switchable, with failover
+
+`config.values.model` is the main model, and on its own it holds exactly one
+endpoint. To keep two or more available at once - a hosted API and an
+in-cluster gateway, say - declare each as a named entry under
+`config.values.providers` and pick the main one by name:
+
+```yaml
+config:
+  values:
+    model:
+      provider: salad
+      default: qwen3.6-35b-a3b
+      base_url: ""            # the endpoint comes from providers.salad
+    providers:
+      salad:
+        api: https://ai.salad.cloud/v1
+        key_env: SALAD_API_KEY
+        discover_models: false
+        models: [qwen3.6-35b-a3b]
+      claude-code:
+        api: http://claude-code-openai-wrapper.claude.svc:8000/v1
+        key_env: CLAUDE_CODE_WRAPPER_API_KEY
+        discover_models: false
+        models: [claude-sonnet-4-6]
+    fallback_providers:
+      - provider: claude-code
+        model: claude-sonnet-4-6
+```
+
+Every named provider is selectable: `/model` in Telegram, Discord or the
+dashboard chat switches the current session between them, and the dashboard's
+Models page lists each one with its `models`. `fallback_providers` is the
+ordered chain Hermes moves to, mid-conversation, when the main model answers
+429, 5xx, 401/403 or 404 - for the rest of that turn, then it retries the
+primary on the next message. Swapping which endpoint is primary is a one-word
+edit to `model.provider` (and a restart, since `bootstrap.overwrite=true`
+re-seeds `config.yaml`). A fallback entry can also spell out `provider: custom`
+with its own `base_url` and `key_env` instead of naming a provider.
+
+Credentials never go in values: `key_env` names a key of the Secret the pod
+mounts (`secrets.existingSecret`, the ExternalSecret target, or
+`extraEnvFrom`), one per provider, and the chart refuses an inline `api_key`
+anywhere on a model endpoint unless `hardening.allowInlineSecrets=true`. It
+also refuses a `key_env` that nothing in the release puts on the pod, a
+fallback entry missing `provider` or `model` (Hermes would drop it without a
+word), a `model.base_url` that contradicts the named provider, and an
+in-cluster endpoint with no `networkPolicy.egress.extra` rule.
+`values-examples/multi-provider.yaml` is the complete version of the snippet
+above, egress rule included.
 
 ## Giving the agent a browser
 

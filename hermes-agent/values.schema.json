@@ -158,7 +158,219 @@
           "type": "string"
         },
         "values": {
-          "type": "object"
+          "type": "object",
+          "description": "Partial Hermes config.yaml. Only the model-endpoint keys are typed here; everything else passes through.",
+          "properties": {
+            "model": {
+              "type": "object",
+              "properties": {
+                "default": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string",
+                  "description": "A built-in Hermes provider, or the name of an entry under `providers`."
+                },
+                "base_url": {
+                  "type": "string",
+                  "description": "Only for built-in providers; empty when `provider` names a `providers` entry."
+                },
+                "api_mode": {
+                  "type": "string"
+                },
+                "api_key": {
+                  "type": "string",
+                  "description": "Refused unless hardening.allowInlineSecrets=true."
+                }
+              },
+              "additionalProperties": true
+            },
+            "providers": {
+              "type": "object",
+              "description": "Named endpoints the agent can be pointed at, switched to with /model, or fall back to.",
+              "additionalProperties": {
+                "type": "object",
+                "description": "One OpenAI-compatible endpoint. `api` is the base URL; `key_env` names the env var holding its key (a key of the Secret the pod mounts). Any other key Hermes accepts for a provider entry passes through.",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "base_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "key_env": {
+                    "type": "string"
+                  },
+                  "api_key_env": {
+                    "type": "string"
+                  },
+                  "api_key": {
+                    "type": "string",
+                    "description": "Refused unless hardening.allowInlineSecrets=true."
+                  },
+                  "api_mode": {
+                    "type": "string",
+                    "enum": [
+                      "chat_completions",
+                      "codex_responses",
+                      "anthropic_messages",
+                      "bedrock_converse"
+                    ]
+                  },
+                  "transport": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "default_model": {
+                    "type": "string"
+                  },
+                  "models": {
+                    "type": [
+                      "array",
+                      "object"
+                    ]
+                  },
+                  "discover_models": {
+                    "type": "boolean"
+                  },
+                  "context_length": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "extra_headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "extra_body": {
+                    "type": "object"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "fallback_providers": {
+              "type": "array",
+              "description": "Ordered failover chain tried when the main model returns 429/5xx/401/404.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "provider",
+                  "model"
+                ],
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "base_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "key_env": {
+                    "type": "string"
+                  },
+                  "api_key_env": {
+                    "type": "string"
+                  },
+                  "api_key": {
+                    "type": "string",
+                    "description": "Refused unless hardening.allowInlineSecrets=true."
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "fallback_model": {
+              "description": "Legacy single-fallback key; prefer fallback_providers.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "provider",
+                    "model"
+                  ],
+                  "properties": {
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "base_url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "key_env": {
+                      "type": "string"
+                    },
+                    "api_key_env": {
+                      "type": "string"
+                    },
+                    "api_key": {
+                      "type": "string",
+                      "description": "Refused unless hardening.allowInlineSecrets=true."
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "provider",
+                      "model"
+                    ],
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "model": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "base_url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "key_env": {
+                        "type": "string"
+                      },
+                      "api_key_env": {
+                        "type": "string"
+                      },
+                      "api_key": {
+                        "type": "string",
+                        "description": "Refused unless hardening.allowInlineSecrets=true."
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                }
+              ]
+            }
+          },
+          "additionalProperties": true
         }
       }
     },

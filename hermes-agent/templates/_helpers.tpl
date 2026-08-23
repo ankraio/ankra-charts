@@ -192,6 +192,93 @@ True when the Secret consumed by the pod is managed outside this release.
 {{- end -}}
 
 {{/*
+Named model endpoints declared under config.values.providers, as JSON.
+*/}}
+{{- define "hermes-agent.modelProviders" -}}
+{{- $config := .Values.config.values | default dict -}}
+{{- $providers := $config.providers | default dict -}}
+{{- if not (kindIs "map" $providers) -}}
+{{- fail "config.values.providers must be a map of <name>: {api, key_env, ...}" -}}
+{{- end -}}
+{{- $providers | toJson -}}
+{{- end -}}
+
+{{/*
+The fallback chain declared under config.values.fallback_providers, as JSON.
+*/}}
+{{- define "hermes-agent.fallbackProviders" -}}
+{{- $config := .Values.config.values | default dict -}}
+{{- $chain := $config.fallback_providers | default list -}}
+{{- if not (kindIs "slice" $chain) -}}
+{{- fail "config.values.fallback_providers must be a list of {provider, model, ...} entries" -}}
+{{- end -}}
+{{- $chain | toJson -}}
+{{- end -}}
+
+{{/*
+The URL a provider entry points at. Hermes accepts `api` (current), `base_url`
+(legacy) or `url`.
+*/}}
+{{- define "hermes-agent.providerEndpoint" -}}
+{{- if kindIs "map" . -}}
+{{- $endpoint := coalesce .api .base_url .url -}}
+{{- if $endpoint -}}{{- $endpoint | toString | trim -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+True when a URL resolves inside the cluster or a private network, which the
+default NetworkPolicy egress excludes.
+*/}}
+{{- define "hermes-agent.isClusterInternalUrl" -}}
+{{- $url := . | toString | lower -}}
+{{- if regexMatch "^https?://(localhost|127\\.[0-9.]+|10\\.[0-9]+\\.[0-9]+\\.[0-9]+|192\\.168\\.[0-9]+\\.[0-9]+|172\\.(1[6-9]|2[0-9]|3[01])\\.[0-9]+\\.[0-9]+|[^/:]+\\.svc(\\.cluster\\.local)?|[^/:]+\\.cluster\\.local)(:[0-9]+)?(/.*)?$" $url -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Model-endpoint entries (main model, named providers, fallback chain) that carry
+an inline api_key, as a JSON array of value paths.
+*/}}
+{{- define "hermes-agent.inlineModelSecretPaths" -}}
+{{- $paths := list -}}
+{{- $config := .Values.config.values | default dict -}}
+{{- $model := $config.model | default dict -}}
+{{- if and (kindIs "map" $model) (ne (printf "%v" ($model.api_key | default "")) "") -}}
+{{- $paths = append $paths "config.values.model.api_key" -}}
+{{- end -}}
+{{- range $name, $entry := include "hermes-agent.modelProviders" . | fromJson -}}
+{{- if and (kindIs "map" $entry) (ne (printf "%v" ($entry.api_key | default "")) "") -}}
+{{- $paths = append $paths (printf "config.values.providers.%s.api_key" $name) -}}
+{{- end -}}
+{{- end -}}
+{{- range $index, $entry := include "hermes-agent.fallbackProviders" . | fromJsonArray -}}
+{{- if and (kindIs "map" $entry) (ne (printf "%v" ($entry.api_key | default "")) "") -}}
+{{- $paths = append $paths (printf "config.values.fallback_providers[%d].api_key" $index) -}}
+{{- end -}}
+{{- end -}}
+{{- $paths | toJson -}}
+{{- end -}}
+
+{{/*
+Names of the environment variables the chart itself puts on the agent
+container: env, extraEnv and the inline secret keys. Keys that arrive through
+secrets.existingSecret, externalSecret or extraEnvFrom are not visible here.
+*/}}
+{{- define "hermes-agent.chartManagedEnvNames" -}}
+{{- $names := list -}}
+{{- range $name, $_ := .Values.env | default dict -}}
+{{- $names = append $names $name -}}
+{{- end -}}
+{{- range .Values.extraEnv | default list -}}
+{{- if and (kindIs "map" .) .name -}}
+{{- $names = append $names .name -}}
+{{- end -}}
+{{- end -}}
+{{- $names = concat $names (include "hermes-agent.inlineSecretKeys" . | fromJsonArray) -}}
+{{- $names | uniq | toJson -}}
+{{- end -}}
+
+{{/*
 Service/container ports, as a JSON array. Explicit service.ports wins;
 otherwise every enabled listener contributes its configured port.
 */}}

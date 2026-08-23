@@ -1,0 +1,222 @@
+suite: model providers and fallback chain
+templates:
+  - templates/validate.yaml
+  - templates/configmap.yaml
+release:
+  name: ut
+  namespace: hermes
+tests:
+  - it: renders the multi-provider example into config.yaml as written
+    template: templates/configmap.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "providers:\n  claude-code:\n    api: http://claude-code-openai-wrapper.claude.svc:8000/v1"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "  salad:\n    api: https://ai.salad.cloud/v1\n    discover_models: false\n    key_env: SALAD_API_KEY"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "fallback_providers:\n- model: claude-sonnet-4-6\n  provider: claude-code"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "model:\n  base_url: \"\"\n  default: qwen3.6-35b-a3b\n  provider: salad"
+
+  - it: accepts the multi-provider example under the guardrails
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses a provider entry without an endpoint
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      config.values.providers.salad.api: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.providers.salad has no endpoint"
+
+  - it: refuses a key_env that nothing on the pod provides
+    template: templates/validate.yaml
+    set:
+      config.values.providers.salad.api: https://ai.salad.cloud/v1
+      config.values.providers.salad.key_env: SALAD_API_KEY
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.providers.salad.key_env names SALAD_API_KEY, but nothing in this release puts that variable on the pod"
+
+  - it: trusts key_env when the Secret is managed outside the release
+    template: templates/validate.yaml
+    set:
+      secrets.existingSecret: hermes-credentials
+      config.values.providers.salad.api: https://ai.salad.cloud/v1
+      config.values.providers.salad.key_env: SALAD_API_KEY
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: accepts key_env backed by a waived inline secret
+    template: templates/validate.yaml
+    set:
+      hardening.allowInlineSecrets: true
+      secrets.SALAD_API_KEY: ci-placeholder
+      config.values.providers.salad.api: https://ai.salad.cloud/v1
+      config.values.providers.salad.key_env: SALAD_API_KEY
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses an inline api_key on a provider and names the path
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      config.values.providers.salad.api_key: ci-placeholder
+    asserts:
+      - failedTemplate:
+          errorPattern: "inline api_key values on model endpoints are refused \\(config.values.providers.salad.api_key\\)"
+
+  - it: refuses an inline api_key on a fallback entry and on the main model
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      config.values.model.api_key: ci-placeholder
+      config.values.fallback_providers[0].api_key: ci-placeholder
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.model.api_key, config.values.fallback_providers\\[0\\].api_key"
+
+  - it: accepts inline api_key values once they are waived
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      hardening.allowInlineSecrets: true
+      config.values.providers.salad.api_key: ci-placeholder
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses a model.base_url that contradicts the named provider
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      config.values.model.base_url: https://openrouter.ai/api/v1
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.model.provider names providers.salad \\(https://ai.salad.cloud/v1\\) but config.values.model.base_url is https://openrouter.ai/api/v1"
+
+  - it: tolerates a model.base_url equal to the named provider endpoint
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      config.values.model.base_url: https://ai.salad.cloud/v1/
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses a fallback entry missing its model
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      config.values.fallback_providers[0].model: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.fallback_providers\\[0\\] needs both `provider` and `model`"
+
+  - it: refuses a custom fallback without a base_url
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      config.values.fallback_providers[0].provider: custom
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.fallback_providers\\[0\\] uses provider `custom` without `base_url`"
+
+  - it: accepts a custom fallback spelled out with base_url and key_env
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      config.values.fallback_providers:
+        - provider: custom
+          model: claude-sonnet-4-6
+          base_url: http://claude-code-openai-wrapper.claude.svc:8000/v1
+          key_env: CLAUDE_CODE_WRAPPER_API_KEY
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses an in-cluster provider the NetworkPolicy would drop
+    template: templates/validate.yaml
+    values:
+      - ../values-examples/multi-provider.yaml
+    set:
+      networkPolicy.egress.extra: []
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.providers.claude-code points at http://claude-code-openai-wrapper.claude.svc:8000/v1, inside the cluster, but the NetworkPolicy egress excludes private networks"
+
+  - it: refuses an in-cluster main model the NetworkPolicy would drop
+    template: templates/validate.yaml
+    set:
+      secrets.existingSecret: hermes-credentials
+      config.values.model.provider: lmstudio
+      config.values.model.base_url: http://claude-code-openai-wrapper.claude.svc:8000/v1
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.model.base_url points at http://claude-code-openai-wrapper.claude.svc:8000/v1, inside the cluster"
+
+  - it: accepts an in-cluster main model once private egress is opened
+    template: templates/validate.yaml
+    set:
+      secrets.existingSecret: hermes-credentials
+      config.values.model.provider: lmstudio
+      config.values.model.base_url: http://claude-code-openai-wrapper.claude.svc:8000/v1
+      hardening.allowClusterInternalEgress: true
+      networkPolicy.egress.excludedCidrs:
+        - 169.254.0.0/16
+        - 127.0.0.0/8
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: leaves a public main model alone
+    template: templates/validate.yaml
+    set:
+      secrets.existingSecret: hermes-credentials
+      config.values.model.provider: openrouter
+      config.values.model.base_url: https://openrouter.ai/api/v1
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses providers that are not a map
+    template: templates/validate.yaml
+    set:
+      config.values.providers:
+        - salad
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.providers must be a map"
+
+  - it: refuses a fallback chain that is not a list
+    template: templates/validate.yaml
+    set:
+      config.values.fallback_providers:
+        provider: openrouter
+        model: anthropic/claude-sonnet-4
+    asserts:
+      - failedTemplate:
+          errorPattern: "config.values.fallback_providers must be a list"

@@ -67,10 +67,43 @@ config:
   raw: ""
   # Partial Hermes config.yaml written to HERMES_HOME/config.yaml.
   values:
+    # The main model. `provider` is a built-in Hermes provider, or the name of
+    # an entry under `providers` below; `base_url` only applies to built-ins
+    # and must be left empty when `provider` names a `providers` entry.
     model:
       default: anthropic/claude-opus-4.6
       provider: auto
       base_url: https://openrouter.ai/api/v1
+    # Named OpenAI-compatible endpoints the agent can use side by side. Each
+    # entry is a provider of its own: point `model.provider` at one, switch
+    # to another mid-session with `/model`, or list one in
+    # `fallback_providers`. `key_env` names an env var the pod already
+    # carries (a key of secrets.existingSecret / the ExternalSecret target);
+    # an inline `api_key` is refused by hardening.allowInlineSecrets. An
+    # endpoint inside the cluster also needs a networkPolicy.egress.extra
+    # rule, because the default egress excludes RFC1918 (see
+    # values-examples/multi-provider.yaml).
+    #
+    #   providers:
+    #     salad:
+    #       api: https://ai.salad.cloud/v1
+    #       key_env: SALAD_API_KEY
+    #       discover_models: false
+    #       models: [qwen3.6-35b-a3b]
+    #     claude-code:
+    #       api: http://claude-code-openai-wrapper.claude.svc:8000/v1
+    #       key_env: CLAUDE_CODE_WRAPPER_API_KEY
+    #       discover_models: false
+    #       models: [claude-sonnet-4-6]
+    #
+    # Ordered chain Hermes fails over to when the main model returns 429/5xx,
+    # 401/403 or 404, for the rest of that turn. Each entry needs `provider`
+    # (a built-in, a `providers` name, or `custom` with its own `base_url` and
+    # `key_env`) and `model`.
+    #
+    #   fallback_providers:
+    #     - provider: claude-code
+    #       model: claude-sonnet-4-6
     agent:
       max_turns: 90
       gateway_timeout: 1800
