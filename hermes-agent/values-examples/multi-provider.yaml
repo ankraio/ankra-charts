@@ -1,0 +1,64 @@
+# Two model endpoints side by side: a hosted OpenAI-compatible API (Salad) as
+# the main model and an in-cluster Claude Code wrapper as the fallback. Both
+# are named providers, so `/model` in any chat switches between them and the
+# fallback chain covers a 429/5xx/401/404 on the main one without losing the
+# conversation. Swapping which is primary is a one-word change to
+# model.provider.
+#
+# Create the Secret first - one key per provider, named by key_env:
+#
+#   kubectl -n hermes create secret generic hermes-credentials \
+#     --from-literal=TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+#     --from-literal=SALAD_API_KEY="$SALAD_API_KEY" \
+#     --from-literal=CLAUDE_CODE_WRAPPER_API_KEY="$CLAUDE_CODE_WRAPPER_API_KEY"
+#
+#   helm install hermes ankra/hermes-agent -n hermes --create-namespace \
+#     -f hermes-agent/values-examples/multi-provider.yaml
+
+secrets:
+  existingSecret: hermes-credentials
+
+config:
+  values:
+    model:
+      provider: salad
+      default: qwen3.6-35b-a3b
+      # Must stay empty: the endpoint comes from providers.salad.
+      base_url: ""
+    providers:
+      salad:
+        api: https://ai.salad.cloud/v1
+        key_env: SALAD_API_KEY
+        discover_models: false
+        models:
+          - qwen3.6-35b-a3b
+      claude-code:
+        api: http://claude-code-openai-wrapper.claude.svc:8000/v1
+        key_env: CLAUDE_CODE_WRAPPER_API_KEY
+        discover_models: false
+        models:
+          - claude-sonnet-4-6
+    fallback_providers:
+      - provider: claude-code
+        model: claude-sonnet-4-6
+    agent:
+      # qwen3.6-35b-a3b reasons before it answers, so keep the turn budget high.
+      max_turns: 90
+      gateway_timeout: 1800
+
+# The default egress is DNS plus public HTTPS with RFC1918 excluded, which
+# would drop every call to the wrapper. This is the hole for it: nothing else
+# in the cluster becomes reachable.
+networkPolicy:
+  egress:
+    extra:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: claude
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: claude-code-openai-wrapper
+        ports:
+          - protocol: TCP
+            port: 8000

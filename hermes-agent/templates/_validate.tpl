@@ -54,6 +54,77 @@ needs a weaker posture has to say so explicitly, in values, under review.
 {{- if and .Values.virtualService.enabled (not .Values.service.enabled) -}}
 {{- fail "virtualService.enabled=true requires service.enabled=true." -}}
 {{- end -}}
+{{- include "hermes-agent.validateModelProviders" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Model endpoints: the main model, the named providers and the fallback chain.
+Hermes silently drops a fallback entry it cannot parse and silently keeps a
+provider whose key is missing, so both are caught here instead.
+*/}}
+{{- define "hermes-agent.validateModelProviders" -}}
+{{- $config := .Values.config.values | default dict -}}
+{{- $model := $config.model | default dict -}}
+{{- $providers := include "hermes-agent.modelProviders" . | fromJson -}}
+{{- $chain := include "hermes-agent.fallbackProviders" . | fromJsonArray -}}
+{{- $envNames := include "hermes-agent.chartManagedEnvNames" . | fromJsonArray -}}
+{{- $envVisible := or (include "hermes-agent.secretManagedExternally" .) (gt (len (.Values.extraEnvFrom | default list)) 0) -}}
+{{- $egress := .Values.networkPolicy.egress -}}
+{{- $excluded := $egress.excludedCidrs | default list -}}
+{{- $privateExcluded := or (has "10.0.0.0/8" $excluded) (has "172.16.0.0/12" $excluded) (has "192.168.0.0/16" $excluded) -}}
+{{- $hasEgressHole := or (gt (len ($egress.extra | default list)) 0) (and .Values.tenantIsolation.enabled (gt (len (.Values.tenantIsolation.additionalEgress | default list)) 0)) -}}
+{{- $internalBlocked := and .Values.networkPolicy.enabled (not $hasEgressHole) (or (not $egress.allowPublicInternet) $privateExcluded) -}}
+
+{{- range $name, $entry := $providers -}}
+{{- if not (kindIs "map" $entry) -}}
+{{- fail (printf "config.values.providers.%s must be a map with at least `api` (the endpoint URL)." $name) -}}
+{{- end -}}
+{{- $endpoint := include "hermes-agent.providerEndpoint" $entry -}}
+{{- if eq $endpoint "" -}}
+{{- fail (printf "config.values.providers.%s has no endpoint: set `api` to the OpenAI-compatible base URL (e.g. https://ai.salad.cloud/v1)." $name) -}}
+{{- end -}}
+{{- $keyEnv := $entry.key_env | default $entry.api_key_env | default "" | toString | trim -}}
+{{- if and (ne $keyEnv "") (not $envVisible) (not (has $keyEnv $envNames)) -}}
+{{- fail (printf "config.values.providers.%s.key_env names %s, but nothing in this release puts that variable on the pod: add it to secrets.existingSecret (or externalSecret / extraEnvFrom), or declare it under secrets.%s." $name $keyEnv $keyEnv) -}}
+{{- end -}}
+{{- if and $internalBlocked (include "hermes-agent.isClusterInternalUrl" $endpoint) -}}
+{{- fail (printf "config.values.providers.%s points at %s, inside the cluster, but the NetworkPolicy egress excludes private networks: add a networkPolicy.egress.extra rule for that namespace, pod and port (see values-examples/multi-provider.yaml)." $name $endpoint) -}}
+{{- end -}}
+{{- end -}}
+
+{{- $modelProvider := $model.provider | default "" | toString | trim -}}
+{{- $modelBaseUrl := $model.base_url | default "" | toString | trim -}}
+{{- if hasKey $providers $modelProvider -}}
+{{- $named := index $providers $modelProvider -}}
+{{- $namedEndpoint := include "hermes-agent.providerEndpoint" $named -}}
+{{- if and (ne $modelBaseUrl "") (ne (trimSuffix "/" $modelBaseUrl) (trimSuffix "/" $namedEndpoint)) -}}
+{{- fail (printf "config.values.model.provider names providers.%s (%s) but config.values.model.base_url is %s: leave base_url empty so the named provider's endpoint is the only one in play." $modelProvider $namedEndpoint $modelBaseUrl) -}}
+{{- end -}}
+{{- else if and $internalBlocked (include "hermes-agent.isClusterInternalUrl" $modelBaseUrl) -}}
+{{- fail (printf "config.values.model.base_url points at %s, inside the cluster, but the NetworkPolicy egress excludes private networks: add a networkPolicy.egress.extra rule for that namespace, pod and port (see values-examples/multi-provider.yaml)." $modelBaseUrl) -}}
+{{- end -}}
+
+{{- range $index, $entry := $chain -}}
+{{- if not (kindIs "map" $entry) -}}
+{{- fail (printf "config.values.fallback_providers[%d] must be a map with `provider` and `model`." $index) -}}
+{{- end -}}
+{{- $provider := $entry.provider | default "" | toString | trim -}}
+{{- $fallbackModel := $entry.model | default "" | toString | trim -}}
+{{- if or (eq $provider "") (eq $fallbackModel "") -}}
+{{- fail (printf "config.values.fallback_providers[%d] needs both `provider` and `model`; Hermes ignores an entry missing either, so the chain would silently be shorter than configured." $index) -}}
+{{- end -}}
+{{- $baseUrl := $entry.base_url | default "" | toString | trim -}}
+{{- if and (eq $provider "custom") (eq $baseUrl "") -}}
+{{- fail (printf "config.values.fallback_providers[%d] uses provider `custom` without `base_url`: set base_url (and key_env), or name an entry under config.values.providers instead." $index) -}}
+{{- end -}}
+{{- $keyEnv := $entry.key_env | default $entry.api_key_env | default "" | toString | trim -}}
+{{- if and (ne $keyEnv "") (not $envVisible) (not (has $keyEnv $envNames)) -}}
+{{- fail (printf "config.values.fallback_providers[%d].key_env names %s, but nothing in this release puts that variable on the pod: add it to secrets.existingSecret (or externalSecret / extraEnvFrom), or declare it under secrets.%s." $index $keyEnv $keyEnv) -}}
+{{- end -}}
+{{- if and $internalBlocked (include "hermes-agent.isClusterInternalUrl" $baseUrl) -}}
+{{- fail (printf "config.values.fallback_providers[%d] points at %s, inside the cluster, but the NetworkPolicy egress excludes private networks: add a networkPolicy.egress.extra rule for that namespace, pod and port (see values-examples/multi-provider.yaml)." $index $baseUrl) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -70,6 +141,11 @@ needs a weaker posture has to say so explicitly, in values, under review.
 
 {{- if and (include "hermes-agent.hasInlineSecrets" .) (not $hardening.allowInlineSecrets) -}}
 {{- fail (printf "inline secret values are refused (%s): plain API keys in values land in the Helm release Secret, in Git and in shell history. Use secrets.existingSecret or externalSecret.enabled, or set hardening.allowInlineSecrets=true." (include "hermes-agent.inlineSecretKeys" .)) -}}
+{{- end -}}
+
+{{- $inlineModelSecretPaths := include "hermes-agent.inlineModelSecretPaths" . | fromJsonArray -}}
+{{- if and (gt (len $inlineModelSecretPaths) 0) (not $hardening.allowInlineSecrets) -}}
+{{- fail (printf "inline api_key values on model endpoints are refused (%s): they land in the rendered config.yaml, the Helm release Secret, Git and shell history. Point key_env at a key of secrets.existingSecret or the ExternalSecret target instead, or set hardening.allowInlineSecrets=true." (join ", " $inlineModelSecretPaths)) -}}
 {{- end -}}
 
 {{- if not .Values.operator.enabled -}}
