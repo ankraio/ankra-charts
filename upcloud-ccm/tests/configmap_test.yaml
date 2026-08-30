@@ -27,3 +27,51 @@ tests:
       - matchRegex:
           path: data["ccm-config.yaml"]
           pattern: 'clusterName: "production-1"'
+
+  - it: defaults the backend address source to the node InternalIP
+    set:
+      ccmConfig.clusterID: my-stable-uuid
+      credentials.username: u
+      credentials.password: p
+    asserts:
+      - matchRegex:
+          path: data["ccm-config.yaml"]
+          pattern: 'loadBalancerBackendAddressSource: "node-internal-ip"'
+
+  - it: renders the private-network backend address source when asked
+    set:
+      ccmConfig.clusterID: my-stable-uuid
+      ccmConfig.loadBalancerBackendAddressSource: private-network
+      credentials.username: u
+      credentials.password: p
+    asserts:
+      - matchRegex:
+          path: data["ccm-config.yaml"]
+          pattern: 'loadBalancerBackendAddressSource: "private-network"'
+
+  # Regression: the template used to render four hardcoded keys, so a
+  # nodeScopeSelector set in values never reached the controller and every
+  # node stayed in scope.
+  - it: renders nodeScopeSelector so the CCM actually scopes its nodes
+    set:
+      ccmConfig.clusterID: my-stable-uuid
+      ccmConfig.nodeScopeSelector.matchLabels.topology\.kubernetes\.io/zone: fi-hel1
+      credentials.username: u
+      credentials.password: p
+    asserts:
+      - matchRegex:
+          path: data["ccm-config.yaml"]
+          pattern: 'nodeScopeSelector:'
+      - matchRegex:
+          path: data["ccm-config.yaml"]
+          pattern: 'topology\.kubernetes\.io/zone: fi-hel1'
+
+  - it: omits nodeScopeSelector entirely when it is not set
+    set:
+      ccmConfig.clusterID: my-stable-uuid
+      credentials.username: u
+      credentials.password: p
+    asserts:
+      - notMatchRegex:
+          path: data["ccm-config.yaml"]
+          pattern: 'nodeScopeSelector'

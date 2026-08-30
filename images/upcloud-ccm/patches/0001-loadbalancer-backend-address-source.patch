@@ -1,0 +1,585 @@
+From 3857131ec6d8397738b1c22177ed62ec5de048c8 Mon Sep 17 00:00:00 2001
+From: Mark Shine <mark@ankra.io>
+Date: Sun, 30 Aug 2026 13:17:52 +0200
+Subject: [PATCH] feat(loadbalancer): let backend members use the node's
+ private-network address
+
+A managed load balancer reaches its backends over the SDN private network
+it is attached to, but members are built from the node's Kubernetes
+InternalIP. Those are normally the same address, and on a cluster where
+they are not, the result is silent: the API accepts the members, the
+service is assigned an EXTERNAL-IP and the controller logs
+EnsuredLoadBalancer, but no member ever passes a health check and the
+load balancer serves 503 or refuses connections.
+
+This bites any cluster that advertises an overlay address as its node IP
+- for example a WireGuard mesh joining nodes across zones, where kubelet
+runs with --node-ip set to the mesh address. The load balancer is not a
+mesh peer, so every backend is unreachable.
+
+Adds loadBalancerBackendAddressSource to the CCM config, defaulting to
+node-internal-ip so existing deployments are byte-for-byte unchanged.
+Set to private-network, each member's address is instead read from the
+node's server interface on the load balancer's own private network - the
+one address that is reachable by construction. The controller already
+fetches server details to pick that network, so the lookup reuses the
+existing helper; addresses are resolved once per request rather than per
+service port.
+
+An unknown value is rejected at startup rather than silently falling back,
+since the failure it would cause is invisible at runtime.
+---
+ README.md                                     |  10 ++
+ internal/cloud/cloud.go                       |   1 +
+ internal/cloud/config.go                      |  27 +++-
+ .../config_backend_address_internal_test.go   |  99 +++++++++++++++
+ .../backend_address_internal_test.go          | 119 ++++++++++++++++++
+ internal/loadbalancer/config.go               |  17 ++-
+ internal/loadbalancer/const.go                |  19 +++
+ .../loadbalancer_internal_test.go             |   2 +-
+ internal/loadbalancer/loadbalancer_request.go |   4 +-
+ internal/loadbalancer/loadbalancer_test.go    |   2 +-
+ internal/loadbalancer/upcloud_service.go      |  48 ++++++-
+ internal/loadbalancer/upcloud_service_test.go |   2 +-
+ internal/loadbalancer/utils.go                |  13 +-
+ 13 files changed, 348 insertions(+), 15 deletions(-)
+ create mode 100644 internal/cloud/config_backend_address_internal_test.go
+ create mode 100644 internal/loadbalancer/backend_address_internal_test.go
+
+diff --git a/README.md b/README.md
+index 41149b7..d6be49c 100644
+--- a/README.md
++++ b/README.md
+@@ -37,6 +37,16 @@ data:
+   clusterID: ""
+   loadBalancerPlan: ""
+   loadBalancerMaxBackendMembers: 100
++  # Where a load balancer backend member's address is taken from:
++  #   node-internal-ip (default) - the node's Kubernetes InternalIP
++  #   private-network            - the node's address on the SDN private
++  #                                network the load balancer is attached to
++  # Use private-network when the node's InternalIP is not an address the
++  # load balancer can reach, which is the case on a cluster that advertises
++  # an overlay address (e.g. a WireGuard mesh spanning zones) as the node IP.
++  # With the default the members are accepted by the API but never pass a
++  # health check, so the service reports success and serves nothing.
++  loadBalancerBackendAddressSource: node-internal-ip
+   nodeScopeSelector: #Describe selector that defines the scope of the nodes, that CCM will operate on
+                      #https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+     matchExpressions:
+diff --git a/internal/cloud/cloud.go b/internal/cloud/cloud.go
+index 6e6ccfb..fb1314f 100644
+--- a/internal/cloud/cloud.go
++++ b/internal/cloud/cloud.go
+@@ -54,6 +54,7 @@ func (c *cloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder,
+ 		c.cfg.Data.ClusterName,
+ 		c.cfg.Data.LoadBalancerPlan,
+ 		c.cfg.Data.LoadBalancerMaxBackendMembers,
++		c.cfg.Data.LoadBalancerBackendAddressSource,
+ 	)
+ 	loadBalancerService := loadbalancer.NewLoadBalancerService(upCloudService, upCloudClient, loadbalancerConfig)
+ 	c.loadbalancers = loadbalancer.NewLoadBalancerManager(
+diff --git a/internal/cloud/config.go b/internal/cloud/config.go
+index f07065b..3ecf459 100644
+--- a/internal/cloud/config.go
++++ b/internal/cloud/config.go
+@@ -27,6 +27,10 @@ type ConfigData struct {
+ 
+ 	LoadBalancerPlan              string `yaml:"loadBalancerPlan"`
+ 	LoadBalancerMaxBackendMembers int    `yaml:"loadBalancerMaxBackendMembers"`
++	// LoadBalancerBackendAddressSource selects where a backend member's
++	// address comes from: "node-internal-ip" (default) or
++	// "private-network". See the loadbalancer package constants.
++	LoadBalancerBackendAddressSource string `yaml:"loadBalancerBackendAddressSource"`
+ 
+ 	nodeScopeLabelSelector labels.Selector
+ }
+@@ -60,12 +64,13 @@ func newConfig(f io.Reader) (config, error) {
+ 		TypeMeta:   metav1.TypeMeta{},
+ 		ObjectMeta: metav1.ObjectMeta{},
+ 		Data: ConfigData{
+-			ClusterDeploymentMode:  "",
+-			NodeScopeSelector:      LabelSelector{},
+-			ClusterName:            "",
+-			ClusterID:              "",
+-			LoadBalancerPlan:       loadbalancer.DefaultPlan,
+-			nodeScopeLabelSelector: labels.Everything(),
++			ClusterDeploymentMode:            "",
++			NodeScopeSelector:                LabelSelector{},
++			ClusterName:                      "",
++			ClusterID:                        "",
++			LoadBalancerPlan:                 loadbalancer.DefaultPlan,
++			LoadBalancerBackendAddressSource: loadbalancer.BackendAddressSourceNodeInternalIP,
++			nodeScopeLabelSelector:           labels.Everything(),
+ 		},
+ 	}
+ 	c.Data.APICredentials = Credentials{
+@@ -93,6 +98,16 @@ func newConfig(f io.Reader) (config, error) {
+ 	if c.Data.APICredentials.Token == "" && (c.Data.APICredentials.User == "" || c.Data.APICredentials.Password == "") {
+ 		return c, errors.New("UpCloud user credentials not set")
+ 	}
++	switch c.Data.LoadBalancerBackendAddressSource {
++	case "":
++		c.Data.LoadBalancerBackendAddressSource = loadbalancer.BackendAddressSourceNodeInternalIP
++	case loadbalancer.BackendAddressSourceNodeInternalIP, loadbalancer.BackendAddressSourcePrivateNetwork:
++	default:
++		return c, fmt.Errorf("unknown loadBalancerBackendAddressSource %q, want %q or %q",
++			c.Data.LoadBalancerBackendAddressSource,
++			loadbalancer.BackendAddressSourceNodeInternalIP,
++			loadbalancer.BackendAddressSourcePrivateNetwork)
++	}
+ 	return c, nil
+ }
+ 
+diff --git a/internal/cloud/config_backend_address_internal_test.go b/internal/cloud/config_backend_address_internal_test.go
+new file mode 100644
+index 0000000..dc7969b
+--- /dev/null
++++ b/internal/cloud/config_backend_address_internal_test.go
+@@ -0,0 +1,99 @@
++package cloud
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/UpCloudLtd/upcloud-cloud-controller-manager/internal/loadbalancer"
++	"github.com/UpCloudLtd/upcloud-cloud-controller-manager/internal/mock"
++	"github.com/stretchr/testify/require"
++	"k8s.io/apimachinery/pkg/labels"
++)
++
++func configWith(source string) string {
++	return `
++apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
++kind: CCMConfig
++metadata:
++  name: ccm-config
++data:
++  clusterName: test-cluster
++  loadBalancerBackendAddressSource: "` + source + `"
++  apiCredentials:
++    user: "testuser"
++    password: "testpass"
++`
++}
++
++// TestNewConfigBackendAddressSourceDefaults keeps a config that predates the
++// key - every existing deployment - on the InternalIP behaviour.
++func TestNewConfigBackendAddressSourceDefaults(t *testing.T) {
++	t.Parallel()
++
++	got, err := newConfig(mock.ConfigReader())
++	require.NoError(t, err)
++	require.Equal(t, loadbalancer.BackendAddressSourceNodeInternalIP, got.Data.LoadBalancerBackendAddressSource)
++}
++
++func TestNewConfigBackendAddressSourceAccepted(t *testing.T) {
++	t.Parallel()
++
++	for _, source := range []string{
++		loadbalancer.BackendAddressSourceNodeInternalIP,
++		loadbalancer.BackendAddressSourcePrivateNetwork,
++	} {
++		got, err := newConfig(strings.NewReader(configWith(source)))
++		require.NoError(t, err)
++		require.Equal(t, source, got.Data.LoadBalancerBackendAddressSource)
++	}
++}
++
++// TestNewConfigBackendAddressSourceRejectsUnknown fails fast at startup
++// rather than silently falling back and leaving unreachable members.
++func TestNewConfigBackendAddressSourceRejectsUnknown(t *testing.T) {
++	t.Parallel()
++
++	_, err := newConfig(strings.NewReader(configWith("private-ip")))
++	require.Error(t, err)
++	require.Contains(t, err.Error(), "loadBalancerBackendAddressSource")
++}
++
++// TestNewConfigParsesTheChartRenderedConfig feeds the exact ConfigMap body the
++// ankra-charts upcloud-ccm chart renders for a meshed cluster, so the two
++// halves of the fix - the chart writing the keys and the controller reading
++// them - cannot drift apart silently. Regenerate with:
++//
++//	helm template t ./upcloud-ccm -f values.yaml -s templates/configmap.yaml
++func TestNewConfigParsesTheChartRenderedConfig(t *testing.T) {
++	// No t.Parallel: the credentials come from the environment, as they do
++	// in the chart (extraEnv wires UPCLOUD_API_TOKEN from a Secret).
++	const rendered = `apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
++kind: CCMConfig
++metadata:
++  name: ccm-config
++data:
++  clusterName: "upcloud-3edd8155"
++  clusterID: "3edd8155-8f44-4f32-a51e-4026d63b0e44"
++  loadBalancerPlan: "development"
++  loadBalancerMaxBackendMembers: 100
++  loadBalancerBackendAddressSource: "private-network"
++  nodeScopeSelector:
++    matchLabels:
++      topology.kubernetes.io/zone: fi-hel1
++`
++	t.Setenv("UPCLOUD_API_TOKEN", "token")
++
++	got, err := newConfig(strings.NewReader(rendered))
++	require.NoError(t, err)
++	require.Equal(t, "upcloud-3edd8155", got.Data.ClusterName)
++	require.Equal(t, loadbalancer.BackendAddressSourcePrivateNetwork, got.Data.LoadBalancerBackendAddressSource)
++	require.Equal(t, 100, got.Data.LoadBalancerMaxBackendMembers)
++
++	// The selector the chart used to drop must now actually scope nodes.
++	require.True(t, got.Data.nodeScopeLabelSelector.Matches(labels.Set{
++		"topology.kubernetes.io/zone": "fi-hel1",
++	}))
++	require.False(t, got.Data.nodeScopeLabelSelector.Matches(labels.Set{
++		"topology.kubernetes.io/zone": "se-sto1",
++	}))
++}
+diff --git a/internal/loadbalancer/backend_address_internal_test.go b/internal/loadbalancer/backend_address_internal_test.go
+new file mode 100644
+index 0000000..68d2794
+--- /dev/null
++++ b/internal/loadbalancer/backend_address_internal_test.go
+@@ -0,0 +1,119 @@
++package loadbalancer
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/UpCloudLtd/upcloud-go-api/v8/upcloud"
++	"github.com/stretchr/testify/require"
++	v1 "k8s.io/api/core/v1"
++	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
++)
++
++func testNode(name, internalIP string) *v1.Node {
++	return &v1.Node{
++		ObjectMeta: metav1.ObjectMeta{Name: name},
++		Status: v1.NodeStatus{
++			Addresses: []v1.NodeAddress{
++				{Type: v1.NodeHostName, Address: name},
++				{Type: v1.NodeInternalIP, Address: internalIP},
++			},
++		},
++	}
++}
++
++// TestLoadBalancerBackendFromServicePortUsesInternalIPByDefault pins that a
++// nil address map leaves the long-standing behaviour untouched.
++func TestLoadBalancerBackendFromServicePortUsesInternalIPByDefault(t *testing.T) {
++	t.Parallel()
++
++	nodes := []*v1.Node{testNode("node-1", "10.0.0.1"), testNode("node-2", "10.0.0.2")}
++	port := &v1.ServicePort{Name: "http", Port: 80, NodePort: 32000}
++
++	backend := loadBalancerBackendFromServicePort(port, nodes, upcloud.LoadBalancerPlan{PerServerMaxSessions: 1000}, nil)
++
++	require.Len(t, backend.Members, 2)
++	require.Equal(t, "10.0.0.1", backend.Members[0].IP)
++	require.Equal(t, "10.0.0.2", backend.Members[1].IP)
++	require.Equal(t, 32000, backend.Members[0].Port)
++}
++
++// TestLoadBalancerBackendFromServicePortPrefersResolvedAddresses covers the
++// meshed-cluster case: the node's InternalIP is an overlay address the load
++// balancer cannot reach, so the member must carry the resolved private
++// address instead.
++func TestLoadBalancerBackendFromServicePortPrefersResolvedAddresses(t *testing.T) {
++	t.Parallel()
++
++	nodes := []*v1.Node{testNode("node-1", "172.30.2.2"), testNode("node-2", "172.30.2.3")}
++	port := &v1.ServicePort{Name: "http", Port: 80, NodePort: 32000}
++	addresses := map[string]string{"node-1": "10.173.209.3", "node-2": "10.173.209.4"}
++
++	backend := loadBalancerBackendFromServicePort(port, nodes, upcloud.LoadBalancerPlan{PerServerMaxSessions: 1000}, addresses)
++
++	require.Len(t, backend.Members, 2)
++	require.Equal(t, "10.173.209.3", backend.Members[0].IP)
++	require.Equal(t, "10.173.209.4", backend.Members[1].IP)
++	for _, m := range backend.Members {
++		require.NotContains(t, m.IP, "172.30.", "overlay address must never reach the load balancer")
++	}
++}
++
++// TestLoadBalancerBackendFromServicePortSkipsUnresolvedNodes keeps a node
++// whose address could not be resolved out of the backend rather than
++// enrolling it with an empty IP.
++func TestLoadBalancerBackendFromServicePortSkipsUnresolvedNodes(t *testing.T) {
++	t.Parallel()
++
++	nodes := []*v1.Node{testNode("node-1", "172.30.2.2"), testNode("node-2", "172.30.2.3")}
++	port := &v1.ServicePort{Name: "http", Port: 80, NodePort: 32000}
++
++	backend := loadBalancerBackendFromServicePort(port, nodes, upcloud.LoadBalancerPlan{}, map[string]string{"node-1": "10.173.209.3"})
++
++	require.Len(t, backend.Members, 1)
++	require.Equal(t, "10.173.209.3", backend.Members[0].IP)
++}
++
++func TestServerAddressOnNetwork(t *testing.T) {
++	t.Parallel()
++
++	server := &upcloud.ServerDetails{
++		Server: upcloud.Server{UUID: "00674f78-8d6c-4781-9233-f58b86a202fe"},
++		Networking: upcloud.ServerNetworking{
++			Interfaces: upcloud.ServerInterfaceSlice{
++				{
++					Type:        upcloud.NetworkTypeUtility,
++					Network:     "utility-net",
++					IPAddresses: upcloud.IPAddressSlice{{Family: upcloud.IPAddressFamilyIPv4, Address: "10.1.24.100"}},
++				},
++				{
++					Type:        upcloud.NetworkTypePrivate,
++					Network:     "sdn-net",
++					IPAddresses: upcloud.IPAddressSlice{{Family: upcloud.IPAddressFamilyIPv4, Address: "10.173.209.4"}},
++				},
++			},
++		},
++	}
++
++	got, err := serverAddressOnNetwork(server, "sdn-net")
++	require.NoError(t, err)
++	require.Equal(t, "10.173.209.4", got, "must pick the address on the load balancer's own network, not the utility one")
++
++	_, err = serverAddressOnNetwork(server, "other-net")
++	require.Error(t, err)
++	require.True(t, strings.Contains(err.Error(), "other-net"))
++
++	_, err = serverAddressOnNetwork(nil, "sdn-net")
++	require.Error(t, err)
++}
++
++// TestNewConfigDefaultsBackendAddressSource keeps existing deployments, whose
++// config predates the key, on the InternalIP behaviour.
++func TestNewConfigDefaultsBackendAddressSource(t *testing.T) {
++	t.Parallel()
++
++	require.Equal(t, BackendAddressSourceNodeInternalIP,
++		NewConfig("id", "name", DefaultPlan, 10, "").backendAddressSource)
++	require.Equal(t, BackendAddressSourcePrivateNetwork,
++		NewConfig("id", "name", DefaultPlan, 10, BackendAddressSourcePrivateNetwork).backendAddressSource)
++}
+diff --git a/internal/loadbalancer/config.go b/internal/loadbalancer/config.go
+index 5ce6f1c..02a0ff5 100644
+--- a/internal/loadbalancer/config.go
++++ b/internal/loadbalancer/config.go
+@@ -6,11 +6,24 @@ type Config struct {
+ 	loadBalancerPlan string
+ 	// Maxium number of backend members to configure.
+ 	maxBackendMembers int
++	// Where a backend member's address is taken from; one of
++	// BackendAddressSourceNodeInternalIP (default) or
++	// BackendAddressSourcePrivateNetwork.
++	backendAddressSource string
+ }
+ 
+-func NewConfig(clusterID, clusterName, loadBalancerPlan string, maxBackendMembers int) *Config {
++func NewConfig(clusterID, clusterName, loadBalancerPlan string, maxBackendMembers int, backendAddressSource string) *Config {
+ 	if maxBackendMembers == 0 {
+ 		maxBackendMembers = defaultMaxBackendMembers
+ 	}
+-	return &Config{clusterID: clusterID, clusterName: clusterName, loadBalancerPlan: loadBalancerPlan, maxBackendMembers: maxBackendMembers}
++	if backendAddressSource == "" {
++		backendAddressSource = BackendAddressSourceNodeInternalIP
++	}
++	return &Config{
++		clusterID:            clusterID,
++		clusterName:          clusterName,
++		loadBalancerPlan:     loadBalancerPlan,
++		maxBackendMembers:    maxBackendMembers,
++		backendAddressSource: backendAddressSource,
++	}
+ }
+diff --git a/internal/loadbalancer/const.go b/internal/loadbalancer/const.go
+index 0fa292a..aff1d3d 100644
+--- a/internal/loadbalancer/const.go
++++ b/internal/loadbalancer/const.go
+@@ -3,6 +3,25 @@ package loadbalancer
+ const (
+ 	DefaultPlan string = "development"
+ 
++	// BackendAddressSourceNodeInternalIP builds backend members from the
++	// node's Kubernetes InternalIP. This is the default and what the
++	// controller has always done.
++	BackendAddressSourceNodeInternalIP string = "node-internal-ip"
++
++	// BackendAddressSourcePrivateNetwork builds backend members from the
++	// address the node's server holds on the SDN private network the load
++	// balancer itself is attached to.
++	//
++	// A managed load balancer reaches its backends over that private
++	// network, so the node's address on it is the only address guaranteed
++	// to be routable from the load balancer. The InternalIP is normally
++	// the same address, but it need not be: a cluster that advertises an
++	// overlay address (a WireGuard mesh spanning zones, for example) as
++	// the node IP leaves every member unreachable, and because the API
++	// accepts the members without complaint the service is created,
++	// reports success and then never passes a health check.
++	BackendAddressSourcePrivateNetwork string = "private-network"
++
+ 	// loadBalancerIDAnnotation is the annotation specifying the load balancer ID
+ 	// used to enable fast retrievals of load balancers from the API by UUID.
+ 	loadBalancerIDAnnotation = "service.beta.kubernetes.io/upcloud-load-balancer-id"
+diff --git a/internal/loadbalancer/loadbalancer_internal_test.go b/internal/loadbalancer/loadbalancer_internal_test.go
+index 5bc2048..6595526 100644
+--- a/internal/loadbalancer/loadbalancer_internal_test.go
++++ b/internal/loadbalancer/loadbalancer_internal_test.go
+@@ -19,7 +19,7 @@ func TestLoadBalancerInternal(t *testing.T) {
+ 	t.Parallel()
+ 
+ 	cli := mock.NewControllerClientBuilder().ClientOrDie("test-client")
+-	cfg := NewConfig(uuid.NewString(), "test-cluster", "essentials", 10)
++	cfg := NewConfig(uuid.NewString(), "test-cluster", "essentials", 10, "")
+ 	broadcaster := record.NewBroadcaster()
+ 	m := &manager{
+ 		svc:           nil,
+diff --git a/internal/loadbalancer/loadbalancer_request.go b/internal/loadbalancer/loadbalancer_request.go
+index eb25ec3..286ab60 100644
+--- a/internal/loadbalancer/loadbalancer_request.go
++++ b/internal/loadbalancer/loadbalancer_request.go
+@@ -35,7 +35,7 @@ func (r *replaceLoadBalancerRequest) RequestURL() string {
+ 	return fmt.Sprintf("/load-balancer/%s", r.UUID)
+ }
+ 
+-func createLoadBalancerRequest(service *v1.Service, nodes []*v1.Node, plan upcloud.LoadBalancerPlan, privateNetworkUUID, name, zone string) (*request.CreateLoadBalancerRequest, error) {
++func createLoadBalancerRequest(service *v1.Service, nodes []*v1.Node, plan upcloud.LoadBalancerPlan, privateNetworkUUID, name, zone string, backendAddresses map[string]string) (*request.CreateLoadBalancerRequest, error) {
+ 	if err := validateServiceExternalTrafficPolicy(service); err != nil {
+ 		err := errors.Join(err, errUnsupportedConfiguration)
+ 		return nil, err
+@@ -71,7 +71,7 @@ func createLoadBalancerRequest(service *v1.Service, nodes []*v1.Node, plan upclo
+ 	// we create a frontend config and corresponding backend config
+ 	for i := range service.Spec.Ports {
+ 		r.Frontends[i] = loadBalancerFrontendFromServicePort(&service.Spec.Ports[i])
+-		backend := loadBalancerBackendFromServicePort(&service.Spec.Ports[i], nodes, plan)
++		backend := loadBalancerBackendFromServicePort(&service.Spec.Ports[i], nodes, plan, backendAddresses)
+ 		if service.Spec.ExternalTrafficPolicy == v1.ServiceExternalTrafficPolicyTypeLocal {
+ 			// When ETP is set to `Local`, Kubernetes (proxy) provides health check service running in the worker nodes,
+ 			// that can be used to query service state on the particular node.
+diff --git a/internal/loadbalancer/loadbalancer_test.go b/internal/loadbalancer/loadbalancer_test.go
+index 67d74bd..2f1f54b 100644
+--- a/internal/loadbalancer/loadbalancer_test.go
++++ b/internal/loadbalancer/loadbalancer_test.go
+@@ -156,7 +156,7 @@ func newManagerWithService(ctx context.Context, client clientset.Interface, upcs
+ 		return nil, err
+ 	}
+ 
+-	config := loadbalancer.NewConfig(uuid.NewString(), "test-cluster", "development", 10)
++	config := loadbalancer.NewConfig(uuid.NewString(), "test-cluster", "development", 10, "")
+ 	loadBalancerService := loadbalancer.NewLoadBalancerService(upcs, mock.NewUpCloudClient(), config)
+ 	broadcaster := record.NewBroadcaster()
+ 	broadcaster.StartStructuredLogging(0)
+diff --git a/internal/loadbalancer/upcloud_service.go b/internal/loadbalancer/upcloud_service.go
+index 84cda03..0cb9518 100644
+--- a/internal/loadbalancer/upcloud_service.go
++++ b/internal/loadbalancer/upcloud_service.go
+@@ -205,7 +205,11 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
+ 		namePrefix = u.config.clusterID
+ 	}
+ 	name := loadBalancerName(service.GetNamespace(), service.GetName(), namePrefix)
+-	config, err := createLoadBalancerRequest(service, nodes, plans[u.config.loadBalancerPlan], privateNetworkUUID, name, zone)
++	backendAddresses, err := u.backendAddresses(ctx, nodes, privateNetworkUUID)
++	if err != nil {
++		return nil, err
++	}
++	config, err := createLoadBalancerRequest(service, nodes, plans[u.config.loadBalancerPlan], privateNetworkUUID, name, zone, backendAddresses)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -216,6 +220,48 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
+ 	return config, nil
+ }
+ 
++// backendAddresses answers the address each node should be reached on as a
++// backend member, keyed by node name, or nil to keep the InternalIP
++// behaviour. It is resolved once per request rather than per service port.
++func (u *upCloudLoadBalancer) backendAddresses(ctx context.Context, nodes []*v1.Node, privateNetworkUUID string) (map[string]string, error) {
++	if u.config == nil || u.config.backendAddressSource != BackendAddressSourcePrivateNetwork {
++		return nil, nil
++	}
++	addresses := make(map[string]string, len(nodes))
++	for _, node := range nodes {
++		server, err := u.serverDetails(ctx, node)
++		if err != nil {
++			return nil, err
++		}
++		address, err := serverAddressOnNetwork(server, privateNetworkUUID)
++		if err != nil {
++			return nil, fmt.Errorf("resolving backend address for node %s failed; %w", node.Name, err)
++		}
++		addresses[node.Name] = address
++	}
++	return addresses, nil
++}
++
++// serverAddressOnNetwork answers the server's IPv4 address on one SDN
++// network. A server is attached to a private network at most once, so the
++// first match is the address.
++func serverAddressOnNetwork(server *upcloud.ServerDetails, networkUUID string) (string, error) {
++	if server == nil {
++		return "", fmt.Errorf("server details not available; %w", errAmbiguity)
++	}
++	for _, inf := range server.Networking.Interfaces {
++		if inf.Network != networkUUID {
++			continue
++		}
++		for _, address := range inf.IPAddresses {
++			if address.Family == upcloud.IPAddressFamilyIPv4 {
++				return address.Address, nil
++			}
++		}
++	}
++	return "", fmt.Errorf("server %s has no IPv4 address on network %s; %w", server.UUID, networkUUID, errAmbiguity)
++}
++
+ func (u *upCloudLoadBalancer) serverDetails(ctx context.Context, node *v1.Node) (*upcloud.ServerDetails, error) {
+ 	serverUUID, err := utils.ServerUUIDFromNode(node)
+ 	if err != nil {
+diff --git a/internal/loadbalancer/upcloud_service_test.go b/internal/loadbalancer/upcloud_service_test.go
+index fc6e900..e0ad723 100644
+--- a/internal/loadbalancer/upcloud_service_test.go
++++ b/internal/loadbalancer/upcloud_service_test.go
+@@ -22,7 +22,7 @@ func TestService(t *testing.T) {
+ 	lbPlan := "essentials"
+ 
+ 	lbs := loadbalancer.NewLoadBalancerService(upcs, mock.NewUpCloudClient(),
+-		loadbalancer.NewConfig(clusterID, "test-cluster", lbPlan, 100))
++		loadbalancer.NewConfig(clusterID, "test-cluster", lbPlan, 100, ""))
+ 
+ 	nodes := newNodes()
+ 
+diff --git a/internal/loadbalancer/utils.go b/internal/loadbalancer/utils.go
+index eda642e..2271ea0 100644
+--- a/internal/loadbalancer/utils.go
++++ b/internal/loadbalancer/utils.go
+@@ -127,7 +127,11 @@ func loadBalancerFrontendFromServicePort(p *v1.ServicePort) request.LoadBalancer
+ 	}
+ }
+ 
+-func loadBalancerBackendFromServicePort(p *v1.ServicePort, nodes []*v1.Node, plan upcloud.LoadBalancerPlan) request.LoadBalancerBackend {
++// loadBalancerBackendFromServicePort builds the backend for one service
++// port. When addresses is non-nil it holds the address to reach each node on,
++// keyed by node name, and a node missing from it is skipped; when it is nil
++// members are built from the nodes' InternalIPs.
++func loadBalancerBackendFromServicePort(p *v1.ServicePort, nodes []*v1.Node, plan upcloud.LoadBalancerPlan, addresses map[string]string) request.LoadBalancerBackend {
+ 	portName := servicePortName(p)
+ 	b := request.LoadBalancerBackend{
+ 		Name:       portName,
+@@ -145,6 +149,13 @@ func loadBalancerBackendFromServicePort(p *v1.ServicePort, nodes []*v1.Node, pla
+ 			IP:          "",
+ 			Port:        int(p.NodePort),
+ 		}
++		if addresses != nil {
++			if ip, ok := addresses[node.Name]; ok {
++				m.IP = ip
++				b.Members = append(b.Members, m)
++			}
++			continue
++		}
+ 		for _, addr := range node.Status.Addresses {
+ 			if addr.Type == v1.NodeInternalIP {
+ 				m.IP = addr.Address
+-- 
+2.55.0
+

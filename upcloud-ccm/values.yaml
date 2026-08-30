@@ -65,6 +65,22 @@ ccmConfig:
   loadBalancerPlan: "development"
   # -- Maximum backend members attached to a managed LoadBalancer.
   loadBalancerMaxBackendMembers: 100
+  # -- Where a LoadBalancer backend member's address is taken from.
+  # `node-internal-ip` (default) uses the node's Kubernetes InternalIP.
+  # `private-network` uses the node's address on the SDN private network the
+  # load balancer is attached to - the only address a load balancer can reach
+  # by construction. Use it when the InternalIP is not that address, which is
+  # the case on a cluster advertising an overlay address (a WireGuard mesh
+  # across zones, say) as the node IP: with the default every member is
+  # unreachable, and because the API accepts them the Service reports success
+  # and then serves nothing.
+  # Requires a CCM build carrying the backend-address-source patch; the
+  # stock upstream image ignores this key.
+  loadBalancerBackendAddressSource: node-internal-ip
+  # -- Restrict the nodes the CCM manages, and the nodes enrolled as
+  # LoadBalancer backends, to those matching this selector. Same shape as a
+  # Kubernetes label selector. Empty means every node.
+  nodeScopeSelector: {}
 
 serviceAccount:
   # -- Create a ServiceAccount. K3s only ships the `cloud-controller-manager`
