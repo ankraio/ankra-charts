@@ -18,8 +18,10 @@
 # Drop this image (and the patch) once the change is released upstream, and
 # point images.ccm back at ghcr.io/upcloudltd/cloud-controller-manager.
 #
-# Upstream is MIT licensed; the LICENSE file is carried into the runtime
-# layer below.
+# Upstream is Apache-2.0 with a NOTICE file. Both are carried into the
+# runtime layer below, and MODIFICATIONS records that this build is not
+# stock upstream - Apache-2.0 section 4 asks for the licence, the NOTICE,
+# and a statement of the changes made.
 
 FROM golang:1.25-alpine AS build
 
@@ -61,13 +63,23 @@ LABEL org.opencontainers.image.title="upcloud-cloud-controller-manager" \
       org.opencontainers.image.description="UpCloud cloud controller manager, built by Ankra from the pinned upstream release with the load balancer backend address source patch" \
       org.opencontainers.image.source="https://github.com/ankraio/ankra-charts" \
       org.opencontainers.image.url="https://github.com/ankraio/ankra-charts/tree/main/images/upcloud-ccm" \
-      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.revision="${UPSTREAM_COMMIT}" \
       org.opencontainers.image.vendor="Ankra AB"
 
 RUN apk add --no-cache curl tini
 
 COPY --from=build /upstream/LICENSE /usr/share/licenses/upcloud-cloud-controller-manager/LICENSE
+COPY --from=build /upstream/NOTICE /usr/share/licenses/upcloud-cloud-controller-manager/NOTICE
+COPY --from=build /patches/ /usr/share/licenses/upcloud-cloud-controller-manager/patches/
+RUN printf '%s\n' \
+      "This image is a modified build of UpCloud's cloud-controller-manager." \
+      "Upstream: https://github.com/UpCloudLtd/upcloud-cloud-controller-manager" \
+      "Built from commit ${UPSTREAM_COMMIT} with the patches in ./patches applied." \
+      "The patches add ccmConfig.loadBalancerBackendAddressSource; they do not" \
+      "change behaviour unless that option is set." \
+      > /usr/share/licenses/upcloud-cloud-controller-manager/MODIFICATIONS
+
 COPY --from=build /out/cloud-controller-manager /usr/local/bin/
 
 ENTRYPOINT ["/sbin/tini", "--"]
