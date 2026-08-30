@@ -50,10 +50,21 @@ tests:
 
   - it: falls back to Chart.AppVersion for the plugin image tag
     template: templates/controller-statefulset.yaml
+    set:
+      images.csiDriver.digest: ""
     asserts:
       - equal:
           path: spec.template.spec.containers[4].image
           value: docker.io/digitalocean/do-csi-plugin:v4.17.0
+
+  - it: pins the plugin image by digest when set
+    template: templates/controller-statefulset.yaml
+    set:
+      images.csiDriver.digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[4].image
+          value: docker.io/digitalocean/do-csi-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000
 
   - it: applies the backend-supplied controller nodeSelector
     template: templates/controller-statefulset.yaml
