@@ -26,7 +26,7 @@ FROM golang:1.25-alpine AS build
 ARG UPSTREAM_REPOSITORY=https://github.com/UpCloudLtd/upcloud-cloud-controller-manager
 # v1.2.3 - the commit is what gets fetched; keep it and the tag in step.
 ARG UPSTREAM_COMMIT=d04f4e864875bf649128f7113f6d075e3f79be81
-# image-revision: ankra.1
+# image-revision: ankra.2
 # Bump when the patch set changes but the upstream commit does not; the
 # published tag is <upstream tag>-<image-revision>, so this image can never
 # be confused with stock upstream v1.2.3.
