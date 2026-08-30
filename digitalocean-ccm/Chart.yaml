@@ -2,8 +2,8 @@ apiVersion: v2
 name: digitalocean-ccm
 description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified from the upstream release manifests, with LoadBalancer provisioning, node lifecycle management, and uninitialized-taint clearing.
 type: application
-version: 0.1.1
-appVersion: "v0.1.68"
+version: 0.1.2
+appVersion: "v0.1.69"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 

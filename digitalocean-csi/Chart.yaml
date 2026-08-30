@@ -2,8 +2,8 @@ apiVersion: v2
 name: digitalocean-csi
 description: DigitalOcean CSI block-storage driver - controller StatefulSet, node DaemonSet, snapshot controller, snapshot CRDs, and the do-block-storage StorageClasses, chart-ified from the upstream release manifests.
 type: application
-version: 0.1.0
-appVersion: "v4.17.0"
+version: 0.1.1
+appVersion: "v4.18.0"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 
