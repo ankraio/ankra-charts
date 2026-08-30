@@ -21,3 +21,8 @@ data:
       clusterID: {{ required "ccmConfig.clusterID is required" .Values.ccmConfig.clusterID | quote }}
       loadBalancerPlan: {{ .Values.ccmConfig.loadBalancerPlan | quote }}
       loadBalancerMaxBackendMembers: {{ .Values.ccmConfig.loadBalancerMaxBackendMembers }}
+      loadBalancerBackendAddressSource: {{ .Values.ccmConfig.loadBalancerBackendAddressSource | default "node-internal-ip" | quote }}
+      {{- with .Values.ccmConfig.nodeScopeSelector }}
+      nodeScopeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

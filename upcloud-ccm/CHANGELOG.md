@@ -6,6 +6,40 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-30
+
+### Fixed
+
+- **`ccmConfig.nodeScopeSelector` was silently dropped**: the ConfigMap
+  template rendered only `clusterName`, `clusterID`, `loadBalancerPlan` and
+  `loadBalancerMaxBackendMembers`, so a `nodeScopeSelector` set in values never
+  reached the controller. The CCM has always supported the key, and anything
+  relying on it - restricting which nodes the CCM manages, and which nodes are
+  enrolled as LoadBalancer backends - was quietly a no-op. It now renders, and
+  the key is documented in `values.yaml` and the schema.
+
+  This is behaviour-changing for anyone who set it: the selector starts being
+  honoured, which is what they asked for but not what they were getting.
+
+### Added
+
+- **`ccmConfig.loadBalancerBackendAddressSource`**: selects where a
+  LoadBalancer backend member's address comes from - `node-internal-ip`
+  (default, unchanged behaviour) or `private-network`, the node's address on
+  the SDN private network the load balancer is attached to.
+
+  `private-network` is for clusters whose node InternalIP is not an address a
+  load balancer can reach, which is the case when the cluster advertises an
+  overlay address (a WireGuard mesh spanning zones, say) as the node IP. With
+  the default, members are accepted by the API but never pass a health check,
+  so the Service is assigned an `EXTERNAL-IP`, the CCM logs
+  `EnsuredLoadBalancer`, and the load balancer then serves 503 or refuses
+  connections.
+
+  The key needs a CCM build carrying the backend-address-source patch
+  (`images/upcloud-ccm` in this repository); the stock upstream image parses
+  its config non-strictly and ignores the key.
+
 ## [0.3.2] - 2026-07-26
 
 ### Fixed

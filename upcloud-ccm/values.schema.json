@@ -57,7 +57,16 @@
           "type": "string",
           "enum": ["development", "production-small", "production-medium", "production-large"]
         },
-        "loadBalancerMaxBackendMembers": { "type": "integer", "minimum": 1, "maximum": 1000 }
+        "loadBalancerMaxBackendMembers": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "loadBalancerBackendAddressSource": { "type": "string", "enum": ["node-internal-ip", "private-network"] },
+        "nodeScopeSelector": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "matchLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+            "matchExpressions": { "type": "array", "items": { "type": "object" } }
+          }
+        }
       },
       "required": ["clusterName", "clusterID", "loadBalancerPlan", "loadBalancerMaxBackendMembers"]
     },
