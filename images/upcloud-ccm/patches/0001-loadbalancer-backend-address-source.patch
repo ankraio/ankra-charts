@@ -1,4 +1,4 @@
-From 3857131ec6d8397738b1c22177ed62ec5de048c8 Mon Sep 17 00:00:00 2001
+From 18ea2152e3c8f6e074a3385a5c48e6220716c221 Mon Sep 17 00:00:00 2001
 From: Mark Shine <mark@ankra.io>
 Date: Sun, 30 Aug 2026 13:17:52 +0200
 Subject: [PATCH] feat(loadbalancer): let backend members use the node's
@@ -39,10 +39,10 @@ since the failure it would cause is invisible at runtime.
  .../loadbalancer_internal_test.go             |   2 +-
  internal/loadbalancer/loadbalancer_request.go |   4 +-
  internal/loadbalancer/loadbalancer_test.go    |   2 +-
- internal/loadbalancer/upcloud_service.go      |  48 ++++++-
+ internal/loadbalancer/upcloud_service.go      |  56 ++++++++-
  internal/loadbalancer/upcloud_service_test.go |   2 +-
  internal/loadbalancer/utils.go                |  13 +-
- 13 files changed, 348 insertions(+), 15 deletions(-)
+ 13 files changed, 356 insertions(+), 15 deletions(-)
  create mode 100644 internal/cloud/config_backend_address_internal_test.go
  create mode 100644 internal/loadbalancer/backend_address_internal_test.go
 
@@ -471,33 +471,41 @@ index 67d74bd..2f1f54b 100644
  	broadcaster := record.NewBroadcaster()
  	broadcaster.StartStructuredLogging(0)
 diff --git a/internal/loadbalancer/upcloud_service.go b/internal/loadbalancer/upcloud_service.go
-index 84cda03..0cb9518 100644
+index 84cda03..690b818 100644
 --- a/internal/loadbalancer/upcloud_service.go
 +++ b/internal/loadbalancer/upcloud_service.go
-@@ -205,7 +205,11 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
+@@ -205,7 +205,15 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
  		namePrefix = u.config.clusterID
  	}
  	name := loadBalancerName(service.GetNamespace(), service.GetName(), namePrefix)
 -	config, err := createLoadBalancerRequest(service, nodes, plans[u.config.loadBalancerPlan], privateNetworkUUID, name, zone)
-+	backendAddresses, err := u.backendAddresses(ctx, nodes, privateNetworkUUID)
-+	if err != nil {
-+		return nil, err
++	// A nil map keeps the InternalIP behaviour in the request builder.
++	var backendAddresses map[string]string
++	if u.usesPrivateNetworkBackendAddresses() {
++		backendAddresses, err = u.backendAddresses(ctx, nodes, privateNetworkUUID)
++		if err != nil {
++			return nil, err
++		}
 +	}
 +	config, err := createLoadBalancerRequest(service, nodes, plans[u.config.loadBalancerPlan], privateNetworkUUID, name, zone, backendAddresses)
  	if err != nil {
  		return nil, err
  	}
-@@ -216,6 +220,48 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
+@@ -216,6 +224,52 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
  	return config, nil
  }
  
++// usesPrivateNetworkBackendAddresses reports whether backend members should
++// carry the node's address on the load balancer's own private network rather
++// than its Kubernetes InternalIP.
++func (u *upCloudLoadBalancer) usesPrivateNetworkBackendAddresses() bool {
++	return u.config != nil && u.config.backendAddressSource == BackendAddressSourcePrivateNetwork
++}
++
 +// backendAddresses answers the address each node should be reached on as a
-+// backend member, keyed by node name, or nil to keep the InternalIP
-+// behaviour. It is resolved once per request rather than per service port.
++// backend member, keyed by node name. It is resolved once per request rather
++// than per service port.
 +func (u *upCloudLoadBalancer) backendAddresses(ctx context.Context, nodes []*v1.Node, privateNetworkUUID string) (map[string]string, error) {
-+	if u.config == nil || u.config.backendAddressSource != BackendAddressSourcePrivateNetwork {
-+		return nil, nil
-+	}
 +	addresses := make(map[string]string, len(nodes))
 +	for _, node := range nodes {
 +		server, err := u.serverDetails(ctx, node)
