@@ -1,0 +1,35 @@
+# PostgreSQL backend: records live in the database, uploaded files stay on the
+# data volume - so persistence remains on.
+#
+# The Secret needs both keys:
+#
+#   kubectl -n isms create secret generic isms-credentials \
+#     --from-literal=JWT_SECRET="$(openssl rand -base64 48)" \
+#     --from-literal=DB_PASS="$POSTGRES_PASSWORD"
+#
+# The default NetworkPolicy already allows a database in the same namespace
+# (for example a CloudNativePG cluster deployed next to the app); a database
+# in another namespace needs a networkPolicy.egress.extra rule like the
+# commented one below.
+
+secrets:
+  existingSecret: isms-credentials
+
+storage:
+  backend: postgres
+  database:
+    host: isms-postgresql-rw
+    name: isms_builder
+    user: isms
+    ssl: false
+
+# networkPolicy:
+#   egress:
+#     extra:
+#       - to:
+#           - namespaceSelector:
+#               matchLabels:
+#                 kubernetes.io/metadata.name: databases
+#         ports:
+#           - protocol: TCP
+#             port: 5432

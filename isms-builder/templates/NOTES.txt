@@ -1,0 +1,67 @@
+{{ include "isms-builder.fullname" . }} ({{ .Chart.Name }}-{{ .Chart.Version }}, upstream {{ .Chart.AppVersion }})
+
+Image:
+  {{ include "isms-builder.image" . }}
+
+Watch it come up:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "isms-builder.fullname" . }}
+  kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "isms-builder.fullname" . }}
+
+Open the app:
+
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}/ui/login.html
+{{- end }}
+{{- else if .Values.service.enabled }}
+  http://{{ include "isms-builder.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}/ui/login.html
+  (in-cluster; use kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "isms-builder.fullname" . }} {{ .Values.service.port }} to try it locally)
+{{- end }}
+
+FIRST LOGIN - CHANGE THE SEEDED PASSWORD:
+  A fresh installation seeds the user "admin" with the password "adminpass".
+  Log in and change it before anyone else can reach the Service{{ if .Values.ingress.enabled }} - this
+  release exposes the app through an Ingress, so treat the default credential
+  as already public{{ end }}.
+
+Storage:
+{{- if eq .Values.storage.backend "json" }}
+  JSON files{{ else if eq .Values.storage.backend "sqlite" }}
+  A SQLite database{{ else }}
+  {{ .Values.storage.backend }} at {{ .Values.storage.database.host }}{{ if .Values.storage.database.port }}:{{ .Values.storage.database.port }}{{ end }}; uploaded files stay{{ end }} on the data volume at /app/data
+{{- if .Values.persistence.enabled }}
+  ({{ if .Values.persistence.existingClaim }}existing claim {{ .Values.persistence.existingClaim }}{{ else }}claim {{ include "isms-builder.claimName" . }}, {{ .Values.persistence.size }}{{ if .Values.persistence.retain }}, kept on uninstall{{ end }}{{ end }}).
+{{- else }}
+  WARNING: persistence.enabled=false - the ISMS lives in an emptyDir and a pod
+  restart starts over empty.
+{{- end }}
+
+Secrets:
+{{- if .Values.externalSecret.enabled }}
+  Delivered by the External Secrets Operator into {{ include "isms-builder.secretName" . }}.
+{{- else if .Values.secrets.existingSecret }}
+  Read from the existing Secret {{ .Values.secrets.existingSecret }}.
+{{- else if include "isms-builder.hasInlineSecrets" . }}
+  WARNING: rendered from inline values into {{ include "isms-builder.secretName" . }}.
+  They are readable in the Helm release Secret and in whatever holds your values
+  file. Move them to secrets.existingSecret or externalSecret.enabled.
+{{- end }}
+
+Network:
+{{- if .Values.networkPolicy.enabled }}
+  A NetworkPolicy limits this pod to DNS and its own namespace, in both
+  directions{{ if or .Values.networkPolicy.ingress.allowedNamespaces .Values.networkPolicy.ingress.extra .Values.networkPolicy.egress.extra }}, plus the extra rules from your values{{ end }}. An SMTP relay or an
+  out-of-namespace database needs a networkPolicy.egress.extra rule. This is
+  only enforced if your CNI implements NetworkPolicy - check with:
+
+    kubectl -n {{ .Release.Namespace }} describe networkpolicy {{ include "isms-builder.fullname" . }}
+{{- else }}
+  WARNING: networkPolicy.enabled=false. The pod holding your ISMS records is
+  reachable from - and can reach - the whole cluster network.
+{{- end }}
+{{- if not .Values.hardening.enabled }}
+
+WARNING: hardening.enabled=false - every render-time guardrail in this chart is
+switched off. Do not run this configuration in a shared or production cluster.
+{{- end }}

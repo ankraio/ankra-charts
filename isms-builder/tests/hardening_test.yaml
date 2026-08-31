@@ -1,0 +1,167 @@
+suite: hardening guardrails
+templates:
+  - templates/validate.yaml
+release:
+  name: ut
+  namespace: isms
+tests:
+  - it: renders clean with an existing Secret
+    set:
+      secrets.existingSecret: isms-credentials
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses to run without a JWT_SECRET source
+    asserts:
+      - failedTemplate:
+          errorPattern: "a JWT_SECRET is required"
+
+  - it: refuses a mutable image tag
+    set:
+      secrets.existingSecret: s
+      image.digest: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "image.digest is empty"
+
+  - it: accepts a mutable image tag once it is waived
+    set:
+      secrets.existingSecret: s
+      image.digest: ""
+      hardening.allowMutableImageTag: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses inline secrets and names the offending keys
+    set:
+      secrets.JWT_SECRET: ci-placeholder
+    asserts:
+      - failedTemplate:
+          errorPattern: "inline secret values are refused .*JWT_SECRET"
+
+  - it: accepts inline secrets once they are waived
+    set:
+      hardening.allowInlineSecrets: true
+      secrets.JWT_SECRET: ci-placeholder
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses a second replica outright
+    set:
+      secrets.existingSecret: s
+      replicaCount: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "replicaCount must be 1"
+
+  - it: refuses an unknown storage backend
+    set:
+      secrets.existingSecret: s
+      storage.backend: mongodb
+    asserts:
+      - failedTemplate:
+          errorPattern: "storage.backend must be json, sqlite, postgres or mariadb"
+
+  - it: refuses a SQL backend without a database host
+    set:
+      secrets.existingSecret: s
+      storage.backend: postgres
+    asserts:
+      - failedTemplate:
+          errorPattern: "storage.backend=postgres requires storage.database.host"
+
+  - it: refuses a SQL backend without a DB_PASS source
+    set:
+      hardening.allowInlineSecrets: true
+      secrets.JWT_SECRET: ci-placeholder
+      storage.backend: mariadb
+      storage.database.host: db
+    asserts:
+      - failedTemplate:
+          errorPattern: "storage.backend=mariadb requires a DB_PASS"
+
+  - it: refuses an SMTP user without an SMTP_PASS source
+    set:
+      hardening.allowInlineSecrets: true
+      secrets.JWT_SECRET: ci-placeholder
+      smtp.user: isms
+    asserts:
+      - failedTemplate:
+          errorPattern: "smtp.user is set but no SMTP_PASS"
+
+  - it: refuses running as root
+    set:
+      secrets.existingSecret: s
+      podSecurityContext.runAsUser: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "podSecurityContext.runAsUser must be a non-zero uid"
+
+  - it: refuses a writable root filesystem
+    set:
+      secrets.existingSecret: s
+      securityContext.readOnlyRootFilesystem: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "securityContext.readOnlyRootFilesystem must be true"
+
+  - it: refuses privilege escalation
+    set:
+      secrets.existingSecret: s
+      securityContext.allowPrivilegeEscalation: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "securityContext.allowPrivilegeEscalation must be false"
+
+  - it: refuses a mounted ServiceAccount token
+    set:
+      secrets.existingSecret: s
+      serviceAccount.automountServiceAccountToken: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "serviceAccount.automountServiceAccountToken must be false"
+
+  - it: refuses running without a NetworkPolicy
+    set:
+      secrets.existingSecret: s
+      networkPolicy.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "networkPolicy.enabled=false"
+
+  - it: accepts no NetworkPolicy once it is waived
+    set:
+      secrets.existingSecret: s
+      networkPolicy.enabled: false
+      hardening.allowUnrestrictedNetwork: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses an Ingress without the Service
+    set:
+      secrets.existingSecret: s
+      ingress.enabled: true
+      service.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "ingress.enabled=true requires service.enabled=true"
+
+  - it: refuses combining externalSecret with an existing Secret
+    set:
+      secrets.existingSecret: s
+      externalSecret.enabled: true
+      externalSecret.secretStoreRef.name: vault
+    asserts:
+      - failedTemplate:
+          errorPattern: "mutually exclusive"
+
+  - it: refuses an externalSecret without a store
+    set:
+      externalSecret.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "externalSecret.enabled=true requires externalSecret.secretStoreRef.name"

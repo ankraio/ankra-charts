@@ -1,0 +1,64 @@
+suite: service and ingress
+templates:
+  - templates/service.yaml
+  - templates/ingress.yaml
+release:
+  name: ut
+  namespace: isms
+tests:
+  - it: exposes the HTTP port on a ClusterIP Service
+    template: templates/service.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - contains:
+          path: spec.ports
+          content:
+            name: http
+            port: 3000
+            targetPort: http
+            protocol: TCP
+
+  - it: renders no Ingress by default
+    template: templates/ingress.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: routes the Ingress host to the Service
+    template: templates/ingress.yaml
+    set:
+      secrets.existingSecret: s
+      ingress.enabled: true
+      ingress.className: traefik
+      ingress.hosts:
+        - host: isms.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+      ingress.tls:
+        - secretName: isms-builder-tls
+          hosts:
+            - isms.example.com
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.ingressClassName
+          value: traefik
+      - equal:
+          path: spec.rules[0].host
+          value: isms.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: ut-isms-builder
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3000

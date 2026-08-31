@@ -1,0 +1,58 @@
+apiVersion: v2
+name: isms-builder
+description: ISMS Builder on Kubernetes - the open-source ISO 27001 / NIS2 ISMS template builder, digest-pinned, non-root, persistent, network-restricted by default, with managed-secret guardrails.
+type: application
+version: 0.1.0
+appVersion: "1.40.2"
+kubeVersion: ">=1.27.0-0"
+icon: https://ankra.io/images/apple-touch-icon.png
+
+home: https://github.com/ankraio/ankra-charts/tree/main/isms-builder
+sources:
+  - https://github.com/ankraio/ankra-charts/tree/main/isms-builder
+  - https://github.com/coolstartnow/isms-builder
+
+keywords:
+  - isms
+  - iso27001
+  - nis2
+  - compliance
+  - security
+  - grc
+  - templates
+  - hardened
+
+maintainers:
+  - name: Ankra AB
+    email: admin@ankra.io
+    url: https://ankra.io
+
+annotations:
+  category: Security
+  licenses: AGPL-3.0-only
+  artifacthub.io/license: AGPL-3.0-only
+  artifacthub.io/category: security
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/maintainers: |
+    - name: Ankra AB
+      email: admin@ankra.io
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/ankraio/ankra-charts/tree/main/isms-builder
+    - name: Helm repo (helm repo add)
+      url: https://ankraio.github.io/ankra-charts
+    - name: Chart (OCI)
+      url: oci://ghcr.io/ankraio/ankra-charts/isms-builder
+    - name: Upstream project
+      url: https://github.com/coolstartnow/isms-builder
+  artifacthub.io/operator: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/signKey: |
+    fingerprint: keyless
+    url: https://github.com/ankraio/ankra-charts#verifying-a-published-chart
+  artifacthub.io/images: |
+    - name: isms-builder
+      image: ghcr.io/coolstartnow/isms-builder:1.40.2@sha256:b792260aac72f51bf002a853fb65265184843244fb53dfdabff1bbac75c45ac1
+  artifacthub.io/changes: |
+    - kind: added
+      description: "Initial chart: upstream publishes a container image but no Helm chart, so this one wraps it - digest-pinned image, restricted-PodSecurity defaults (the image's fixed isms user, root entrypoint bypassed), a PersistentVolumeClaim for /app/data, JWT_SECRET through a managed Secret or ExternalSecret, json/sqlite/postgres/mariadb storage backends, and a same-namespace-only NetworkPolicy."
