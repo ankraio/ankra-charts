@@ -4,13 +4,14 @@
 # working directory. Both `cd charts && make lint` and
 # `make -C charts lint` (from the repo root) work.
 
-CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi psono hermes-agent claude-code-openai-wrapper
+CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi psono hermes-agent claude-code-openai-wrapper isms-builder
 HELM     ?= helm
 KCONFORM ?= kubeconform
 
 .PHONY: help lint template unittest test secret-scan \
         sync sync-ccm sync-csi sync-cloudflare sync-do-ccm sync-do-csi check docs \
-        hermes-digest hermes-digest-latest claude-wrapper-digest claude-wrapper-digest-latest
+        hermes-digest hermes-digest-latest claude-wrapper-digest claude-wrapper-digest-latest \
+        isms-builder-digest isms-builder-digest-latest
 
 help:
 	@printf 'Available targets:\n'
@@ -39,6 +40,9 @@ lint:
 	@$(HELM) lint --strict hermes-agent
 	@echo "==> helm lint claude-code-openai-wrapper"
 	@$(HELM) lint --strict claude-code-openai-wrapper \
+		--set secrets.existingSecret=ci-placeholder
+	@echo "==> helm lint isms-builder"
+	@$(HELM) lint --strict isms-builder \
 		--set secrets.existingSecret=ci-placeholder
 
 template:
@@ -72,7 +76,11 @@ template:
 		--namespace claude \
 		--set secrets.existingSecret=claude-credentials \
 		> /tmp/rendered/claude-code-openai-wrapper.yaml
-	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,digitalocean-ccm,digitalocean-csi,psono,hermes-agent,claude-code-openai-wrapper}.yaml"
+	@$(HELM) template isms isms-builder \
+		--namespace isms \
+		--set secrets.existingSecret=isms-credentials \
+		> /tmp/rendered/isms-builder.yaml
+	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,digitalocean-ccm,digitalocean-csi,psono,hermes-agent,claude-code-openai-wrapper,isms-builder}.yaml"
 
 unittest:
 	@for c in $(CHARTS); do \
@@ -119,6 +127,7 @@ check:
 	@./scripts/sync-upstream.sh check
 	@./scripts/sync-image-digest.sh hermes-agent check
 	@./scripts/sync-image-digest.sh claude-code-openai-wrapper check
+	@./scripts/sync-image-digest.sh isms-builder check
 
 # Re-resolve the digest hermes-agent pins for its current tag.
 hermes-digest:
@@ -135,6 +144,14 @@ claude-wrapper-digest:
 # Move claude-code-openai-wrapper to the newest published image tag and re-pin.
 claude-wrapper-digest-latest:
 	@./scripts/sync-image-digest.sh claude-code-openai-wrapper latest
+
+# Re-resolve the digest isms-builder pins for its current tag.
+isms-builder-digest:
+	@./scripts/sync-image-digest.sh isms-builder
+
+# Move isms-builder to the newest upstream image tag and re-pin the digest.
+isms-builder-digest-latest:
+	@./scripts/sync-image-digest.sh isms-builder latest
 
 docs:
 	@command -v helm-docs >/dev/null 2>&1 || { echo "install helm-docs: https://github.com/norwoodj/helm-docs"; exit 1; }

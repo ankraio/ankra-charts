@@ -1,0 +1,270 @@
+nameOverride: ""
+fullnameOverride: ""
+
+# Render-time guardrails. Each flag turns one hardening rule from "enforced"
+# into "your problem"; every one of them fails the render with an explanation
+# instead of silently shipping a weaker Deployment.
+hardening:
+  enabled: true
+  # Permit secret values supplied as plain values (secrets.<KEY>) instead of an
+  # existing Secret or an ExternalSecret.
+  allowInlineSecrets: false
+  # Permit image.tag without image.digest.
+  allowMutableImageTag: false
+  # Permit root, writable root filesystem, added capabilities, privilege
+  # escalation or a mounted ServiceAccount token.
+  allowPrivilegedRuntime: false
+  # Permit running with networkPolicy.enabled=false.
+  allowUnrestrictedNetwork: false
+
+# Upstream's own multi-arch image (linux/amd64 + linux/arm64), published by its
+# release workflow with provenance attestation. The image's entrypoint starts
+# as root only to chown a bind-mounted data directory; this chart bypasses it
+# (see the command override in the Deployment) and runs the server directly as
+# the image's fixed unprivileged isms user.
+image:
+  registry: ghcr.io
+  repository: coolstartnow/isms-builder
+  # Tag is documentation; digest is what is pulled. Keep both in step.
+  tag: 1.40.2
+  digest: sha256:b792260aac72f51bf002a853fb65265184843244fb53dfdabff1bbac75c45ac1
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Exactly one replica is supported: file uploads and the json/sqlite storage
+# backends are per-pod files on the single data volume, so a second replica
+# would see - and write - a different ISMS. The render refuses more.
+replicaCount: 1
+revisionHistoryLimit: 5
+
+# Recreate, because the data volume is ReadWriteOnce: a RollingUpdate would
+# deadlock with the new pod waiting on a volume the old pod still holds.
+strategy:
+  type: Recreate
+
+server:
+  port: 3000
+  # Login token lifetime (JWT_EXPIRES_IN).
+  jwtExpiresIn: 8h
+  # Absolute external base URL (PUBLIC_URL), e.g. https://isms.example.com.
+  # Used when the app builds links to itself (acknowledgement QR codes and
+  # e-mail links). Empty derives it from the request.
+  publicUrl: ""
+  # Express "trust proxy" hops (TRUST_PROXY). Set "1" when exactly one
+  # reverse proxy - the usual Ingress controller - sits in front, so the app
+  # sees real client addresses. Empty leaves proxy headers untrusted.
+  trustProxy: ""
+
+storage:
+  # json     - JSON files on the data volume (upstream's default)
+  # sqlite   - SQLite database on the data volume
+  # postgres - PostgreSQL; requires storage.database.host and a DB_PASS secret
+  # mariadb  - MariaDB;    requires storage.database.host and a DB_PASS secret
+  # File uploads live on the data volume with every backend, so persistence
+  # matters even with an external database.
+  backend: json
+  database:
+    host: ""
+    # Empty uses the backend's default port (5432 postgres, 3306 mariadb).
+    port: ""
+    name: isms_builder
+    user: isms
+    # Renders DB_SSL=true; upstream turns that into TLS with certificate
+    # verification on mariadb and TLS without verification on postgres.
+    ssl: false
+
+# E-mail notifications and deadline warnings. Off while host is empty; the
+# app logs that notifications are disabled and runs fine without them.
+smtp:
+  host: ""
+  port: 587
+  # Sender address (SMTP_FROM).
+  from: ""
+  # true renders SMTP_SECURE=true (implicit TLS, usually port 465).
+  secure: false
+  # Authentication username; the password comes from the configured Secret as
+  # SMTP_PASS.
+  user: ""
+
+env: {}
+
+extraEnv: []
+extraEnvFrom: []
+
+# Every key of the configured Secret lands in the container environment, so
+# name keys exactly as the server reads them:
+#   JWT_SECRET - required; signs every login token
+#   DB_PASS    - required by the postgres and mariadb backends
+#   SMTP_PASS  - required when smtp.user is set
+secrets:
+  # Preferred: a Secret you already manage (SOPS, Vault, ESO, sealed-secrets).
+  existingSecret: ""
+  annotations: {}
+  # Any other key here becomes a Secret entry, e.g. JWT_SECRET. Refused unless
+  # hardening.allowInlineSecrets=true - plain secrets in values end up in the
+  # Helm release Secret, in Git, and in shell history.
+
+externalSecret:
+  enabled: false
+  # external-secrets.io/v1beta1 was removed in ESO 0.17; v1 is current.
+  apiVersion: external-secrets.io/v1
+  name: ""
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: ""
+  target:
+    name: ""
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      type: Opaque
+      metadata:
+        annotations: {}
+        labels: {}
+  data: []
+  dataFrom: []
+  annotations: {}
+  labels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 3000
+  annotations: {}
+  labels: {}
+  externalTrafficPolicy: ""
+  internalTrafficPolicy: ""
+  loadBalancerSourceRanges: []
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: isms-builder.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Default posture: an ISMS holds the organisation's security records, so the
+# pod may talk to DNS and its own namespace (clients in, a database out) and
+# nothing else - no internet egress at all. An out-of-namespace database, an
+# SMTP relay or an Ollama endpoint are opened deliberately via egress.extra.
+networkPolicy:
+  enabled: true
+  allowDns: true
+  dnsNamespace: kube-system
+  ingress:
+    allowSameNamespace: true
+    # Namespaces (by name) allowed to reach the HTTP port, e.g. the Ingress
+    # controller's namespace when ingress.enabled=true.
+    allowedNamespaces: []
+    # Raw NetworkPolicyIngressRule entries.
+    extra: []
+  egress:
+    allowSameNamespace: true
+    # Raw NetworkPolicyEgressRule entries, e.g. the SMTP relay or an external
+    # database.
+    extra: []
+
+# The single writable state of the app: JSON stores, the sqlite database and
+# every uploaded file live under /app/data. With persistence off the data
+# lives in an emptyDir and a pod restart starts an empty ISMS.
+persistence:
+  enabled: true
+  # Reuse a claim you manage instead of creating one.
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 2Gi
+  annotations: {}
+  # Keep the claim on helm uninstall (helm.sh/resource-policy: keep) - an
+  # ISMS's records should outlive an accidental uninstall. Delete the claim
+  # explicitly when you really mean to.
+  retain: true
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+# Raw probe specs copied onto the container; empty means the chart's httpGet
+# probes against /api/version on the server port (unauthenticated, no
+# redirect).
+probes:
+  liveness: {}
+  readiness: {}
+  startup: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+    ephemeral-storage: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+    ephemeral-storage: 1Gi
+
+terminationGracePeriodSeconds: 30
+
+podAnnotations: {}
+deploymentAnnotations: {}
+podLabels: {}
+
+# Keeps every Service in the namespace out of the app's environment.
+enableServiceLinks: false
+
+# Set to false on clusters with user namespaces (k8s >= 1.33) enabled.
+hostUsers: null
+
+podSecurityContext:
+  runAsNonRoot: true
+  # The image's fixed isms user.
+  runAsUser: 100
+  runAsGroup: 101
+  # Makes the data volume group-writable for the isms user; OnRootMismatch
+  # skips the recursive re-own on every start once ownership is right.
+  fsGroup: 101
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  # Kept read-only: the server writes only under /app/data (the data volume)
+  # and /tmp (an emptyDir).
+  readOnlyRootFilesystem: true
+  privileged: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# emptyDir size cap for /tmp, the only writable path besides the data volume.
+writableVolumes:
+  tmp:
+    sizeLimit: 512Mi
+
+priorityClassName: ""
+runtimeClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+extraVolumes: []
+extraVolumeMounts: []
+extraInitContainers: []
+extraContainers: []
+extraObjects: []

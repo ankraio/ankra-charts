@@ -1,0 +1,101 @@
+suite: networkpolicy
+templates:
+  - templates/networkpolicy.yaml
+release:
+  name: ut
+  namespace: isms
+tests:
+  - it: defaults to DNS plus same-namespace in both directions
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+            - Egress
+      - contains:
+          path: spec.ingress
+          content:
+            from:
+              - namespaceSelector:
+                  matchExpressions:
+                    - key: kubernetes.io/metadata.name
+                      operator: In
+                      values:
+                        - isms
+            ports:
+              - protocol: TCP
+                port: 3000
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+            ports:
+              - protocol: UDP
+                port: 53
+              - protocol: TCP
+                port: 53
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector: {}
+
+  - it: admits extra namespaces to the HTTP port
+    set:
+      secrets.existingSecret: s
+      networkPolicy.ingress.allowedNamespaces:
+        - traefik
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            from:
+              - namespaceSelector:
+                  matchExpressions:
+                    - key: kubernetes.io/metadata.name
+                      operator: In
+                      values:
+                        - isms
+                        - traefik
+            ports:
+              - protocol: TCP
+                port: 3000
+
+  - it: appends extra egress rules verbatim
+    set:
+      secrets.existingSecret: s
+      networkPolicy.egress.extra:
+        - to:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: databases
+          ports:
+            - protocol: TCP
+              port: 5432
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: databases
+            ports:
+              - protocol: TCP
+                port: 5432
+
+  - it: renders nothing when disabled with the waiver
+    set:
+      secrets.existingSecret: s
+      networkPolicy.enabled: false
+      hardening.allowUnrestrictedNetwork: true
+    asserts:
+      - hasDocuments:
+          count: 0

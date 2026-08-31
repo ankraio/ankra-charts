@@ -1,0 +1,59 @@
+suite: persistence
+templates:
+  - templates/pvc.yaml
+release:
+  name: ut
+  namespace: isms
+tests:
+  - it: creates a kept claim by default
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: ut-isms-builder-data
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: spec.resources.requests.storage
+          value: 2Gi
+      - equal:
+          path: spec.accessModes
+          value:
+            - ReadWriteOnce
+
+  - it: drops the keep policy when retain is off
+    set:
+      secrets.existingSecret: s
+      persistence.retain: false
+    asserts:
+      - notExists:
+          path: metadata.annotations
+
+  - it: sets the storage class only when given
+    set:
+      secrets.existingSecret: s
+      persistence.storageClass: fast-ssd
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd
+
+  - it: creates no claim for an existing one
+    set:
+      secrets.existingSecret: s
+      persistence.existingClaim: isms-data
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: creates no claim with persistence off
+    set:
+      secrets.existingSecret: s
+      persistence.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

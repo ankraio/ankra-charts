@@ -1,0 +1,47 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $allowedNamespaces := list -}}
+{{- if .Values.networkPolicy.ingress.allowSameNamespace -}}
+{{- $allowedNamespaces = append $allowedNamespaces .Release.Namespace -}}
+{{- end -}}
+{{- $allowedNamespaces = concat $allowedNamespaces .Values.networkPolicy.ingress.allowedNamespaces | uniq | sortAlpha -}}
+
+{{- $ingressRules := list -}}
+{{- if gt (len $allowedNamespaces) 0 -}}
+{{- $ingressPorts := list (dict "protocol" "TCP" "port" (.Values.server.port | int)) -}}
+{{- $namespaceSelector := dict "namespaceSelector" (dict "matchExpressions" (list (dict "key" "kubernetes.io/metadata.name" "operator" "In" "values" $allowedNamespaces))) -}}
+{{- $ingressRules = append $ingressRules (dict "from" (list $namespaceSelector) "ports" $ingressPorts) -}}
+{{- end -}}
+{{- $ingressRules = concat $ingressRules .Values.networkPolicy.ingress.extra -}}
+
+{{- $egressRules := list -}}
+{{- if .Values.networkPolicy.allowDns -}}
+{{- $dnsSelector := dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" .Values.networkPolicy.dnsNamespace)) -}}
+{{- $dnsPorts := list (dict "protocol" "UDP" "port" 53) (dict "protocol" "TCP" "port" 53) -}}
+{{- $egressRules = append $egressRules (dict "to" (list $dnsSelector) "ports" $dnsPorts) -}}
+{{- end -}}
+{{- if .Values.networkPolicy.egress.allowSameNamespace -}}
+{{- $egressRules = append $egressRules (dict "to" (list (dict "podSelector" dict))) -}}
+{{- end -}}
+{{- $egressRules = concat $egressRules .Values.networkPolicy.egress.extra -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "isms-builder.fullname" . }}
+  labels:
+    {{- include "isms-builder.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "isms-builder.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  {{- if gt (len $ingressRules) 0 }}
+  ingress:
+    {{- toYaml $ingressRules | nindent 4 }}
+  {{- end }}
+  {{- if gt (len $egressRules) 0 }}
+  egress:
+    {{- toYaml $egressRules | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,10 @@
+.DS_Store
+.git/
+.gitignore
+*.tmp
+*.orig
+*.swp
+*.bak
+tests/
+values-examples/
+CHANGELOG.md

@@ -1,0 +1,64 @@
+# Production overlay: secrets from the External Secrets Operator, the app
+# behind a TLS Ingress with real client addresses, a PostgreSQL backend, and
+# ingress traffic locked to the controller's namespace.
+#
+# The extracted key must provide JWT_SECRET and DB_PASS.
+
+externalSecret:
+  enabled: true
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault
+  dataFrom:
+    - extract:
+        key: platform/isms-builder
+
+storage:
+  backend: postgres
+  database:
+    host: isms-postgresql-rw
+    name: isms_builder
+    user: isms
+    ssl: true
+
+server:
+  # The app builds links to itself (acknowledgement QR codes, e-mail links)
+  # from this URL.
+  publicUrl: https://isms.example.com
+  # Exactly one reverse proxy - the Ingress controller - sits in front.
+  trustProxy: "1"
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+  hosts:
+    - host: isms.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: isms-builder-tls
+      hosts:
+        - isms.example.com
+
+networkPolicy:
+  ingress:
+    # The Ingress controller lives outside the app's namespace.
+    allowedNamespaces:
+      - traefik
+
+persistence:
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+    ephemeral-storage: 256Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+    ephemeral-storage: 1Gi

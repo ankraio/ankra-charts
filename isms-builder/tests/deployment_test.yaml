@@ -1,0 +1,225 @@
+suite: deployment
+templates:
+  - templates/deployment.yaml
+  # Included by the checksum annotations.
+  - templates/secret.yaml
+  - templates/external-secret.yaml
+release:
+  name: ut
+  namespace: isms
+tests:
+  - it: pins the image by tag and digest
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "^ghcr.io/coolstartnow/isms-builder:[0-9.]+@sha256:[a-f0-9]{64}$"
+
+  - it: bypasses the root entrypoint and starts the server directly
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value:
+            - node
+            - server/index.js
+
+  - it: runs as the image's isms user with the data volume group
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 100
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 101
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: renders the base environment
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_ENV
+            value: production
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PORT
+            value: "3000"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: JWT_EXPIRES_IN
+            value: 8h
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: STORAGE_BACKEND
+            value: json
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_HOST
+            value: ""
+
+  - it: wires the SQL backend environment
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+      storage.backend: postgres
+      storage.database.host: db.example.com
+      storage.database.port: "5433"
+      storage.database.ssl: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_HOST
+            value: db.example.com
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_PORT
+            value: "5433"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_NAME
+            value: isms_builder
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_USER
+            value: isms
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_SSL
+            value: "true"
+
+  - it: wires the SMTP environment only when a host is set
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+      smtp.host: mail.example.com
+      smtp.from: isms@example.com
+      smtp.user: isms
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_HOST
+            value: mail.example.com
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_PORT
+            value: "587"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_SECURE
+            value: "false"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_FROM
+            value: isms@example.com
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_USER
+            value: isms
+
+  - it: sets PUBLIC_URL and TRUST_PROXY when configured
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+      server.publicUrl: https://isms.example.com
+      server.trustProxy: "1"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PUBLIC_URL
+            value: https://isms.example.com
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TRUST_PROXY
+            value: "1"
+
+  - it: mounts the data claim at /app/data and probes /api/version
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /app/data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: ut-isms-builder-data
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /api/version
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
+  - it: uses an existing claim when given
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+      persistence.existingClaim: isms-data
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: isms-data
+
+  - it: falls back to an emptyDir with persistence off
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: s
+      persistence.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            emptyDir: {}
+
+  - it: references the existing Secret as a required envFrom
+    template: templates/deployment.yaml
+    set:
+      secrets.existingSecret: isms-credentials
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: isms-credentials
+              optional: false

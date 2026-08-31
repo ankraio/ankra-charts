@@ -1,0 +1,14 @@
+# Smallest configuration that satisfies the chart's guardrails.
+#
+# Create the Secret first, then install:
+#
+#   kubectl -n isms create secret generic isms-credentials \
+#     --from-literal=JWT_SECRET="$(openssl rand -base64 48)"
+#
+#   helm install isms ankra/isms-builder -n isms --create-namespace \
+#     -f isms-builder/values-examples/minimal.yaml
+#
+# First login: user "admin", password "adminpass" - change it immediately.
+
+secrets:
+  existingSecret: isms-credentials
