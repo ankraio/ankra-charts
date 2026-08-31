@@ -23,12 +23,19 @@
 # stock upstream - Apache-2.0 section 4 asks for the licence, the NOTICE,
 # and a statement of the changes made.
 
-FROM golang:1.25-alpine AS build
+# --platform=$BUILDPLATFORM pins this stage to the builder's own
+# architecture and the binary is cross-compiled for $TARGETARCH below.
+# Building it natively per-architecture instead means the arm64 half runs
+# the Go compiler and the test suite under QEMU, which took over 26 minutes
+# per build; cross-compiling is a few minutes and produces the same binary.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 
+ARG TARGETOS
+ARG TARGETARCH
 ARG UPSTREAM_REPOSITORY=https://github.com/UpCloudLtd/upcloud-cloud-controller-manager
 # v1.2.3 - the commit is what gets fetched; keep it and the tag in step.
 ARG UPSTREAM_COMMIT=d04f4e864875bf649128f7113f6d075e3f79be81
-# image-revision: ankra.2
+# image-revision: ankra.3
 # Bump when the patch set changes but the upstream commit does not; the
 # published tag is <upstream tag>-<image-revision>, so this image can never
 # be confused with stock upstream v1.2.3.
@@ -48,11 +55,14 @@ RUN cd /upstream \
 
 # The tests ship with the patch and are cheap, so the build runs them: an
 # image that would silently mis-address every backend member is exactly the
-# failure this patch exists to prevent.
+# failure this patch exists to prevent. They run once, on the builder's
+# native architecture - this code has no architecture-specific behaviour,
+# so running them again under emulation would only cost time.
 RUN cd /upstream && CGO_ENABLED=0 go test ./internal/...
 
 RUN cd /upstream \
-    && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" \
+    && CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+       go build -trimpath -ldflags "-s -w" \
        -o /out/cloud-controller-manager \
        github.com/UpCloudLtd/upcloud-cloud-controller-manager/cmd/upcloud-cloud-controller-manager
 
