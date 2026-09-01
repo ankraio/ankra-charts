@@ -1,4 +1,4 @@
-From 18ea2152e3c8f6e074a3385a5c48e6220716c221 Mon Sep 17 00:00:00 2001
+From d5bd46c9cac1a21488b5b84045e7feed1b8cd33d Mon Sep 17 00:00:00 2001
 From: Mark Shine <mark@ankra.io>
 Date: Sun, 30 Aug 2026 13:17:52 +0200
 Subject: [PATCH] feat(loadbalancer): let backend members use the node's
@@ -33,16 +33,16 @@ since the failure it would cause is invisible at runtime.
  internal/cloud/cloud.go                       |   1 +
  internal/cloud/config.go                      |  27 +++-
  .../config_backend_address_internal_test.go   |  99 +++++++++++++++
- .../backend_address_internal_test.go          | 119 ++++++++++++++++++
+ .../backend_address_internal_test.go          | 120 ++++++++++++++++++
  internal/loadbalancer/config.go               |  17 ++-
  internal/loadbalancer/const.go                |  19 +++
  .../loadbalancer_internal_test.go             |   2 +-
  internal/loadbalancer/loadbalancer_request.go |   4 +-
  internal/loadbalancer/loadbalancer_test.go    |   2 +-
- internal/loadbalancer/upcloud_service.go      |  56 ++++++++-
+ internal/loadbalancer/upcloud_service.go      |  67 +++++++++-
  internal/loadbalancer/upcloud_service_test.go |   2 +-
  internal/loadbalancer/utils.go                |  13 +-
- 13 files changed, 356 insertions(+), 15 deletions(-)
+ 13 files changed, 368 insertions(+), 15 deletions(-)
  create mode 100644 internal/cloud/config_backend_address_internal_test.go
  create mode 100644 internal/loadbalancer/backend_address_internal_test.go
 
@@ -238,14 +238,13 @@ index 0000000..dc7969b
 +}
 diff --git a/internal/loadbalancer/backend_address_internal_test.go b/internal/loadbalancer/backend_address_internal_test.go
 new file mode 100644
-index 0000000..68d2794
+index 0000000..5612865
 --- /dev/null
 +++ b/internal/loadbalancer/backend_address_internal_test.go
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,120 @@
 +package loadbalancer
 +
 +import (
-+	"strings"
 +	"testing"
 +
 +	"github.com/UpCloudLtd/upcloud-go-api/v8/upcloud"
@@ -339,16 +338,18 @@ index 0000000..68d2794
 +		},
 +	}
 +
-+	got, err := serverAddressOnNetwork(server, "sdn-net")
-+	require.NoError(t, err)
++	got, found := serverAddressOnNetwork(server, "sdn-net")
++	require.True(t, found)
 +	require.Equal(t, "10.173.209.4", got, "must pick the address on the load balancer's own network, not the utility one")
 +
-+	_, err = serverAddressOnNetwork(server, "other-net")
-+	require.Error(t, err)
-+	require.True(t, strings.Contains(err.Error(), "other-net"))
++	// A node on another network is an ordinary miss, not an error: on a
++	// multi-zone cluster every node outside the balancer's zone lands here,
++	// and failing would take the whole service down with them.
++	_, found = serverAddressOnNetwork(server, "other-net")
++	require.False(t, found)
 +
-+	_, err = serverAddressOnNetwork(nil, "sdn-net")
-+	require.Error(t, err)
++	_, found = serverAddressOnNetwork(nil, "sdn-net")
++	require.False(t, found)
 +}
 +
 +// TestNewConfigDefaultsBackendAddressSource keeps existing deployments, whose
@@ -471,7 +472,7 @@ index 67d74bd..2f1f54b 100644
  	broadcaster := record.NewBroadcaster()
  	broadcaster.StartStructuredLogging(0)
 diff --git a/internal/loadbalancer/upcloud_service.go b/internal/loadbalancer/upcloud_service.go
-index 84cda03..690b818 100644
+index 84cda03..baa4d12 100644
 --- a/internal/loadbalancer/upcloud_service.go
 +++ b/internal/loadbalancer/upcloud_service.go
 @@ -205,7 +205,15 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
@@ -491,7 +492,7 @@ index 84cda03..690b818 100644
  	if err != nil {
  		return nil, err
  	}
-@@ -216,6 +224,52 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
+@@ -216,6 +224,63 @@ func (u *upCloudLoadBalancer) newCreateRequest(ctx context.Context, service *v1.
  	return config, nil
  }
  
@@ -512,9 +513,15 @@ index 84cda03..690b818 100644
 +		if err != nil {
 +			return nil, err
 +		}
-+		address, err := serverAddressOnNetwork(server, privateNetworkUUID)
-+		if err != nil {
-+			return nil, fmt.Errorf("resolving backend address for node %s failed; %w", node.Name, err)
++		address, found := serverAddressOnNetwork(server, privateNetworkUUID)
++		if !found {
++			// A node that holds no address on the load balancer's network
++			// cannot be reached from it, and on a multi-zone cluster that is
++			// every node outside the balancer's own zone, because each zone
++			// has its own private network. Leaving it out of the map drops it
++			// from the backend; failing here instead would fail the whole
++			// service, taking the reachable nodes down with it.
++			continue
 +		}
 +		addresses[node.Name] = address
 +	}
@@ -522,11 +529,16 @@ index 84cda03..690b818 100644
 +}
 +
 +// serverAddressOnNetwork answers the server's IPv4 address on one SDN
-+// network. A server is attached to a private network at most once, so the
-+// first match is the address.
-+func serverAddressOnNetwork(server *upcloud.ServerDetails, networkUUID string) (string, error) {
++// network, and whether it holds one at all. A server is attached to a private
++// network at most once, so the first match is the address.
++//
++// Not holding an address is an ordinary outcome, not an error: a load
++// balancer's backends are drawn from every node the service selects, and on a
++// multi-zone cluster the nodes outside the balancer's zone sit on a different
++// private network.
++func serverAddressOnNetwork(server *upcloud.ServerDetails, networkUUID string) (string, bool) {
 +	if server == nil {
-+		return "", fmt.Errorf("server details not available; %w", errAmbiguity)
++		return "", false
 +	}
 +	for _, inf := range server.Networking.Interfaces {
 +		if inf.Network != networkUUID {
@@ -534,11 +546,11 @@ index 84cda03..690b818 100644
 +		}
 +		for _, address := range inf.IPAddresses {
 +			if address.Family == upcloud.IPAddressFamilyIPv4 {
-+				return address.Address, nil
++				return address.Address, true
 +			}
 +		}
 +	}
-+	return "", fmt.Errorf("server %s has no IPv4 address on network %s; %w", server.UUID, networkUUID, errAmbiguity)
++	return "", false
 +}
 +
  func (u *upCloudLoadBalancer) serverDetails(ctx context.Context, node *v1.Node) (*upcloud.ServerDetails, error) {
