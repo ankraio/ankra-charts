@@ -2,8 +2,8 @@ apiVersion: v2
 name: hermes-agent
 description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root, egress-restricted by default, with managed-secret and supply-chain guardrails.
 type: application
-version: 0.3.1
-appVersion: "v2026.8.27"
+version: 0.3.2
+appVersion: "v2026.8.31"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 
@@ -52,7 +52,7 @@ annotations:
     url: https://github.com/ankraio/ankra-charts#verifying-a-published-chart
   artifacthub.io/images: |
     - name: hermes-agent
-      image: docker.io/nousresearch/hermes-agent:v2026.8.27@sha256:e0df6adebddf29b91112aefc999d4aaf6846c9eb544faca5672a16a13590ff79
+      image: docker.io/nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
   artifacthub.io/changes: |
     - kind: added
       description: "Several model endpoints at once: config.values.providers declares named OpenAI-compatible endpoints with their own key_env, model.provider picks the main one, /model switches between them, and config.values.fallback_providers is the failover chain Hermes moves to on 429/5xx/401/404 without losing the conversation. values-examples/multi-provider.yaml shows Salad plus an in-cluster Claude Code wrapper side by side."

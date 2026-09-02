@@ -28,8 +28,8 @@ image:
   registry: docker.io
   repository: nousresearch/hermes-agent
   # Tag is documentation; digest is what is pulled. Keep both in step.
-  tag: v2026.8.27
-  digest: sha256:e0df6adebddf29b91112aefc999d4aaf6846c9eb544faca5672a16a13590ff79
+  tag: v2026.8.31
+  digest: sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
