@@ -38,7 +38,7 @@ images:
     tag: ""
     # -- Image digest (sha256:...). When set, takes precedence over `tag`
     # and yields `registry/repository@sha256:...`. Recommended for production.
-    digest: "sha256:9eb9fc10d76be30fdeafa40ffd8c70625d2d2a5c414f4e71989e43d698d6b9be"
+    digest: "sha256:790cd1f8e69581d0b66b4c47bcd808f8c43a3b61db07ceb2c5664f8e6d748034"
     # -- `IfNotPresent`, `Always`, or `Never`.
     pullPolicy: IfNotPresent
 
