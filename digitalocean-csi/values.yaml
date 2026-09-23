@@ -29,37 +29,37 @@ images:
     # -- Tag. Empty string falls back to `.Chart.AppVersion`.
     tag: ""
     # -- Image digest (sha256:...). Takes precedence over `tag` when set.
-    digest: "sha256:790f483b9b7d2783d4d836b2b7da5602e6be85c5884842b496d3609baafc19bd"
+    digest: "sha256:32176ee3f34b87dd35ea66517c6bd121068e5c9b637b395f907bc385dc033bcd"
     pullPolicy: IfNotPresent
   provisioner:
     registry: registry.k8s.io
     repository: sig-storage/csi-provisioner
-    tag: "v6.2.0"
+    tag: "v6.3.0"
     pullPolicy: IfNotPresent
   attacher:
     registry: registry.k8s.io
     repository: sig-storage/csi-attacher
-    tag: "v4.11.0"
+    tag: "v4.13.0"
     pullPolicy: IfNotPresent
   snapshotter:
     registry: registry.k8s.io
     repository: sig-storage/csi-snapshotter
-    tag: "v8.5.0"
+    tag: "v8.6.0"
     pullPolicy: IfNotPresent
   resizer:
     registry: registry.k8s.io
     repository: sig-storage/csi-resizer
-    tag: "v2.1.0"
+    tag: "v2.2.1"
     pullPolicy: IfNotPresent
   nodeDriverRegistrar:
     registry: registry.k8s.io
     repository: sig-storage/csi-node-driver-registrar
-    tag: "v2.16.0"
+    tag: "v2.18.0"
     pullPolicy: IfNotPresent
   snapshotController:
     registry: registry.k8s.io
     repository: sig-storage/snapshot-controller
-    tag: "v8.5.0"
+    tag: "v8.6.0"
     pullPolicy: IfNotPresent
   automountUdevDeleter:
     registry: docker.io
