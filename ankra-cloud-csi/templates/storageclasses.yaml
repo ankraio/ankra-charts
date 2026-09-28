@@ -1,0 +1,21 @@
+{{- range .Values.storageClasses }}
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "ankra-cloud-csi.labels" $ | nindent 4 }}
+  {{- if .default }}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  {{- end }}
+provisioner: csi.ankra.cloud
+parameters:
+  tier: {{ .tier | quote }}
+  csi.storage.k8s.io/fstype: {{ .fsType | default $.Values.storageClassDefaults.fsType | quote }}
+reclaimPolicy: {{ .reclaimPolicy | default $.Values.storageClassDefaults.reclaimPolicy }}
+allowVolumeExpansion: {{ $.Values.storageClassDefaults.allowVolumeExpansion }}
+# The volume is created once a pod is scheduled, in that node's zone and, for local-nvme, on that server.
+volumeBindingMode: WaitForFirstConsumer
+{{- end }}

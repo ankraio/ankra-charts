@@ -1,0 +1,101 @@
+# The Ankra Cloud API the driver talks to, with a customer API token that can operate storages.
+api:
+  # @param api.url The API's base URL (ANKRA_CLOUD_API_URL).
+  url: "https://cloud.ankra.app"
+  # @param api.existingSecret A Secret holding the API token; the chart creates one from api.token when empty.
+  existingSecret: ""
+  # @param api.existingSecretKey The key of the token in the Secret.
+  existingSecretKey: "token"
+  # @param api.token An Ankra Cloud API token. Prefer api.existingSecret so the token never sits in values.
+  token: ""
+  # @param api.caBundle.existingSecret A Secret with a PEM CA bundle for a privately signed API certificate (optional).
+  caBundle:
+    existingSecret: ""
+    key: "ca.crt"
+
+# @param defaultZone Zone of volumes created without a topology; empty reads the controller's own zone.
+defaultZone: ""
+
+image:
+  # @param image.repository The driver image (multi-arch: linux/amd64, linux/arm64).
+  repository: share.ankra.cloud/library/ankra-cloud-csi
+  # @param image.tag Defaults to the chart's appVersion. Tags are immutable (v<semver>, sha-<commit>); there is no latest.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Sidecars, pinned. Upgrade them together with the chart.
+sidecars:
+  provisioner:
+    image: registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
+  attacher:
+    image: registry.k8s.io/sig-storage/csi-attacher:v4.8.1
+  resizer:
+    image: registry.k8s.io/sig-storage/csi-resizer:v1.13.2
+  snapshotter:
+    image: registry.k8s.io/sig-storage/csi-snapshotter:v8.2.1
+  nodeDriverRegistrar:
+    image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+  livenessProbe:
+    image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
+
+controller:
+  replicas: 1
+  # @param controller.operationTimeout How long one CSI call waits for an API operation.
+  operationTimeout: "5m"
+  # @param controller.sidecarTimeout The sidecars' per-call timeout; above operationTimeout so the driver answers first.
+  sidecarTimeout: "6m"
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+  nodeSelector: {}
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  affinity: {}
+  priorityClassName: system-cluster-critical
+
+node:
+  # @param node.kubeletDir The kubelet's root directory (k3s and kubeadm use /var/lib/kubelet).
+  kubeletDir: /var/lib/kubelet
+  # @param node.maxVolumesPerNode Volumes one server can attach: 16 storage devices less its boot storage.
+  maxVolumesPerNode: 15
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+  nodeSelector: {}
+  tolerations:
+    - operator: Exists
+  priorityClassName: system-node-critical
+
+# StorageClasses, one per tier. All bind on first consumer: the volume is created in the zone (and, for local-nvme,
+# on the server) of the node the pod is scheduled to.
+storageClasses:
+  - name: ankra-standard
+    tier: standard
+    default: true
+  - name: ankra-maxiops
+    tier: maxiops
+  - name: ankra-hdd
+    tier: hdd
+  - name: ankra-local-nvme
+    tier: local-nvme
+storageClassDefaults:
+  reclaimPolicy: Delete
+  allowVolumeExpansion: true
+  fsType: ext4
+
+# The VolumeSnapshotClass is only rendered when the cluster has the snapshot CRDs (snapshot.storage.k8s.io/v1) and
+# the snapshot-controller, which the chart does not install.
+volumeSnapshotClass:
+  enabled: true
+  name: ankra-snapshots
+  default: true
+  deletionPolicy: Delete

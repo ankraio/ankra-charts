@@ -1,0 +1,11 @@
+csi.ankra.cloud is installed in {{ .Release.Namespace }}.
+
+StorageClasses: {{ range $index, $class := .Values.storageClasses }}{{ if $index }}, {{ end }}{{ $class.name }}{{ if $class.default }} (default){{ end }}{{ end }}
+All bind on first consumer; ankra-local-nvme volumes are pinned to the server that first mounts them.
+{{- if not (.Capabilities.APIVersions.Has "snapshot.storage.k8s.io/v1/VolumeSnapshotClass") }}
+
+No VolumeSnapshotClass was created: install the snapshot CRDs and the snapshot-controller
+(github.com/kubernetes-csi/external-snapshotter) and upgrade this release to enable snapshots.
+{{- end }}
+
+Check the plugin: kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/name=ankra-cloud-csi

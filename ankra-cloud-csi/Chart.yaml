@@ -1,0 +1,66 @@
+apiVersion: v2
+name: ankra-cloud-csi
+description: CSI driver csi.ankra.cloud for Ankra Cloud block storage (dynamic volumes per tier, snapshots, clones, online expansion).
+type: application
+version: 0.1.0
+appVersion: "v0.1.0"
+kubeVersion: ">=1.27.0-0"
+icon: https://ankra.io/images/apple-touch-icon.png
+home: https://github.com/ankraio/ankra-cloud-csi
+sources:
+  - https://github.com/ankraio/ankra-cloud-csi
+keywords:
+  - ankra
+  - ankra-cloud
+  - csi
+  - storage
+  - block-storage
+  - persistent-volumes
+  - snapshots
+maintainers:
+  - name: Ankra AB
+    email: admin@ankra.io
+    url: https://ankra.io
+annotations:
+  category: Storage
+  licenses: Apache-2.0
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: storage
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/operator: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/maintainers: |
+    - name: Ankra AB
+      email: admin@ankra.io
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/ankraio/ankra-cloud-csi
+    - name: Documentation
+      url: https://cloud.ankra.app/docs/kubernetes-csi
+    - name: Helm repo (helm repo add)
+      url: https://ankraio.github.io/ankra-charts
+  artifacthub.io/recommendations: |
+    - url: https://artifacthub.io/packages/helm/ankra-charts/ankra-cloud-ccm
+  artifacthub.io/images: |
+    - name: ankra-cloud-csi
+      image: share.ankra.cloud/library/ankra-cloud-csi:v0.1.0
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    - name: csi-provisioner
+      image: registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
+    - name: csi-attacher
+      image: registry.k8s.io/sig-storage/csi-attacher:v4.8.1
+    - name: csi-resizer
+      image: registry.k8s.io/sig-storage/csi-resizer:v1.13.2
+    - name: csi-snapshotter
+      image: registry.k8s.io/sig-storage/csi-snapshotter:v8.2.1
+    - name: csi-node-driver-registrar
+      image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+    - name: livenessprobe
+      image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
+  artifacthub.io/changes: |
+    - kind: added
+      description: "First public release: dynamic provisioning for the standard, maxiops, hdd and local-nvme tiers, hot-plug attach and detach, online expansion, snapshots, restore from a snapshot and clones."
+    - kind: added
+      description: "Multi-arch driver image (linux/amd64, linux/arm64) on share.ankra.cloud with an SPDX SBOM."

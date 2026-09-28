@@ -13,6 +13,7 @@ In-tree Helm charts maintained by the Ankra platform team.
 | [`claude-code-openai-wrapper`](claude-code-openai-wrapper/README.md) | [Claude Code OpenAI API Wrapper](https://github.com/RichardAtCT/claude-code-openai-wrapper) - OpenAI-compatible `/v1/chat/completions` endpoint backed by the Claude Agent SDK. Digest-pinned, non-root, egress-restricted by default, with render-time hardening guardrails. | Ankra-maintained; upstream publishes no image, so the image is built in-repo ([`images/claude-code-openai-wrapper/`](images/claude-code-openai-wrapper/)) from the pinned upstream release. |
 | [`psono`](psono/README.md) | Self-hosted [Psono](https://psono.com/) password manager — server, web client and optional admin client behind a single Ingress (Traefik by default). Bring your own PostgreSQL + Secrets. | Hand-written from Psono [server install docs](https://doc.psono.com/admin/installation/install-server-ce.html); images `psono/psono-{server,client,admin-client}`. |
 | [`isms-builder`](isms-builder/README.md) | [ISMS Builder](https://github.com/coolstartnow/isms-builder) - open-source ISO 27001 / NIS2 ISMS template builder. Digest-pinned, non-root (restricted-profile), persistent data volume, same-namespace-only NetworkPolicy, with render-time hardening guardrails. | Ankra-maintained; upstream image `ghcr.io/coolstartnow/isms-builder`, digest re-pinned via `scripts/sync-image-digest.sh`. |
+| [`ankra-cloud-csi`](ankra-cloud-csi/README.md) | Ankra Cloud CSI block-storage driver `csi.ankra.cloud` - controller Deployment, node DaemonSet, four StorageClasses (`ankra-standard` default), snapshots, online expansion. Multi-arch image on `share.ankra.cloud`. | Ankra-maintained in [`ankraio/ankra-cloud-csi`](https://github.com/ankraio/ankra-cloud-csi) (`charts/ankra-cloud-csi`); copied here for each release. |
 
 ## Install via `helm repo add` (recommended)
 
@@ -53,6 +54,11 @@ kubectl -n hermes create secret generic hermes-credentials \
   --from-literal=OPENROUTER_API_KEY="$OPENROUTER_API_KEY"
 helm install hermes ankra/hermes-agent --version 0.1.1 -n hermes --create-namespace \
   --set secrets.existingSecret=hermes-credentials
+
+# Ankra Cloud CSI - the API token from a Secret you manage.
+kubectl -n kube-system create secret generic ankra-cloud-csi-api --from-literal=token="$ANKRA_CLOUD_TOKEN"
+helm install ankra-cloud-csi ankra/ankra-cloud-csi --version 0.1.0 -n kube-system \
+  --set api.existingSecret=ankra-cloud-csi-api
 ```
 
 ## Install from GHCR (OCI)
@@ -96,6 +102,11 @@ helm install digitalocean-csi oci://ghcr.io/ankraio/ankra-charts/digitalocean-cs
 helm install hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
   --version 0.1.1 -n hermes --create-namespace \
   --set secrets.existingSecret=hermes-credentials
+
+# Ankra Cloud CSI (also at oci://share.ankra.cloud/charts/ankra-cloud-csi)
+helm install ankra-cloud-csi oci://ghcr.io/ankraio/ankra-charts/ankra-cloud-csi \
+  --version 0.1.0 -n kube-system \
+  --set api.existingSecret=ankra-cloud-csi-api
 
 # Psono (self-hosted password manager) — requires the BYO Secrets described
 # in psono/README.md to already exist in the target namespace.
