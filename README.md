@@ -6,6 +6,7 @@ In-tree Helm charts maintained by the Ankra platform team.
 |---|---|---|
 | [`upcloud-ccm`](upcloud-ccm/README.md) | UpCloud Cloud Controller Manager — provisions LoadBalancers, manages node labels, clears the `uninitialized` cloud-provider taint. | Hand-written from UpCloud docs; image `ghcr.io/upcloudltd/cloud-controller-manager`. |
 | [`upcloud-csi`](upcloud-csi/README.md) | UpCloud CSI block-storage driver — controller StatefulSet, snapshot-controller, node DaemonSet, three StorageClasses. | Vendored from upstream [`UpCloudLtd/upcloud-csi`](https://github.com/UpCloudLtd/upcloud-csi); auto-bumped daily. |
+| [`ankra-cloud-ccm`](ankra-cloud-ccm/README.md) | Ankra Cloud Cloud Controller Manager (provider `ankracloud`) - initialises nodes, provisions Ankra load balancers for Services of type LoadBalancer, clears the `uninitialized` cloud-provider taint. Multi-arch image on `share.ankra.cloud`. | Ankra-maintained in [`ankraio/ankra-cloud-ccm`](https://github.com/ankraio/ankra-cloud-ccm) (`charts/ankra-cloud-ccm`); copied here for each release. |
 | [`cloudflare-operator`](cloudflare-operator/README.md) | Cloudflare Tunnel operator (Tunnel / ClusterTunnel / TunnelBinding / AccessTunnel CRDs) — plus optional `ClusterOriginIssuer` for the cert-manager Origin CA external issuer. | Vendored from upstream [`adyanth/cloudflare-operator`](https://github.com/adyanth/cloudflare-operator); auto-bumped daily. |
 | [`digitalocean-ccm`](digitalocean-ccm/README.md) | DigitalOcean Cloud Controller Manager - provisions DO Load Balancers, manages node lifecycle, clears the `uninitialized` cloud-provider taint. | Vendored from upstream [`digitalocean/digitalocean-cloud-controller-manager`](https://github.com/digitalocean/digitalocean-cloud-controller-manager) release manifests (no upstream chart exists); auto-bumped daily. |
 | [`digitalocean-csi`](digitalocean-csi/README.md) | DigitalOcean CSI block-storage driver - controller StatefulSet, node DaemonSet, snapshot-controller, snapshot CRDs, four `do-block-storage*` StorageClasses. | Vendored from upstream [`digitalocean/csi-digitalocean`](https://github.com/digitalocean/csi-digitalocean) release manifests (no upstream chart exists); auto-bumped daily. |
@@ -33,6 +34,11 @@ helm install upcloud-ccm ankra/upcloud-ccm --version 0.3.0 -n kube-system \
 # UpCloud CSI
 helm install upcloud-csi ankra/upcloud-csi --version 0.3.0 -n kube-system \
   --set storageClasses.defaultClass=maxiops
+
+# Ankra Cloud CCM - kubelets must run with --cloud-provider=external.
+kubectl -n kube-system create secret generic ankra-cloud-ccm --from-literal=token="$ANKRA_CLOUD_TOKEN"
+helm install ankra-cloud-ccm ankra/ankra-cloud-ccm --version 0.1.0 -n kube-system \
+  --set api.existingSecret=ankra-cloud-ccm --set clusterName=production
 
 # Cloudflare operator
 helm install cloudflare-operator ankra/cloudflare-operator --version 0.2.0 \
@@ -75,6 +81,11 @@ helm install upcloud-ccm oci://ghcr.io/ankraio/ankra-charts/upcloud-ccm \
 helm install upcloud-csi oci://ghcr.io/ankraio/ankra-charts/upcloud-csi \
   --version 0.2.0 -n kube-system \
   --set storageClasses.defaultClass=maxiops
+
+# Ankra Cloud CCM (also at oci://share.ankra.cloud/charts/ankra-cloud-ccm)
+helm install ankra-cloud-ccm oci://ghcr.io/ankraio/ankra-charts/ankra-cloud-ccm \
+  --version 0.1.0 -n kube-system \
+  --set api.existingSecret=ankra-cloud-ccm --set clusterName=production
 
 # Cloudflare operator
 helm install cloudflare-operator oci://ghcr.io/ankraio/ankra-charts/cloudflare-operator \

@@ -1,0 +1,10 @@
+ankra-cloud-ccm is running as the cloud controller manager for provider "ankracloud" (cluster {{ .Values.clusterName }}).
+
+Every kubelet must run with --cloud-provider=external. New nodes stay tainted
+node.cloudprovider.kubernetes.io/uninitialized until the controller sets their providerID
+(ankracloud://<zone>/<server-id>), addresses and topology labels:
+
+  kubectl get nodes -o custom-columns=NAME:.metadata.name,PROVIDER:.spec.providerID,ZONE:.metadata.labels.topology\.kubernetes\.io/zone
+
+Services of type LoadBalancer get an Ankra load balancer labelled ccm.ankra.cloud/service=<namespace>/<name>.
+IPv4 is opt-in per Service with the annotation load-balancer.ankra.cloud/ipv4: "true".

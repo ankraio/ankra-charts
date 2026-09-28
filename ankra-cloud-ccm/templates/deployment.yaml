@@ -1,0 +1,117 @@
+{{- if not (has (toString .Values.loadBalancer.highAvailability) (list "auto" "true" "false")) }}
+{{- fail "loadBalancer.highAvailability must be auto, true or false" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ankra-cloud-ccm.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ankra-cloud-ccm.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      {{- include "ankra-cloud-ccm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ankra-cloud-ccm.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- if not .Values.api.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "ankra-cloud-ccm.name" . }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: {{ if .Values.hostNetwork }}Default{{ else }}ClusterFirst{{ end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: ankra-cloud-ccm
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --cloud-provider=ankracloud
+            - --cluster-name={{ .Values.clusterName }}
+            - --leader-elect=true
+            - --leader-elect-resource-name=ankra-cloud-ccm
+            - --leader-elect-resource-namespace={{ .Release.Namespace }}
+            - --configure-cloud-routes=false
+            - --allocate-node-cidrs=false
+            - --secure-port=10258
+            - --v={{ .Values.logVerbosity }}
+            {{- range .Values.extraArgs }}
+            - {{ . }}
+            {{- end }}
+          env:
+            - name: ANKRA_CLOUD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ankra-cloud-ccm.secretName" . }}
+                  key: token
+            - name: ANKRA_CLOUD_API_URL
+              value: {{ .Values.api.url | quote }}
+            {{- if include "ankra-cloud-ccm.hasCABundle" . }}
+            - name: ANKRA_CLOUD_CA_BUNDLE
+              value: /etc/ankra-cloud/ca.crt
+            {{- end }}
+            - name: ANKRA_CLOUD_NETWORK_ID
+              value: {{ .Values.loadBalancer.networkID | quote }}
+            - name: ANKRA_CLOUD_ZONE
+              value: {{ .Values.loadBalancer.zone | quote }}
+            - name: ANKRA_CLOUD_LOAD_BALANCER_HIGH_AVAILABILITY
+              value: {{ toString .Values.loadBalancer.highAvailability | quote }}
+          ports:
+            - name: https
+              containerPort: 10258
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 10258
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if include "ankra-cloud-ccm.hasCABundle" . }}
+          volumeMounts:
+            - name: ca-bundle
+              mountPath: /etc/ankra-cloud
+              readOnly: true
+          {{- end }}
+      {{- if include "ankra-cloud-ccm.hasCABundle" . }}
+      volumes:
+        - name: ca-bundle
+          secret:
+            secretName: {{ include "ankra-cloud-ccm.secretName" . }}
+            items:
+              - key: ca.crt
+                path: ca.crt
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

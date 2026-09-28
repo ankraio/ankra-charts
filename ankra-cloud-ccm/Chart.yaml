@@ -1,0 +1,52 @@
+apiVersion: v2
+name: ankra-cloud-ccm
+description: Kubernetes cloud controller manager for Ankra Cloud (node initialisation and Services of type LoadBalancer).
+type: application
+version: 0.1.0
+appVersion: "v0.1.0"
+kubeVersion: ">=1.29.0-0"
+icon: https://ankra.io/images/apple-touch-icon.png
+home: https://github.com/ankraio/ankra-cloud-ccm
+sources:
+  - https://github.com/ankraio/ankra-cloud-ccm
+keywords:
+  - ankra
+  - ankra-cloud
+  - cloud-controller-manager
+  - ccm
+  - load-balancer
+maintainers:
+  - name: Ankra AB
+    email: admin@ankra.io
+    url: https://ankra.io
+annotations:
+  category: Networking
+  licenses: Apache-2.0
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: networking
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/operator: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/maintainers: |
+    - name: Ankra AB
+      email: admin@ankra.io
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/ankraio/ankra-cloud-ccm
+    - name: Documentation
+      url: https://cloud.ankra.app/docs/kubernetes-ccm
+    - name: Helm repo (helm repo add)
+      url: https://ankraio.github.io/ankra-charts
+  artifacthub.io/recommendations: |
+    - url: https://artifacthub.io/packages/helm/ankra-charts/ankra-cloud-csi
+  artifacthub.io/images: |
+    - name: ankra-cloud-ccm
+      image: share.ankra.cloud/library/ankra-cloud-ccm:v0.1.0
+      platforms:
+        - linux/amd64
+        - linux/arm64
+  artifacthub.io/changes: |
+    - kind: added
+      description: "First public release: node initialisation (providerID, addresses, instance type, zone and region) and one Ankra load balancer per Service of type LoadBalancer, or members on a combined edge."
+    - kind: added
+      description: "Multi-arch controller image (linux/amd64, linux/arm64) on share.ankra.cloud, distroless and non-root, with an SPDX SBOM."
