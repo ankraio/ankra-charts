@@ -1,0 +1,91 @@
+suite: sidecar rbac
+templates:
+  - templates/rbac.yaml
+release:
+  name: ut
+  namespace: kube-system
+
+tests:
+  - it: lets csi-snapshotter v8 patch VolumeSnapshotContent status
+    documentIndex: 8
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: ut-upcloud-csi-snapshotter
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["snapshot.storage.k8s.io"]
+            resources: ["volumesnapshotcontents/status"]
+            verbs: ["update", "patch"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["snapshot.storage.k8s.io"]
+            resources: ["volumesnapshotcontents"]
+            verbs: ["get", "list", "watch", "update", "patch"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["snapshot.storage.k8s.io"]
+            resources: ["volumesnapshotclasses"]
+            verbs: ["get", "list", "watch"]
+
+  - it: lets snapshot-controller v8 patch VolumeSnapshots and their status
+    documentIndex: 14
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: ut-upcloud-csi-snapshot-controller
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["snapshot.storage.k8s.io"]
+            resources: ["volumesnapshots"]
+            verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["snapshot.storage.k8s.io"]
+            resources: ["volumesnapshots/status"]
+            verbs: ["update", "patch"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["snapshot.storage.k8s.io"]
+            resources: ["volumesnapshotcontents/status"]
+            verbs: ["patch"]
+
+  - it: lets external-provisioner v6 patch PersistentVolumes
+    documentIndex: 4
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: ut-upcloud-csi-provisioner
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["persistentvolumes"]
+            verbs: ["get", "list", "watch", "create", "patch", "delete"]
+
+  - it: lets external-resizer v2 read VolumeAttributesClasses
+    documentIndex: 12
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: ut-upcloud-csi-resizer
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["storage.k8s.io"]
+            resources: ["volumeattributesclasses"]
+            verbs: ["get", "list", "watch"]

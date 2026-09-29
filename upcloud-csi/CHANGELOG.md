@@ -12,6 +12,24 @@ auto-bumps these.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-29
+
+### Fixed
+
+- **VolumeSnapshots never became ReadyToUse with newer sidecars**: stacks
+  that override `images.snapshotter.tag` / `images.snapshotController.tag`
+  to the v8 line (and `images.provisioner.tag` to v6) ran into RBAC written
+  for the pinned v4 sidecars. csi-snapshotter v8 records a finished snapshot
+  by patching `volumesnapshotcontents/status`, which the role only allowed to
+  `update`, so every snapshot was created at UpCloud but its content stayed
+  unready: `cannot patch resource "volumesnapshotcontents/status"`. Velero
+  waits 10 minutes per PVC for that and then fails the backup. The
+  snapshotter, snapshot-controller, provisioner and resizer roles are now the
+  union of the rules the pinned and the current kubernetes-csi sidecars need
+  (including the `groupsnapshot.storage.k8s.io` rules and
+  `volumeattributesclasses`). The change only adds permissions, so the
+  default v4 sidecars are unaffected.
+
 ## [0.3.3] - 2026-08-07
 
 ### Fixed
