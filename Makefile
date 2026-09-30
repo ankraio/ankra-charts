@@ -5,6 +5,7 @@
 # `make -C charts lint` (from the repo root) work.
 
 CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi psono hermes-agent claude-code-openai-wrapper isms-builder
+CHARTS   += ankra-cloud-csi
 HELM     ?= helm
 KCONFORM ?= kubeconform
 CHARTS   += ankra-cloud-ccm
@@ -48,6 +49,9 @@ lint:
 	@echo "==> helm lint isms-builder"
 	@$(HELM) lint --strict isms-builder \
 		--set secrets.existingSecret=ci-placeholder
+	@echo "==> helm lint ankra-cloud-csi"
+	@$(HELM) lint --strict ankra-cloud-csi \
+		--set api.existingSecret=ci-placeholder
 
 template:
 	@mkdir -p /tmp/rendered
@@ -88,6 +92,10 @@ template:
 		--namespace isms \
 		--set secrets.existingSecret=isms-credentials \
 		> /tmp/rendered/isms-builder.yaml
+	@$(HELM) template ankra-cloud-csi ankra-cloud-csi \
+		--namespace kube-system \
+		--set api.existingSecret=ankra-cloud-csi-api \
+		> /tmp/rendered/ankra-cloud-csi.yaml
 	@echo "rendered to /tmp/rendered/{upcloud-ccm,upcloud-csi,cloudflare-operator,digitalocean-ccm,digitalocean-csi,psono,hermes-agent,claude-code-openai-wrapper,isms-builder}.yaml"
 
 unittest:
