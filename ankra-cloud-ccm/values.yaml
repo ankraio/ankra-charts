@@ -1,0 +1,98 @@
+# ankra-cloud-ccm. Kubelets must run with --cloud-provider=external, and the chart is installed in kube-system.
+
+image:
+  # @param image.repository The controller image (multi-arch: linux/amd64, linux/arm64).
+  repository: share.ankra.cloud/library/ankra-cloud-ccm
+  # @param image.tag Defaults to the chart's appVersion. Tags are immutable (v<semver>, sha-<commit>); there is no latest.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# @param replicas Two or more run as a leader-elected standby pair.
+replicas: 1
+
+# @param clusterName Written on every load balancer as the ccm.ankra.cloud/cluster label; unique per account.
+clusterName: kubernetes
+
+api:
+  # @param api.url The Ankra Cloud API endpoint (ANKRA_CLOUD_API_URL).
+  url: https://cloud.ankra.app
+  # @param api.existingSecret A Secret with the key `token` (an API token with operate permission) and optionally
+  # `ca.crt` (a PEM bundle for an API behind a private CA). Leave empty to have the chart create one from api.token.
+  existingSecret: ""
+  # @param api.token Used only when existingSecret is empty. Prefer an existing (SOPS-encrypted) Secret.
+  token: ""
+  # @param api.caBundle PEM certificates to trust in addition to the system roots; used only when existingSecret is empty.
+  caBundle: ""
+  # @param api.existingSecretHasCABundle Set when api.existingSecret also holds `ca.crt`.
+  existingSecretHasCABundle: false
+
+loadBalancer:
+  # @param loadBalancer.networkID Default private network for load balancers (ANKRA_CLOUD_NETWORK_ID); the
+  # load-balancer.ankra.cloud/network-id annotation overrides it.
+  networkID: ""
+  # @param loadBalancer.zone Default zone for load balancers (ANKRA_CLOUD_ZONE); otherwise the nodes' zone.
+  zone: ""
+  # @param loadBalancer.highAvailability auto asks the zone's capabilities and creates a single-VM load balancer
+  # (high_availability false) while the zone has one compute node; true or false forces it.
+  highAvailability: auto
+
+# @param extraArgs Additional flags for the controller manager.
+extraArgs: []
+
+# @param logVerbosity klog verbosity.
+logVerbosity: 2
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+# The controller runs before any CNI is ready (it is what initialises the nodes), so it uses the host network.
+hostNetwork: true
+
+priorityClassName: system-cluster-critical
+
+nodeSelector: {}
+
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+
+tolerations:
+  - key: node.cloudprovider.kubernetes.io/uninitialized
+    value: "true"
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+  - key: node.kubernetes.io/not-ready
+    operator: Exists
+    effect: NoSchedule
+  - key: CriticalAddonsOnly
+    operator: Exists
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL

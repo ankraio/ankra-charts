@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ankra-cloud-ccm.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ankra-cloud-ccm.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system:{{ include "ankra-cloud-ccm.name" . }}
+  labels:
+    {{- include "ankra-cloud-ccm.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch, update]
+  - apiGroups: ["events.k8s.io"]
+    resources: [events]
+    verbs: [create, patch, update]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch, update, patch, delete]
+  - apiGroups: [""]
+    resources: [nodes/status]
+    verbs: [patch, update]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get, list, watch, patch, update]
+  - apiGroups: [""]
+    resources: [services/status]
+    verbs: [patch, update]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [create, get]
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, watch]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: [leases]
+    verbs: [create, get, list, watch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:{{ include "ankra-cloud-ccm.name" . }}
+  labels:
+    {{- include "ankra-cloud-ccm.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:{{ include "ankra-cloud-ccm.name" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ankra-cloud-ccm.name" . }}
+    namespace: {{ .Release.Namespace }}
+---
+# Delegated authentication of the secure port reads kube-system/extension-apiserver-authentication.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ankra-cloud-ccm.name" . }}:extension-apiserver-authentication-reader
+  namespace: kube-system
+  labels:
+    {{- include "ankra-cloud-ccm.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ankra-cloud-ccm.name" . }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:{{ include "ankra-cloud-ccm.name" . }}:auth-delegator
+  labels:
+    {{- include "ankra-cloud-ccm.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ankra-cloud-ccm.name" . }}
+    namespace: {{ .Release.Namespace }}

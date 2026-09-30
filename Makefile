@@ -7,6 +7,7 @@
 CHARTS   := upcloud-ccm upcloud-csi cloudflare-operator digitalocean-ccm digitalocean-csi psono hermes-agent claude-code-openai-wrapper isms-builder
 HELM     ?= helm
 KCONFORM ?= kubeconform
+CHARTS   += ankra-cloud-ccm
 
 .PHONY: help lint template unittest test secret-scan \
         sync sync-ccm sync-csi sync-cloudflare sync-do-ccm sync-do-csi check docs \
@@ -18,6 +19,9 @@ help:
 	@awk '/^[a-zA-Z][a-zA-Z0-9_-]*:/ {print "  " $$0}' $(MAKEFILE_LIST) | sort -u
 
 lint:
+	@echo "==> helm lint ankra-cloud-ccm"
+	@$(HELM) lint --strict ankra-cloud-ccm \
+		--set api.existingSecret=ci-placeholder
 	@echo "==> helm lint upcloud-ccm"
 	@$(HELM) lint upcloud-ccm \
 		--set ccmConfig.clusterID=ci-test \
@@ -47,6 +51,10 @@ lint:
 
 template:
 	@mkdir -p /tmp/rendered
+	@$(HELM) template ankra-cloud-ccm ankra-cloud-ccm \
+		--namespace kube-system \
+		--set api.existingSecret=ankra-cloud-ccm \
+		> /tmp/rendered/ankra-cloud-ccm.yaml
 	@$(HELM) template ccm upcloud-ccm \
 		--set ccmConfig.clusterID=ci-test \
 		--set credentials.username=ci --set credentials.password=ci \
