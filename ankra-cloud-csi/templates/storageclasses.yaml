@@ -12,10 +12,12 @@ metadata:
   {{- end }}
 provisioner: csi.ankra.cloud
 parameters:
+  {{- if .tier }}
   tier: {{ .tier | quote }}
+  {{- end }}
   csi.storage.k8s.io/fstype: {{ .fsType | default $.Values.storageClassDefaults.fsType | quote }}
 reclaimPolicy: {{ .reclaimPolicy | default $.Values.storageClassDefaults.reclaimPolicy }}
 allowVolumeExpansion: {{ $.Values.storageClassDefaults.allowVolumeExpansion }}
-# The volume is created once a pod is scheduled, in that node's zone and, for local-nvme, on that server.
+# The volume is created once a pod is scheduled, in that node's zone and, for local-nvme, next to that server.
 volumeBindingMode: WaitForFirstConsumer
 {{- end }}

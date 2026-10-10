@@ -2,8 +2,8 @@ apiVersion: v2
 name: ankra-cloud-ccm
 description: Kubernetes cloud controller manager for Ankra Cloud (node initialisation and Services of type LoadBalancer).
 type: application
-version: 0.1.0
-appVersion: "v0.1.0"
+version: 0.1.1
+appVersion: "v0.1.1"
 kubeVersion: ">=1.29.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 home: https://github.com/ankraio/ankra-cloud-ccm
@@ -41,12 +41,16 @@ annotations:
     - url: https://artifacthub.io/packages/helm/ankra-charts/ankra-cloud-csi
   artifacthub.io/images: |
     - name: ankra-cloud-ccm
-      image: share.ankra.cloud/library/ankra-cloud-ccm:v0.1.0
+      image: share.ankra.cloud/library/ankra-cloud-ccm:v0.1.1
       platforms:
         - linux/amd64
         - linux/arm64
   artifacthub.io/changes: |
-    - kind: added
-      description: "First public release: node initialisation (providerID, addresses, instance type, zone and region) and one Ankra load balancer per Service of type LoadBalancer, or members on a combined edge."
-    - kind: added
-      description: "Multi-arch controller image (linux/amd64, linux/arm64) on share.ankra.cloud, distroless and non-root, with an SPDX SBOM."
+    - kind: fixed
+      description: "Services of type LoadBalancer no longer stay pending on a get_zone_capabilities decode error: the zone's stage is read as the number the API sends."
+    - kind: fixed
+      description: "A load balancer created without the IPv4 annotation no longer gets the priced IPv4 address: public_ipv4 is always sent."
+    - kind: fixed
+      description: "Load balancers past the first page of list_load_balancers are found: the controller follows next_cursor."
+    - kind: changed
+      description: "The API client is synced with the current Ankra Cloud OpenAPI document, with a contract test on every hand-decoded document."

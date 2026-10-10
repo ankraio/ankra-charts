@@ -29,7 +29,7 @@ helm install ankra-cloud-csi ankra/ankra-cloud-csi -n kube-system --set api.exis
 The chart is also published as an OCI artifact:
 
 ```bash
-helm install ankra-cloud-csi oci://share.ankra.cloud/charts/ankra-cloud-csi --version 0.1.0 -n kube-system \
+helm install ankra-cloud-csi oci://share.ankra.cloud/charts/ankra-cloud-csi --version 0.2.0 -n kube-system \
   --set api.existingSecret=ankra-cloud-csi-api
 ```
 
@@ -50,7 +50,7 @@ metadata:
   name: data
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: ankra-standard
+  storageClassName: ankra-default
   resources:
     requests:
       storage: 10Gi
@@ -79,7 +79,7 @@ spec:
 | `node.kubeletDir` | `/var/lib/kubelet` | The kubelet's root directory. |
 | `node.maxVolumesPerNode` | `15` | Volumes one server can attach: 16 storage devices less its boot storage. |
 | `node.resources`, `.nodeSelector`, `.tolerations`, `.priorityClassName` | see `values.yaml` | Scheduling of the node plugin. |
-| `storageClasses` | four tiers | `name`, `tier` and `default` per StorageClass. |
+| `storageClasses` | `ankra-default` (zone default tier, default class) and the four tiers | `name`, `tier` and `default` per StorageClass. |
 | `storageClassDefaults.reclaimPolicy` | `Delete` | |
 | `storageClassDefaults.allowVolumeExpansion` | `true` | |
 | `storageClassDefaults.fsType` | `ext4` | `ext4` or `xfs`. |

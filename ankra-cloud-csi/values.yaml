@@ -76,11 +76,15 @@ node:
   priorityClassName: system-node-critical
 
 # StorageClasses, one per tier. All bind on first consumer: the volume is created in the zone (and, for local-nvme,
-# on the server) of the node the pod is scheduled to.
+# on the server) of the node the pod is scheduled to. A class without a tier gets the zone's default storage tier
+# (`default_storage_tier` of GET /v1/zones/{zone}/capabilities), so the default class works in a zone without Ankra
+# Storage, where only local-nvme is offered.
 storageClasses:
+  - name: ankra-default
+    tier: ""
+    default: true
   - name: ankra-standard
     tier: standard
-    default: true
   - name: ankra-maxiops
     tier: maxiops
   - name: ankra-hdd

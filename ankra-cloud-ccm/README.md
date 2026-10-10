@@ -35,7 +35,7 @@ helm install ankra-cloud-ccm ankra/ankra-cloud-ccm -n kube-system \
 The chart is also published as an OCI artifact:
 
 ```bash
-helm install ankra-cloud-ccm oci://share.ankra.cloud/charts/ankra-cloud-ccm --version 0.1.0 -n kube-system \
+helm install ankra-cloud-ccm oci://share.ankra.cloud/charts/ankra-cloud-ccm --version 0.1.1 -n kube-system \
   --set api.existingSecret=ankra-cloud-ccm
 ```
 
