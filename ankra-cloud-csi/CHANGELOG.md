@@ -10,6 +10,23 @@ driver image tag it installs.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-10
+
+### Fixed
+
+- A `local-nvme` volume is created on the compute node that runs the scheduled
+  node's server (`create_storage` `placement.server_id`), so attaching it no
+  longer fails with 409 Conflict.
+
+### Changed
+
+- The default StorageClass is the new `ankra-default`: it names no tier, so every
+  volume gets its zone's default storage tier and a claim without a class works in
+  a zone without Ankra Storage, where only `local-nvme` is offered.
+  `ankra-standard` stays, no longer the default.
+- Driver image `share.ankra.cloud/library/ankra-cloud-csi:v0.2.0`; the API client
+  is regenerated from the current Ankra Cloud OpenAPI document.
+
 ## [0.1.0] - 2026-09-28
 
 ### Added

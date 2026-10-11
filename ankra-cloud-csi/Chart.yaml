@@ -2,8 +2,8 @@ apiVersion: v2
 name: ankra-cloud-csi
 description: CSI driver csi.ankra.cloud for Ankra Cloud block storage (dynamic volumes per tier, snapshots, clones, online expansion).
 type: application
-version: 0.1.0
-appVersion: "v0.1.0"
+version: 0.2.0
+appVersion: "v0.2.0"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 home: https://github.com/ankraio/ankra-cloud-csi
@@ -43,7 +43,7 @@ annotations:
     - url: https://artifacthub.io/packages/helm/ankra-charts/ankra-cloud-ccm
   artifacthub.io/images: |
     - name: ankra-cloud-csi
-      image: share.ankra.cloud/library/ankra-cloud-csi:v0.1.0
+      image: share.ankra.cloud/library/ankra-cloud-csi:v0.2.0
       platforms:
         - linux/amd64
         - linux/arm64
@@ -60,7 +60,9 @@ annotations:
     - name: livenessprobe
       image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
   artifacthub.io/changes: |
-    - kind: added
-      description: "First public release: dynamic provisioning for the standard, maxiops, hdd and local-nvme tiers, hot-plug attach and detach, online expansion, snapshots, restore from a snapshot and clones."
-    - kind: added
-      description: "Multi-arch driver image (linux/amd64, linux/arm64) on share.ankra.cloud with an SPDX SBOM."
+    - kind: fixed
+      description: "A local-nvme volume is created on the compute node that runs the scheduled node's server (create_storage placement.server_id), so attaching it no longer fails with 409 Conflict."
+    - kind: changed
+      description: "The default StorageClass is ankra-default: it names no tier, so every volume gets its zone's default storage tier and claims without a class work in zones without Ankra Storage. ankra-standard stays, no longer the default."
+    - kind: changed
+      description: "The API client is regenerated from the current Ankra Cloud OpenAPI document; a volume from a snapshot goes through the generated create_storage."
