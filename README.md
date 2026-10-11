@@ -38,7 +38,7 @@ helm install upcloud-csi ankra/upcloud-csi --version 0.3.0 -n kube-system \
 
 # Ankra Cloud CCM - kubelets must run with --cloud-provider=external.
 kubectl -n kube-system create secret generic ankra-cloud-ccm --from-literal=token="$ANKRA_CLOUD_TOKEN"
-helm install ankra-cloud-ccm ankra/ankra-cloud-ccm --version 0.1.0 -n kube-system \
+helm install ankra-cloud-ccm ankra/ankra-cloud-ccm --version 0.1.1 -n kube-system \
   --set api.existingSecret=ankra-cloud-ccm --set clusterName=production
 
 # Cloudflare operator
