@@ -10,6 +10,16 @@ controller image tag it installs.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-11
+
+### Fixed
+
+- Services of type LoadBalancer get a load balancer again: the controller read the
+  zone capabilities' `stage` as a string while the Ankra Cloud API sends a number, so
+  every load balancer sync failed (ankraio/ankra-cloud-ccm#8).
+- A load balancer gets a public IPv4 address only when the Service asks for one.
+- Load balancers beyond the API's first page are found.
+
 ## [0.1.0] - 2026-09-28
 
 ### Added
