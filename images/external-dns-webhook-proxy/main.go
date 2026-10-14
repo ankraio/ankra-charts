@@ -84,10 +84,15 @@ func run(logger *slog.Logger) error {
 		return loopbackError
 	}
 
+	defaults, defaultsError := adjustDefaultsFromEnvironment()
+	if defaultsError != nil {
+		return defaultsError
+	}
+
 	redactor := newRedactor(upstream)
 	server := &http.Server{
 		Addr:              listenAddress,
-		Handler:           newProxy(upstream, logger, redactor),
+		Handler:           newProxy(upstream, logger, redactor, defaults),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -101,6 +106,10 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("forwarding external-dns webhook calls",
 		"listen", listenAddress, "upstream_origin", upstream.Scheme+"://"+upstream.Host)
+	if defaults != nil {
+		logger.Info("adding default provider-specific properties on adjustendpoints",
+			"properties", defaults.describe())
+	}
 
 	signals, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stopSignals()
@@ -155,8 +164,10 @@ func requireLoopback(listenAddress string) error {
 	return nil
 }
 
-// newProxy builds the forwarding handler.
-func newProxy(upstream *url.URL, logger *slog.Logger, redactor redactor) http.Handler {
+// newProxy builds the forwarding handler. A non-nil defaults adds its
+// provider-specific properties to the endpoints of every adjustendpoints call
+// before it is forwarded.
+func newProxy(upstream *url.URL, logger *slog.Logger, redactor redactor, defaults *adjustDefaults) http.Handler {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 60 * time.Second
 	reverseProxy := &httputil.ReverseProxy{
@@ -192,6 +203,11 @@ func newProxy(upstream *url.URL, logger *slog.Logger, redactor redactor) http.Ha
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if hasDotSegment(request.URL.Path) {
 			http.Error(writer, "path must not contain dot segments", http.StatusBadRequest)
+			return
+		}
+		if rewriteError := defaults.rewriteAdjustRequest(request); rewriteError != nil {
+			logger.Warn("could not add the default provider-specific properties", "error", rewriteError.Error())
+			http.Error(writer, "the adjustendpoints request could not be read", http.StatusBadRequest)
 			return
 		}
 		reverseProxy.ServeHTTP(writer, request)

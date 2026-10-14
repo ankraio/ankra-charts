@@ -6,7 +6,7 @@
 # prints --webhook-provider-url unmasked in its INFO config dump on every
 # start, before --log-level takes effect; see README.md.
 #
-# image-version: v0.1.0
+# image-version: v0.2.0
 # The published tag is read from the line above by the build workflow. Bump it
 # with every change to this directory: consumers pin the tag AND the digest.
 

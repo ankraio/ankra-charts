@@ -56,6 +56,31 @@ URL; the error never echoes the value. It reads the URL once at start, so a
 rotated Secret takes effect when the pod restarts - render a checksum of the
 Secret onto the pod template so a rotation rolls it.
 
+## Default provider-specific properties (v0.2.0)
+
+external-dns has no flag that defaults a webhook provider's provider-specific
+properties (only its built-in Cloudflare provider has `--cloudflare-proxied`).
+A provider applies its defaults in `AdjustEndpoints`, and this proxy sits on
+exactly that call, so it can add them there:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ADJUST_DEFAULT_PROVIDER_SPECIFIC` | (none) | Comma-separated `name=value` properties added on `POST /adjustendpoints`. Empty: the body is forwarded byte for byte, as in v0.1.0. |
+| `ADJUST_DEFAULT_RECORD_TYPES` | `AAAA` | Only endpoints of these record types. |
+| `ADJUST_DEFAULT_RESOURCE_KINDS` | `ingress` | Only endpoints whose external-dns `resource` label names one of these source kinds (`ingress/<namespace>/<name>`). |
+| `ADJUST_DEFAULT_DOMAINS` | (every name) | Only DNS names equal to or below one of these domains. |
+
+An endpoint that already carries a property of the same name keeps its own
+value: external-dns turns the annotation
+`external-dns.alpha.kubernetes.io/webhook-<name>` into `webhook/<name>`, so
+`external-dns.alpha.kubernetes.io/webhook-ankra-cloud-proxied: "false"` on one
+Ingress opts it out of `ADJUST_DEFAULT_PROVIDER_SPECIFIC=webhook/ankra-cloud-proxied=true`.
+Only `/adjustendpoints` is rewritten: external-dns plans and applies the
+adjusted endpoints, so `/records` needs no change. A body that is not an
+endpoint list is forwarded as received. The Ankra platform sets these on
+IPv6-only Ankra Cloud clusters so their ingress hosts are published as
+proxied records (relay A and AAAA, TLS and WAF at the relay).
+
 ## Example sidecar
 
 ```yaml
