@@ -54,7 +54,7 @@ func newTestProxy(t *testing.T, rawUpstream string, logOutput io.Writer) *httpte
 		t.Fatalf("parseUpstreamURL: %v", parseError)
 	}
 	logger := slog.New(slog.NewTextHandler(logOutput, nil))
-	proxy := httptest.NewServer(newProxy(upstream, logger, newRedactor(upstream)))
+	proxy := httptest.NewServer(newProxy(upstream, logger, newRedactor(upstream), nil))
 	t.Cleanup(proxy.Close)
 	return proxy
 }
