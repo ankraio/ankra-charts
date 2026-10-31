@@ -10,6 +10,17 @@ driver image tag it installs.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-31
+
+### Fixed
+
+- The driver's API client health-checks its HTTP/2 connection: a connection that
+  stops answering is pinged after 15 seconds without a frame and closed when the
+  ping goes unanswered for 10 seconds, so the next call dials a fresh one. Before,
+  every call kept going onto the dead connection and timed out for minutes, and
+  volumes stayed `Pending` the whole time. Image `v0.2.1`; no values or template
+  changes.
+
 ## [0.2.0] - 2026-10-10
 
 ### Fixed

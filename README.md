@@ -63,7 +63,7 @@ helm install hermes ankra/hermes-agent --version 0.1.1 -n hermes --create-namesp
 
 # Ankra Cloud CSI - the API token from a Secret you manage.
 kubectl -n kube-system create secret generic ankra-cloud-csi-api --from-literal=token="$ANKRA_CLOUD_TOKEN"
-helm install ankra-cloud-csi ankra/ankra-cloud-csi --version 0.2.0 -n kube-system \
+helm install ankra-cloud-csi ankra/ankra-cloud-csi --version 0.2.1 -n kube-system \
   --set api.existingSecret=ankra-cloud-csi-api
 ```
 
@@ -116,7 +116,7 @@ helm install hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
 
 # Ankra Cloud CSI (also at oci://share.ankra.cloud/charts/ankra-cloud-csi)
 helm install ankra-cloud-csi oci://ghcr.io/ankraio/ankra-charts/ankra-cloud-csi \
-  --version 0.2.0 -n kube-system \
+  --version 0.2.1 -n kube-system \
   --set api.existingSecret=ankra-cloud-csi-api
 
 # Psono (self-hosted password manager) — requires the BYO Secrets described
