@@ -38,10 +38,10 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.1.1
-    created: "2026-10-11T19:40:20.287456851Z"
+    created: "2026-10-31T00:42:17.946656294Z"
     description: Kubernetes cloud controller manager for Ankra Cloud (node initialisation
       and Services of type LoadBalancer).
-    digest: 846472848ffd397ec5d5bba27102ac83b1d84c1f392b41e362d2b56613ed83db
+    digest: f09914e1beab0200f0cd5d150dc64ef797266a88648061c1d0d938acb1754b60
     home: https://github.com/ankraio/ankra-cloud-ccm
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -95,7 +95,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.1.0
-    created: "2026-10-11T19:40:20.286884053Z"
+    created: "2026-10-31T00:42:17.946014429Z"
     description: Kubernetes cloud controller manager for Ankra Cloud (node initialisation
       and Services of type LoadBalancer).
     digest: 676951fc47147c87e9864572ec56aaeabfd88f07d0e916cd27e23a21fc85abf5
@@ -120,6 +120,75 @@ entries:
     - https://ankraio.github.io/ankra-charts/ankra-cloud-ccm-0.1.0.tgz
     version: 0.1.0
   ankra-cloud-csi:
+  - annotations:
+      artifacthub.io/category: storage
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: "The API client health-checks its HTTP/2 connection and replaces one that stops answering within about 25 seconds. Before, every call kept going onto the dead connection and timed out for minutes, so volumes stayed Pending."
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/images: |
+        - name: ankra-cloud-csi
+          image: share.ankra.cloud/library/ankra-cloud-csi:v0.2.1
+          platforms:
+            - linux/amd64
+            - linux/arm64
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.8.1
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.13.2
+        - name: csi-snapshotter
+          image: registry.k8s.io/sig-storage/csi-snapshotter:v8.2.1
+        - name: csi-node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+        - name: livenessprobe
+          image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Source
+          url: https://github.com/ankraio/ankra-cloud-csi
+        - name: Documentation
+          url: https://cloud.ankra.app/docs/kubernetes-csi
+        - name: Helm repo (helm repo add)
+          url: https://ankraio.github.io/ankra-charts
+      artifacthub.io/maintainers: |
+        - name: Ankra AB
+          email: admin@ankra.io
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/ankra-charts/ankra-cloud-ccm
+      category: Storage
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: v0.2.1
+    created: "2026-10-31T00:42:17.948626546Z"
+    description: CSI driver csi.ankra.cloud for Ankra Cloud block storage (dynamic
+      volumes per tier, snapshots, clones, online expansion).
+    digest: 90bc5bd71e3b3ffe9cb0ccdc066afd3c99ff51d02402df59d4d85dbf51c729b0
+    home: https://github.com/ankraio/ankra-cloud-csi
+    icon: https://ankra.io/images/apple-touch-icon.png
+    keywords:
+    - ankra
+    - ankra-cloud
+    - csi
+    - storage
+    - block-storage
+    - persistent-volumes
+    - snapshots
+    kubeVersion: '>=1.27.0-0'
+    maintainers:
+    - email: admin@ankra.io
+      name: Ankra AB
+      url: https://ankra.io
+    name: ankra-cloud-csi
+    sources:
+    - https://github.com/ankraio/ankra-cloud-csi
+    type: application
+    urls:
+    - https://ankraio.github.io/ankra-charts/ankra-cloud-csi-0.2.1.tgz
+    version: 0.2.1
   - annotations:
       artifacthub.io/category: storage
       artifacthub.io/changes: |
@@ -167,7 +236,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.2.0
-    created: "2026-10-11T19:40:20.288781082Z"
+    created: "2026-10-31T00:42:17.947966153Z"
     description: CSI driver csi.ankra.cloud for Ankra Cloud block storage (dynamic
       volumes per tier, snapshots, clones, online expansion).
     digest: 442a2fe87423cccf9d06e31e65cd5a3aa22a60e42eac5c1ca1a5fd5cc2dd3e22
@@ -238,7 +307,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.1.0
-    created: "2026-10-11T19:40:20.288123796Z"
+    created: "2026-10-31T00:42:17.947317618Z"
     description: CSI driver csi.ankra.cloud for Ankra Cloud block storage (dynamic
       volumes per tier, snapshots, clones, online expansion).
     digest: 0398149ae1e8fc9c1ecdb2bfc54ad9fcb74e1d023cbe752a49eb4822176018c7
@@ -296,11 +365,11 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: v2.3.0
-    created: "2026-10-11T19:40:20.29117546Z"
+    created: "2026-10-31T00:42:17.951909978Z"
     description: OpenAI API-compatible wrapper for Claude Code on Kubernetes - digest-pinned,
       non-root, egress-restricted by default, with managed-secret and supply-chain
       guardrails.
-    digest: 4835b6fbd62612c9cf75112c5c0f98d676643306d79ad44b86e8a3a01b0020f4
+    digest: 241f2f432ba04d937086f72c0ec365cd2914443faa8fd08f2553ca201a7896f2
     home: https://github.com/ankraio/ankra-charts/tree/main/claude-code-openai-wrapper
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -357,7 +426,7 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: v2.3.0
-    created: "2026-10-11T19:40:20.289841401Z"
+    created: "2026-10-31T00:42:17.950708952Z"
     description: OpenAI API-compatible wrapper for Claude Code on Kubernetes - digest-pinned,
       non-root, egress-restricted by default, with managed-secret and supply-chain
       guardrails.
@@ -450,12 +519,12 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: 0.13.1
-    created: "2026-10-11T19:40:20.29308489Z"
+    created: "2026-10-31T00:42:17.953260428Z"
     description: 'Helm chart for the community Cloudflare Operator (adyanth/cloudflare-operator)
       that reconciles Tunnel, ClusterTunnel, AccessTunnel and TunnelBinding CRDs against
       Cloudflare Zero Trust / Cloudflare Tunnel. Optionally renders a ClusterOriginIssuer
       for use with the cert-manager origin-ca-issuer. '
-    digest: 0b964f9ba698650c4d7564b8dddf1fdbc5a63797861c5dd9fd2073896ca2ce0f
+    digest: 78d358d48eea3b7b8cfaeb0e50b10cd6f8c6b4c970638738dec529a6de58ef25
     home: https://github.com/ankraio/ankra-charts/tree/main/cloudflare-operator
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -512,11 +581,11 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.1.69
-    created: "2026-10-11T19:40:20.295199667Z"
+    created: "2026-10-31T00:42:17.95550969Z"
     description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified
       from the upstream release manifests, with LoadBalancer provisioning, node lifecycle
       management, and uninitialized-taint clearing.
-    digest: 2b969ac14fa84b85f98cd08bc0542f1bb53d5fd755542c083804c9dcd4930019
+    digest: 851e03782cc8084d9c0933df092c89abe3da26833d25940db1c45ebcbe89b313
     home: https://github.com/ankraio/ankra-charts/tree/main/digitalocean-ccm
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -571,7 +640,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.1.68
-    created: "2026-10-11T19:40:20.294479893Z"
+    created: "2026-10-31T00:42:17.954754725Z"
     description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified
       from the upstream release manifests, with LoadBalancer provisioning, node lifecycle
       management, and uninitialized-taint clearing.
@@ -628,7 +697,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v0.1.67
-    created: "2026-10-11T19:40:20.293792351Z"
+    created: "2026-10-31T00:42:17.95404675Z"
     description: DigitalOcean Cloud Controller Manager for Kubernetes - chart-ified
       from the upstream release manifests, with LoadBalancer provisioning, node lifecycle
       management, and uninitialized-taint clearing.
@@ -717,11 +786,11 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v4.18.0
-    created: "2026-10-11T19:40:20.299137637Z"
+    created: "2026-10-31T00:42:17.960515325Z"
     description: DigitalOcean CSI block-storage driver - controller StatefulSet, node
       DaemonSet, snapshot controller, snapshot CRDs, and the do-block-storage StorageClasses,
       chart-ified from the upstream release manifests.
-    digest: efbeb8ad92b73e1763df6ea8257474200458bc44ec167806057dc5192fd87836
+    digest: 542cd3c78be188080c6432dcc4d3bf614d360b7ee229c74e8706da95e558c717
     home: https://github.com/ankraio/ankra-charts/tree/main/digitalocean-csi
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -805,7 +874,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v4.17.0
-    created: "2026-10-11T19:40:20.296576546Z"
+    created: "2026-10-31T00:42:17.957979713Z"
     description: DigitalOcean CSI block-storage driver - controller StatefulSet, node
       DaemonSet, snapshot controller, snapshot CRDs, and the do-block-storage StorageClasses,
       chart-ified from the upstream release manifests.
@@ -870,10 +939,10 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v2026.8.27
-    created: "2026-10-11T19:40:20.312944247Z"
+    created: "2026-10-31T00:42:17.974869297Z"
     description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root,
       egress-restricted by default, with managed-secret and supply-chain guardrails.
-    digest: 3162601728366fb54d9a2bbd3355a9722498fd559a42549dcf48f319bd9e1860
+    digest: 93d69917c567e742742575f7666f0d05e0b0f65dbfa1239e794a1b0ae45cad39
     home: https://github.com/ankraio/ankra-charts/tree/main/hermes-agent
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -935,7 +1004,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v2026.8.16
-    created: "2026-10-11T19:40:20.311022592Z"
+    created: "2026-10-31T00:42:17.972790531Z"
     description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root,
       egress-restricted by default, with managed-secret and supply-chain guardrails.
     digest: ffe9cf35bd8e335cfa8fe089bac49da042a0b5a81d3921f7726cc408c5d7e0d2
@@ -998,7 +1067,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v2026.8.16
-    created: "2026-10-11T19:40:20.309187778Z"
+    created: "2026-10-31T00:42:17.97090748Z"
     description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root,
       egress-restricted by default, with managed-secret and supply-chain guardrails.
     digest: 52c6fe673870c54b8bdef51d40427562c7e68d892ff4953c179458a634ae418b
@@ -1061,7 +1130,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v2026.8.16
-    created: "2026-10-11T19:40:20.307369695Z"
+    created: "2026-10-31T00:42:17.969066092Z"
     description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root,
       egress-restricted by default, with managed-secret and supply-chain guardrails.
     digest: fcbd2e2b3c58be24968c3ee0065995ca258581036327f877e3fd6798f5217920
@@ -1124,7 +1193,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v2026.8.16
-    created: "2026-10-11T19:40:20.3049161Z"
+    created: "2026-10-31T00:42:17.966467424Z"
     description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root,
       egress-restricted by default, with managed-secret and supply-chain guardrails.
     digest: 948b4d0576d951da8699beec163a99a4060218d557f438bde6423b13ebe4ba21
@@ -1185,7 +1254,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v2026.8.16
-    created: "2026-10-11T19:40:20.303476784Z"
+    created: "2026-10-31T00:42:17.964913748Z"
     description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root,
       egress-restricted by default, with managed-secret and supply-chain guardrails.
     digest: 1475de601ff899ac38a1f96b30ff8884f813e5894b76d1cf95eed776d5609bcf
@@ -1244,7 +1313,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v2026.8.16
-    created: "2026-10-11T19:40:20.30205979Z"
+    created: "2026-10-31T00:42:17.963413803Z"
     description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root,
       egress-restricted by default, with managed-secret and supply-chain guardrails.
     digest: 58b37dbae96bd7f4ef510533cdf25548f7216bce15cc27d52cf87172a09c6835
@@ -1303,7 +1372,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v2026.8.16
-    created: "2026-10-11T19:40:20.300598533Z"
+    created: "2026-10-31T00:42:17.961939667Z"
     description: Nous Research Hermes Agent on Kubernetes - digest-pinned, non-root,
       egress-restricted by default, with managed-secret and supply-chain guardrails.
     digest: defa19682392d3bbcc7c10a1d932ff4b9e39ff6ad9b1709f2cbc05c4bf67a9e9
@@ -1363,11 +1432,11 @@ entries:
       licenses: AGPL-3.0-only
     apiVersion: v2
     appVersion: 1.40.2
-    created: "2026-10-11T19:40:20.314608635Z"
+    created: "2026-10-31T00:42:17.976577134Z"
     description: ISMS Builder on Kubernetes - the open-source ISO 27001 / NIS2 ISMS
       template builder, digest-pinned, non-root, persistent, network-restricted by
       default, with managed-secret guardrails.
-    digest: 152afc60632e2f2c8b22bdceff1cb14fd49f955422e32f69b9ee6300e0f29590
+    digest: 714085695b34f2c45483e65cd9b0d1eea549c9760285bac90017378526014eb7
     home: https://github.com/ankraio/ankra-charts/tree/main/isms-builder
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -1420,11 +1489,11 @@ entries:
           email: admin@ankra.io
     apiVersion: v2
     appVersion: 5.0.0
-    created: "2026-10-11T19:40:20.316415577Z"
+    created: "2026-10-31T00:42:17.978271402Z"
     description: 'Helm chart for Psono — self-hosted password manager. Packages the
       Psono server, web client and (optional) admin client. Brings your own PostgreSQL,
       secret-keys Secret and (optional) ingress. '
-    digest: 3586f4c5072ae3cf35105e75ffa7d575f3febbe02f2531c02d30fded89d93308
+    digest: b39bf3a9560dc257b8ca41101f83e59f69bd44f2c1a26ad47d3d892dacb06057
     home: https://github.com/ankraio/ankra-charts/tree/main/psono
     icon: https://gitlab.com/esaqa/psono/psono-client/-/raw/master/src/common/data/img/icon-128.png
     keywords:
@@ -1482,7 +1551,7 @@ entries:
           email: admin@ankra.io
     apiVersion: v2
     appVersion: 5.0.0
-    created: "2026-10-11T19:40:20.315544802Z"
+    created: "2026-10-31T00:42:17.977447663Z"
     description: 'Helm chart for Psono — self-hosted password manager. Packages the
       Psono server, web client and (optional) admin client. Brings your own PostgreSQL,
       secret-keys Secret and (optional) ingress. '
@@ -1543,10 +1612,10 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.3
-    created: "2026-10-11T19:40:20.323501406Z"
+    created: "2026-10-31T00:42:17.98542421Z"
     description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
-    digest: e7f15ee9fd1060bdf61dd3a78aa7242285beced88fcb8694db00a3ff67fec3b0
+    digest: 633e9d4e35e8d3513edada88fc5e657d454d80efe36e2b7a0b29909a48c092b8
     home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-ccm
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -1605,7 +1674,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.3
-    created: "2026-10-11T19:40:20.322208874Z"
+    created: "2026-10-31T00:42:17.984065347Z"
     description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
     digest: c704928fe96df52cabbc39f68184454546df94d1ff5266d9d04fb58e8d4a2f04
@@ -1667,7 +1736,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.1
-    created: "2026-10-11T19:40:20.320239622Z"
+    created: "2026-10-31T00:42:17.98208798Z"
     description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
     digest: f0ec4c9fddbb9da0bcc468137b2799ed372117f585aeb3f14d58f54e6ae34891
@@ -1729,7 +1798,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.1
-    created: "2026-10-11T19:40:20.318971556Z"
+    created: "2026-10-31T00:42:17.980796107Z"
     description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
     digest: 2f1978f72a64deaf6528faf920eba24a65c6647813403cbfdef6eb61aef98653
@@ -1799,7 +1868,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.2.1
-    created: "2026-10-11T19:40:20.317672883Z"
+    created: "2026-10-31T00:42:17.979535732Z"
     description: UpCloud Cloud Controller Manager for Kubernetes - leader-elected,
       hardened, with built-in Prometheus alerts & Grafana dashboard.
     digest: d766c6be83150502ca272fdb52a0e1cbdc9b50295e88979c4fe021c32acfd39b
@@ -1880,11 +1949,11 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-10-11T19:40:20.33819299Z"
+    created: "2026-10-31T00:42:18.000421714Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
-    digest: ed8ad7ebf388d7cb8aba9defe2dfa7b955597e867256983d1cf2f47e1befaa5d
+    digest: ef3bbc7d461c88ac977696fcd1708e9de5236e6af189a4557fd5455c6ece23e5
     home: https://github.com/ankraio/ankra-charts/tree/main/upcloud-csi
     icon: https://ankra.io/images/apple-touch-icon.png
     keywords:
@@ -1963,7 +2032,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-10-11T19:40:20.335993075Z"
+    created: "2026-10-31T00:42:17.998164731Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
@@ -2046,7 +2115,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-10-11T19:40:20.332942014Z"
+    created: "2026-10-31T00:42:17.994843337Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
@@ -2129,7 +2198,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-10-11T19:40:20.330701774Z"
+    created: "2026-10-31T00:42:17.992611441Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
@@ -2212,7 +2281,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-10-11T19:40:20.328531104Z"
+    created: "2026-10-31T00:42:17.990431253Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
@@ -2301,7 +2370,7 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: v1.4.0
-    created: "2026-10-11T19:40:20.325567361Z"
+    created: "2026-10-31T00:42:17.987557067Z"
     description: UpCloud CSI block-storage driver for Kubernetes (vendored from upstream
       v1.4.0) with snapshot backup CronJob, multi-zone StorageClasses, Prometheus
       alerts & Grafana dashboard.
@@ -2333,4 +2402,4 @@ entries:
     urls:
     - https://ankraio.github.io/ankra-charts/upcloud-csi-0.3.0.tgz
     version: 0.3.0
-generated: "2026-10-11T19:40:20.286136398Z"
+generated: "2026-10-31T00:42:17.945267416Z"
