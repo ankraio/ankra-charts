@@ -10,6 +10,25 @@ driver image tag it installs.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-02
+
+### Fixed
+
+- A local-nvme volume whose selected node sits on a host whose Ankra Local pool
+  takes no new volumes now fails `CreateVolume` with `ResourceExhausted` instead
+  of `FailedPrecondition`. external-provisioner then drops the PVC's selected
+  node and the scheduler places the pod on a node whose host has room; before,
+  the pod stayed Pending on the full node. Other conflicts keep
+  `FailedPrecondition`.
+
+## [0.2.2] - 2026-10-31
+
+### Fixed
+
+- Release builds use the digest-pinned Go 1.26.10 toolchain (GO-2026-6809) and
+  golang.org/x/net 0.62.0 (GO-2026-6860, GO-2026-6866). No storage class,
+  credential or volume configuration changes.
+
 ## [0.2.1] - 2026-10-31
 
 ### Fixed
