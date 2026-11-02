@@ -38,6 +38,14 @@ driver image tag it installs.
   tracking. The image is built with Go 1.26.10 (driver 0.2.2, which this chart
   repository did not publish separately).
 
+### Fixed
+
+- A `local-nvme` volume whose selected node sits on a host whose Ankra Local pool
+  takes no new volumes fails `CreateVolume` with `ResourceExhausted` instead of
+  `FailedPrecondition`, so external-provisioner drops the PVC's selected node and
+  the scheduler picks another one (driver 0.2.3, which this chart repository did
+  not publish separately).
+
 ## [0.2.1] - 2026-10-31
 
 ### Fixed

@@ -60,6 +60,8 @@ annotations:
     - name: livenessprobe
       image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
   artifacthub.io/changes: |
+    - kind: fixed
+      description: "A local-nvme volume whose selected node sits on a host whose Ankra Local pool takes no new volumes fails CreateVolume with ResourceExhausted instead of FailedPrecondition, so external-provisioner drops the selected node and the scheduler picks another one."
     - kind: added
       description: "Storage capacity tracking: the driver implements GetCapacity from the Ankra Cloud API's get_server_storage_capacity, the CSIDriver sets storageCapacity and external-provisioner publishes a CSIStorageCapacity per node and StorageClass, so the scheduler binds a local-nvme claim only to a node whose Ankra Local pool has room for it. Before, a claim could be bound to a node whose pool refused the volume with 409 and wait until other volumes were deleted."
     - kind: added
