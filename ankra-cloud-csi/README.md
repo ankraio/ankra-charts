@@ -29,7 +29,7 @@ helm install ankra-cloud-csi ankra/ankra-cloud-csi -n kube-system --set api.exis
 The chart is also published as an OCI artifact:
 
 ```bash
-helm install ankra-cloud-csi oci://share.ankra.cloud/charts/ankra-cloud-csi --version 0.2.1 -n kube-system \
+helm install ankra-cloud-csi oci://share.ankra.cloud/charts/ankra-cloud-csi --version 0.3.0 -n kube-system \
   --set api.existingSecret=ankra-cloud-csi-api
 ```
 
@@ -56,6 +56,16 @@ spec:
       storage: 10Gi
 ```
 
+## Storage capacity
+
+With `capacity.enabled` (the default) the controller publishes a `CSIStorageCapacity` for every node and StorageClass,
+and the scheduler binds a `WaitForFirstConsumer` claim only to a node whose capacity fits it. For `local-nvme` (and
+`ankra-default` in a zone whose default tier is `local-nvme`) it is what the Ankra Local pool of the node's compute
+node still takes, by the same rule that refuses a volume with `409 the node's Ankra Local pool takes no new volumes`.
+Other tiers report the largest volume the API takes. Several servers can share one compute node's pool and each
+reports the whole room, so a burst of claims can still overrun it; the API then refuses the extra volume and the claim
+is retried. See the [source README](https://github.com/ankraio/ankra-cloud-csi#storage-capacity) for the details.
+
 ## Values
 
 | Value | Default | Description |
@@ -76,6 +86,9 @@ spec:
 | `controller.operationTimeout` | `5m` | How long one CSI call waits for an API operation. |
 | `controller.sidecarTimeout` | `6m` | The sidecars' per-call timeout; above `operationTimeout` so the driver answers first. |
 | `controller.resources`, `.nodeSelector`, `.tolerations`, `.affinity`, `.priorityClassName` | see `values.yaml` | Scheduling of the controller. |
+| `capacity.enabled` | `true` | Storage capacity tracking: the CSIDriver's `storageCapacity` and external-provisioner's `--enable-capacity`. |
+| `capacity.pollInterval` | `30s` | How often external-provisioner asks the driver for every node's capacity again. |
+| `capacity.cacheTTL` | `10s` | How long one API read of a node's capacity answers its StorageClasses; keep it below `pollInterval`. |
 | `node.kubeletDir` | `/var/lib/kubelet` | The kubelet's root directory. |
 | `node.maxVolumesPerNode` | `15` | Volumes one server can attach: 16 storage devices less its boot storage. |
 | `node.resources`, `.nodeSelector`, `.tolerations`, `.priorityClassName` | see `values.yaml` | Scheduling of the node plugin. |

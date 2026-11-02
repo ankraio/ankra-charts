@@ -2,8 +2,8 @@ apiVersion: v2
 name: ankra-cloud-csi
 description: CSI driver csi.ankra.cloud for Ankra Cloud block storage (dynamic volumes per tier, snapshots, clones, online expansion).
 type: application
-version: 0.2.1
-appVersion: "v0.2.1"
+version: 0.3.0
+appVersion: "v0.3.0"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 home: https://github.com/ankraio/ankra-cloud-csi
@@ -43,7 +43,7 @@ annotations:
     - url: https://artifacthub.io/packages/helm/ankra-charts/ankra-cloud-ccm
   artifacthub.io/images: |
     - name: ankra-cloud-csi
-      image: share.ankra.cloud/library/ankra-cloud-csi:v0.2.1
+      image: share.ankra.cloud/library/ankra-cloud-csi:v0.3.0
       platforms:
         - linux/amd64
         - linux/arm64
@@ -60,5 +60,7 @@ annotations:
     - name: livenessprobe
       image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
   artifacthub.io/changes: |
-    - kind: fixed
-      description: "The API client health-checks its HTTP/2 connection and replaces one that stops answering within about 25 seconds. Before, every call kept going onto the dead connection and timed out for minutes, so volumes stayed Pending."
+    - kind: added
+      description: "Storage capacity tracking: the driver implements GetCapacity from the Ankra Cloud API's get_server_storage_capacity, the CSIDriver sets storageCapacity and external-provisioner publishes a CSIStorageCapacity per node and StorageClass, so the scheduler binds a local-nvme claim only to a node whose Ankra Local pool has room for it. Before, a claim could be bound to a node whose pool refused the volume with 409 and wait until other volumes were deleted."
+    - kind: added
+      description: "Values capacity.enabled (default true), capacity.pollInterval (30s) and capacity.cacheTTL (10s)."
