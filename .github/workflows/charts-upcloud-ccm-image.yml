@@ -106,6 +106,6 @@ jobs:
           echo "digest  ${{ steps.push.outputs.digest }}"
           echo
           echo "Nothing consumes this image until a consumer pins it. For the"
-          echo "Ankra platform that is cloudprovstack.BuildUpcloudStack, which"
-          echo "sets images.ccm.{registry,repository,digest} on overlay"
-          echo "clusters - update UpcloudCCMPatchedImageDigest there."
+          echo "Ankra platform that is cloudprovstack.BuildUpcloudStack in"
+          echo "ankraio/cluster, which sets images.ccm.{registry,repository,tag}"
+          echo "on overlay clusters - update UpcloudCCMOverlayImageTag there."

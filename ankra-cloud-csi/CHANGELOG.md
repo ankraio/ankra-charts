@@ -10,7 +10,7 @@ driver image tag it installs.
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-11-02
+## [0.3.0] - 2026-11-03
 
 ### Added
 
@@ -35,16 +35,28 @@ driver image tag it installs.
 - Driver image `v0.3.0`, which needs the Ankra Cloud API's
   `GET /v1/servers/{id}/storage-capacity`. Against an API without it the driver
   reports every node as able to take the largest volume, as before capacity
-  tracking. The image is built with Go 1.26.10 (driver 0.2.2, which this chart
-  repository did not publish separately).
+  tracking. It keeps the Go 1.26.10 build of 0.2.2 and the `ResourceExhausted`
+  answer of 0.2.3 for a node whose pool is full, which stays the fallback when
+  two claims race for the last room on one host.
+
+## [0.2.3] - 2026-11-02
 
 ### Fixed
 
-- A `local-nvme` volume whose selected node sits on a host whose Ankra Local pool
-  takes no new volumes fails `CreateVolume` with `ResourceExhausted` instead of
-  `FailedPrecondition`, so external-provisioner drops the PVC's selected node and
-  the scheduler picks another one (driver 0.2.3, which this chart repository did
-  not publish separately).
+- A local-nvme volume whose selected node sits on a host whose Ankra Local pool
+  takes no new volumes now fails `CreateVolume` with `ResourceExhausted` instead
+  of `FailedPrecondition`. external-provisioner then drops the PVC's selected
+  node and the scheduler places the pod on a node whose host has room; before,
+  the pod stayed Pending on the full node. Other conflicts keep
+  `FailedPrecondition`.
+
+## [0.2.2] - 2026-10-31
+
+### Fixed
+
+- Release builds use the digest-pinned Go 1.26.10 toolchain (GO-2026-6809) and
+  golang.org/x/net 0.62.0 (GO-2026-6860, GO-2026-6866). No storage class,
+  credential or volume configuration changes.
 
 ## [0.2.1] - 2026-10-31
 
