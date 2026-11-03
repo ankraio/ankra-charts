@@ -10,6 +10,35 @@ driver image tag it installs.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-03
+
+### Added
+
+- Storage capacity tracking. The CSIDriver sets `storageCapacity: true` and the
+  controller's external-provisioner runs with `--enable-capacity`
+  (`--capacity-ownerref-level=2`, so the `CSIStorageCapacity` objects are owned by
+  the controller Deployment), publishing one per node and StorageClass from the
+  driver's new `GetCapacity`. The scheduler then binds a `WaitForFirstConsumer`
+  claim only to a node with room for it. For `local-nvme` the capacity is the room
+  left in the Ankra Local pool of the node's compute node, as the Ankra Cloud API
+  computes it with the rule that refuses a volume with `409 the node's Ankra Local
+  pool takes no new volumes`; before, a claim could be bound to a full node and
+  wait until other volumes were deleted (15 to 19 minutes for CI workspaces on
+  ankra-ci-sto1). Other tiers report the largest volume the API takes.
+- Values `capacity.enabled` (default `true`), `capacity.pollInterval` (`30s`) and
+  `capacity.cacheTTL` (`10s`, passed to the driver as `--capacity-cache-ttl`).
+- A namespaced Role and RoleBinding for the controller: `csistoragecapacities`,
+  and `get` on pods and ReplicaSets to find the owning Deployment.
+
+### Changed
+
+- Driver image `v0.3.0`, which needs the Ankra Cloud API's
+  `GET /v1/servers/{id}/storage-capacity`. Against an API without it the driver
+  reports every node as able to take the largest volume, as before capacity
+  tracking. It keeps the Go 1.26.10 build of 0.2.2 and the `ResourceExhausted`
+  answer of 0.2.3 for a node whose pool is full, which stays the fallback when
+  two claims race for the last room on one host.
+
 ## [0.2.3] - 2026-11-02
 
 ### Fixed

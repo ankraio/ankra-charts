@@ -86,6 +86,44 @@ rules:
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["get", "watch", "list", "delete", "update", "create"]
+{{- if .Values.capacity.enabled }}
+---
+# Storage capacity tracking (external-provisioner --enable-capacity): the CSIStorageCapacity objects it publishes in
+# this namespace, and the pod and ReplicaSet it reads to find the Deployment that owns them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ankra-cloud-csi.name" . }}-controller-capacity
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ankra-cloud-csi.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["csistoragecapacities"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ankra-cloud-csi.name" . }}-controller-capacity
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ankra-cloud-csi.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ankra-cloud-csi.name" . }}-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "ankra-cloud-csi.name" . }}-controller-capacity
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

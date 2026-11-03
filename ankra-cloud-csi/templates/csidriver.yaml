@@ -8,5 +8,8 @@ spec:
   attachRequired: true
   podInfoOnMount: false
   fsGroupPolicy: File
+  # The scheduler binds a WaitForFirstConsumer claim only to a node whose CSIStorageCapacity fits it; the controller's
+  # external-provisioner publishes one per node and StorageClass from the driver's GetCapacity.
+  storageCapacity: {{ .Values.capacity.enabled }}
   volumeLifecycleModes:
     - Persistent

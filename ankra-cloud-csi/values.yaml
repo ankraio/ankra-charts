@@ -39,6 +39,19 @@ sidecars:
   livenessProbe:
     image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
 
+# Storage capacity tracking. The controller publishes, per node and StorageClass, how much new storage the Ankra Cloud
+# API takes there (a CSIStorageCapacity object from the driver's GetCapacity: for local-nvme, the room left in the
+# Ankra Local pool of the node's compute node, by the rule that refuses a volume with 409). The scheduler then binds a
+# WaitForFirstConsumer claim only to a node with room for it, instead of to a node whose pool refuses the volume.
+capacity:
+  # @param capacity.enabled CSIDriver storageCapacity and external-provisioner --enable-capacity.
+  enabled: true
+  # @param capacity.pollInterval How often external-provisioner asks the driver for every node's capacity again.
+  pollInterval: "30s"
+  # @param capacity.cacheTTL How long the driver answers a node's capacity from one API read: the StorageClasses of a
+  # node share one call per poll. Keep it below pollInterval.
+  cacheTTL: "10s"
+
 controller:
   replicas: 1
   # @param controller.operationTimeout How long one CSI call waits for an API operation.

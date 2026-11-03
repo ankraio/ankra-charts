@@ -2,8 +2,8 @@ apiVersion: v2
 name: ankra-cloud-csi
 description: CSI driver csi.ankra.cloud for Ankra Cloud block storage (dynamic volumes per tier, snapshots, clones, online expansion).
 type: application
-version: 0.2.3
-appVersion: "v0.2.3"
+version: 0.3.0
+appVersion: "v0.3.0"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 home: https://github.com/ankraio/ankra-cloud-csi
@@ -43,7 +43,7 @@ annotations:
     - url: https://artifacthub.io/packages/helm/ankra-charts/ankra-cloud-ccm
   artifacthub.io/images: |
     - name: ankra-cloud-csi
-      image: share.ankra.cloud/library/ankra-cloud-csi:v0.2.3
+      image: share.ankra.cloud/library/ankra-cloud-csi:v0.3.0
       platforms:
         - linux/amd64
         - linux/arm64
@@ -61,4 +61,8 @@ annotations:
       image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
   artifacthub.io/changes: |
     - kind: fixed
-      description: "A local-nvme volume whose selected node has no room in its Ankra Local pool fails CreateVolume with ResourceExhausted, so external-provisioner drops the selected node and the scheduler places the pod on a node with room; before, the pod stayed Pending on the full node."
+      description: "A local-nvme volume whose selected node sits on a host whose Ankra Local pool takes no new volumes fails CreateVolume with ResourceExhausted instead of FailedPrecondition, so external-provisioner drops the selected node and the scheduler picks another one."
+    - kind: added
+      description: "Storage capacity tracking: the driver implements GetCapacity from the Ankra Cloud API's get_server_storage_capacity, the CSIDriver sets storageCapacity and external-provisioner publishes a CSIStorageCapacity per node and StorageClass, so the scheduler binds a local-nvme claim only to a node whose Ankra Local pool has room for it. Before, a claim could be bound to a node whose pool refused the volume with 409 and wait until other volumes were deleted."
+    - kind: added
+      description: "Values capacity.enabled (default true), capacity.pollInterval (30s) and capacity.cacheTTL (10s)."
