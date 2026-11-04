@@ -15,6 +15,7 @@ In-tree Helm charts maintained by the Ankra platform team.
 | [`psono`](psono/README.md) | Self-hosted [Psono](https://psono.com/) password manager — server, web client and optional admin client behind a single Ingress (Traefik by default). Bring your own PostgreSQL + Secrets. | Hand-written from Psono [server install docs](https://doc.psono.com/admin/installation/install-server-ce.html); images `psono/psono-{server,client,admin-client}`. |
 | [`isms-builder`](isms-builder/README.md) | [ISMS Builder](https://github.com/coolstartnow/isms-builder) - open-source ISO 27001 / NIS2 ISMS template builder. Digest-pinned, non-root (restricted-profile), persistent data volume, same-namespace-only NetworkPolicy, with render-time hardening guardrails. | Ankra-maintained; upstream image `ghcr.io/coolstartnow/isms-builder`, digest re-pinned via `scripts/sync-image-digest.sh`. |
 | [`ankra-cloud-csi`](ankra-cloud-csi/README.md) | Ankra Cloud CSI block-storage driver `csi.ankra.cloud` - controller Deployment, node DaemonSet, five StorageClasses (zone-aware `ankra-default` default), snapshots, online expansion, per-node storage capacity for the scheduler. Multi-arch image on `share.ankra.cloud`. | Ankra-maintained in [`ankraio/ankra-cloud-csi`](https://github.com/ankraio/ankra-cloud-csi) (`charts/ankra-cloud-csi`); copied here for each release. |
+| [`gateway-api-crds`](gateway-api-crds/README.md) | Kubernetes Gateway API CRDs, standard channel, plus upstream's safe-upgrades admission policy. Kept on uninstall. The chart version is the Gateway API release. | Vendored from upstream [`kubernetes-sigs/gateway-api`](https://github.com/kubernetes-sigs/gateway-api) by `scripts/sync-gateway-api-crds.sh` |
 
 ## Install via `helm repo add` (recommended)
 
@@ -118,6 +119,10 @@ helm install hermes oci://ghcr.io/ankraio/ankra-charts/hermes-agent \
 helm install ankra-cloud-csi oci://ghcr.io/ankraio/ankra-charts/ankra-cloud-csi \
   --version 0.3.0 -n kube-system \
   --set api.existingSecret=ankra-cloud-csi-api
+
+# Gateway API CRDs (standard channel), kept on uninstall
+helm install gateway-api-crds oci://ghcr.io/ankraio/ankra-charts/gateway-api-crds \
+  --version 1.5.1 -n gateway-system --create-namespace
 
 # Psono (self-hosted password manager) — requires the BYO Secrets described
 # in psono/README.md to already exist in the target namespace.
@@ -377,6 +382,7 @@ ankra-charts/                        (this repo root)
 ├── cloudflare-operator/
 ├── digitalocean-ccm/
 ├── digitalocean-csi/
+├── gateway-api-crds/                (vendored by scripts/sync-gateway-api-crds.sh)
 └── psono/                           (hand-written, no upstream sync)
 ```
 

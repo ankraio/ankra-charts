@@ -9,6 +9,7 @@ CHARTS   += ankra-cloud-csi
 HELM     ?= helm
 KCONFORM ?= kubeconform
 CHARTS   += ankra-cloud-ccm
+CHARTS   += gateway-api-crds
 
 .PHONY: help lint template unittest test secret-scan \
         sync sync-ccm sync-csi sync-cloudflare sync-do-ccm sync-do-csi check docs \
@@ -29,6 +30,8 @@ lint:
 		--set credentials.username=ci --set credentials.password=ci
 	@echo "==> helm lint upcloud-csi"
 	@$(HELM) lint upcloud-csi
+	@echo "==> helm lint gateway-api-crds"
+	@$(HELM) lint --strict gateway-api-crds
 	@echo "==> helm lint cloudflare-operator"
 	@$(HELM) lint cloudflare-operator
 	@echo "==> helm lint digitalocean-ccm"
@@ -64,6 +67,7 @@ template:
 		--set credentials.username=ci --set credentials.password=ci \
 		> /tmp/rendered/upcloud-ccm.yaml
 	@$(HELM) template csi upcloud-csi > /tmp/rendered/upcloud-csi.yaml
+	@$(HELM) template gateway-api-crds gateway-api-crds > /tmp/rendered/gateway-api-crds.yaml
 	@$(HELM) template cf  cloudflare-operator \
 		--namespace cloudflare-operator-system \
 		> /tmp/rendered/cloudflare-operator.yaml
