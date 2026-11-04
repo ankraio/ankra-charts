@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="$(grep -E '^appVersion:' gateway-api-crds/Chart.yaml | awk '{print $2}' | tr -d '"')"
-          helm template gateway-api-crds gateway-api-crds > /tmp/rendered.yaml
+          helm template gateway-api-crds gateway-api-crds --kube-version 1.31.0 > /tmp/rendered.yaml
           python3 -m pip install --quiet pyyaml
           python3 - "${tag}" <<'CHECK'
           import sys
