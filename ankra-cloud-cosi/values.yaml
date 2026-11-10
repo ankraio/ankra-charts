@@ -1,0 +1,75 @@
+# The Ankra Cloud API the driver talks to, with a customer API token that can operate object storage. The same
+# conventions as the ankra-cloud-csi chart: one token Secret can serve both.
+api:
+  # @param api.url The API's base URL (ANKRA_CLOUD_API_URL).
+  url: "https://cloud.ankra.app"
+  # @param api.existingSecret A Secret holding the API token; the chart creates one from api.token when empty.
+  existingSecret: ""
+  # @param api.existingSecretKey The key of the token in the Secret.
+  existingSecretKey: "token"
+  # @param api.token An Ankra Cloud API token. Prefer api.existingSecret so the token never sits in values.
+  token: ""
+  # @param api.caBundle.existingSecret A Secret with a PEM CA bundle for a privately signed API certificate (optional).
+  caBundle:
+    existingSecret: ""
+    key: "ca.crt"
+
+image:
+  # @param image.repository The driver image (multi-arch: linux/amd64, linux/arm64).
+  repository: share.ankra.cloud/library/ankra-cloud-cosi
+  # @param image.tag Defaults to the chart's appVersion. Tags are immutable (v<semver>, sha-<commit>); there is no latest.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# The COSI provisioner sidecar, pinned by tag and digest. It must match the COSI CRDs and controller installed in the
+# cluster (v0.2.2, API objectstorage.k8s.io/v1alpha1).
+sidecar:
+  # @param sidecar.image The objectstorage provisioner sidecar.
+  image: registry.k8s.io/sig-storage/objectstorage-sidecar:v0.2.2@sha256:c7166a73a303c43c8c1dca3e81aacf2fa85e98b46bcab0b64249cde19fa67979
+  # @param sidecar.verbosity klog verbosity of the sidecar.
+  verbosity: 2
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+# One replica is enough: the sidecar elects a leader, and a second replica only waits.
+replicas: 1
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+nodeSelector: {}
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+affinity: {}
+priorityClassName: ""
+
+# An example BucketClass. Rendered when the cluster serves objectstorage.k8s.io/v1alpha1 and bucketClass.zone is set.
+bucketClass:
+  # @param bucketClass.name The BucketClass name.
+  name: ankra-objects
+  # @param bucketClass.zone The Ankra Cloud zone the class's buckets are created in, for example fsn1. Required for
+  # the class to be rendered.
+  zone: ""
+  # @param bucketClass.bucketNamePrefix Starts every bucket name of the class (after the account's own prefix on
+  # single-node zones): 1 to 24 characters of a-z, 0-9 and '-'. Optional.
+  bucketNamePrefix: ""
+  # @param bucketClass.deletionPolicy Delete or Retain. Delete removes the bucket with its BucketClaim, and only when it
+  # is empty: the driver never deletes objects.
+  deletionPolicy: Delete
+
+# An example BucketAccessClass handing out keys (authenticationType Key, the only one the driver supports). Rendered
+# when the cluster serves objectstorage.k8s.io/v1alpha1.
+bucketAccessClass:
+  # @param bucketAccessClass.enabled Render the BucketAccessClass.
+  enabled: true
+  # @param bucketAccessClass.name The BucketAccessClass name.
+  name: ankra-objects-key

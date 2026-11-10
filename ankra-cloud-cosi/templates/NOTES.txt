@@ -1,0 +1,23 @@
+cosi.ankra.cloud is installed in {{ .Release.Namespace }}.
+{{- if not (include "ankra-cloud-cosi.servesCOSI" .) }}
+
+The cluster does not serve objectstorage.k8s.io/v1alpha1: install the COSI CRDs and controller (see the README of
+github.com/ankraio/ankra-cloud-csi) and upgrade this release. No BucketClass or BucketAccessClass was created.
+{{- else }}
+{{- if .Values.bucketClass.zone }}
+
+BucketClass: {{ .Values.bucketClass.name }} (zone {{ .Values.bucketClass.zone }}, deletionPolicy {{ .Values.bucketClass.deletionPolicy }})
+{{- else }}
+
+No BucketClass was created: set bucketClass.zone, or create your own with driverName cosi.ankra.cloud and the
+parameter zone.
+{{- end }}
+{{- if .Values.bucketAccessClass.enabled }}
+BucketAccessClass: {{ .Values.bucketAccessClass.name }} (authenticationType Key)
+{{- end }}
+{{- end }}
+
+Every BucketAccess in a zone gets the same key: the Ankra Cloud account's one S3 key there, which opens every bucket
+of the account in that zone.
+
+Check the driver: kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/name=ankra-cloud-cosi
