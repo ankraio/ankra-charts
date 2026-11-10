@@ -1,0 +1,51 @@
+apiVersion: v2
+name: ankra-cloud-cosi
+description: COSI driver cosi.ankra.cloud for Ankra Cloud object storage (S3 buckets from BucketClaims, keys from BucketAccesses).
+type: application
+version: 0.1.0
+appVersion: "v0.1.0"
+kubeVersion: ">=1.27.0-0"
+icon: https://ankra.io/images/apple-touch-icon.png
+home: https://github.com/ankraio/ankra-cloud-csi
+sources:
+  - https://github.com/ankraio/ankra-cloud-csi
+keywords:
+  - ankra
+  - ankra-cloud
+  - cosi
+  - object-storage
+  - s3
+  - buckets
+maintainers:
+  - name: Ankra AB
+    email: admin@ankra.io
+    url: https://ankra.io
+annotations:
+  category: Storage
+  licenses: Apache-2.0
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: storage
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/operator: "false"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/maintainers: |
+    - name: Ankra AB
+      email: admin@ankra.io
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/ankraio/ankra-cloud-csi
+    - name: Helm repo (helm repo add)
+      url: https://ankraio.github.io/ankra-charts
+    - name: COSI
+      url: https://github.com/kubernetes-sigs/container-object-storage-interface
+  artifacthub.io/images: |
+    - name: ankra-cloud-cosi
+      image: share.ankra.cloud/library/ankra-cloud-cosi:v0.1.0
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    - name: objectstorage-sidecar
+      image: registry.k8s.io/sig-storage/objectstorage-sidecar:v0.2.2
+  artifacthub.io/changes: |
+    - kind: added
+      description: "The COSI driver cosi.ankra.cloud: BucketClaims create S3 buckets in an Ankra Cloud zone, BucketAccesses get the zone's account key."

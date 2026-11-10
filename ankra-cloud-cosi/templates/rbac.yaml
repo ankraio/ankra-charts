@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ankra-cloud-cosi.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ankra-cloud-cosi.labels" . | nindent 4 }}
+---
+# What the objectstorage provisioner sidecar reads and writes: Buckets and BucketAccesses with their status, the
+# BucketClaims it marks ready, the classes it reads parameters from, the credential Secrets it creates in the
+# BucketAccess's namespace, and events.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ankra-cloud-cosi.name" . }}
+  labels:
+    {{- include "ankra-cloud-cosi.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["objectstorage.k8s.io"]
+    resources: ["buckets", "bucketaccesses", "bucketclaims"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["objectstorage.k8s.io"]
+    resources: ["buckets/status", "bucketaccesses/status", "bucketclaims/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["objectstorage.k8s.io"]
+    resources: ["bucketclasses", "bucketaccessclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "ankra-cloud-cosi.name" . }}
+  labels:
+    {{- include "ankra-cloud-cosi.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ankra-cloud-cosi.name" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "ankra-cloud-cosi.name" . }}
+  apiGroup: rbac.authorization.k8s.io
+---
+# The sidecar's leader election lease, in the release namespace (POD_NAMESPACE).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ankra-cloud-cosi.name" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ankra-cloud-cosi.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ankra-cloud-cosi.name" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ankra-cloud-cosi.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ankra-cloud-cosi.name" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "ankra-cloud-cosi.name" . }}-leader-election
+  apiGroup: rbac.authorization.k8s.io

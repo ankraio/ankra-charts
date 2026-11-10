@@ -1,0 +1,15 @@
+{{- if and (include "ankra-cloud-cosi.servesCOSI" .) .Values.bucketClass.zone }}
+apiVersion: objectstorage.k8s.io/v1alpha1
+kind: BucketClass
+metadata:
+  name: {{ .Values.bucketClass.name }}
+  labels:
+    {{- include "ankra-cloud-cosi.labels" . | nindent 4 }}
+driverName: cosi.ankra.cloud
+deletionPolicy: {{ .Values.bucketClass.deletionPolicy }}
+parameters:
+  zone: {{ .Values.bucketClass.zone | quote }}
+  {{- with .Values.bucketClass.bucketNamePrefix }}
+  bucketNamePrefix: {{ . | quote }}
+  {{- end }}
+{{- end }}

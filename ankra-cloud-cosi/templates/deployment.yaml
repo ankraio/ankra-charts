@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ankra-cloud-cosi.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ankra-cloud-cosi.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ankra-cloud-cosi.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ankra-cloud-cosi.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "ankra-cloud-cosi.name" . }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ankra-cloud-cosi
+          image: {{ include "ankra-cloud-cosi.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: COSI_ENDPOINT
+              value: unix:///var/lib/cosi/cosi.sock
+            - name: ANKRA_CLOUD_API_URL
+              value: {{ required "api.url is required" .Values.api.url | quote }}
+            - name: ANKRA_CLOUD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ankra-cloud-cosi.secretName" . }}
+                  key: {{ .Values.api.existingSecretKey }}
+            {{- if .Values.api.caBundle.existingSecret }}
+            - name: ANKRA_CLOUD_CA_BUNDLE
+              value: /etc/ankra-cloud/ca/{{ .Values.api.caBundle.key }}
+            {{- end }}
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/cosi
+            {{- if .Values.api.caBundle.existingSecret }}
+            - name: ca-bundle
+              mountPath: /etc/ankra-cloud/ca
+              readOnly: true
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: objectstorage-provisioner-sidecar
+          image: {{ .Values.sidecar.image }}
+          args:
+            - --driver-addr=unix:///var/lib/cosi/cosi.sock
+            - --v={{ .Values.sidecar.verbosity }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /var/lib/cosi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.sidecar.resources | nindent 12 }}
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+        {{- if .Values.api.caBundle.existingSecret }}
+        - name: ca-bundle
+          secret:
+            secretName: {{ .Values.api.caBundle.existingSecret }}
+        {{- end }}

@@ -1,0 +1,10 @@
+{{- if and (include "ankra-cloud-cosi.servesCOSI" .) .Values.bucketAccessClass.enabled }}
+apiVersion: objectstorage.k8s.io/v1alpha1
+kind: BucketAccessClass
+metadata:
+  name: {{ .Values.bucketAccessClass.name }}
+  labels:
+    {{- include "ankra-cloud-cosi.labels" . | nindent 4 }}
+driverName: cosi.ankra.cloud
+authenticationType: Key
+{{- end }}

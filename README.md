@@ -15,6 +15,7 @@ In-tree Helm charts maintained by the Ankra platform team.
 | [`psono`](psono/README.md) | Self-hosted [Psono](https://psono.com/) password manager — server, web client and optional admin client behind a single Ingress (Traefik by default). Bring your own PostgreSQL + Secrets. | Hand-written from Psono [server install docs](https://doc.psono.com/admin/installation/install-server-ce.html); images `psono/psono-{server,client,admin-client}`. |
 | [`isms-builder`](isms-builder/README.md) | [ISMS Builder](https://github.com/coolstartnow/isms-builder) - open-source ISO 27001 / NIS2 ISMS template builder. Digest-pinned, non-root (restricted-profile), persistent data volume, same-namespace-only NetworkPolicy, with render-time hardening guardrails. | Ankra-maintained; upstream image `ghcr.io/coolstartnow/isms-builder`, digest re-pinned via `scripts/sync-image-digest.sh`. |
 | [`ankra-cloud-csi`](ankra-cloud-csi/README.md) | Ankra Cloud CSI block-storage driver `csi.ankra.cloud` - controller Deployment, node DaemonSet, five StorageClasses (zone-aware `ankra-default` default), snapshots, online expansion, per-node storage capacity for the scheduler. Multi-arch image on `share.ankra.cloud`. | Ankra-maintained in [`ankraio/ankra-cloud-csi`](https://github.com/ankraio/ankra-cloud-csi) (`charts/ankra-cloud-csi`); copied here for each release. |
+| [`ankra-cloud-cosi`](ankra-cloud-cosi/README.md) | Ankra Cloud COSI driver `cosi.ankra.cloud` (preview) - S3 buckets on Ankra Cloud object storage from `BucketClaim`s, and a Secret with the endpoint and key from `BucketAccess`es. One Deployment with the upstream provisioner sidecar. Multi-arch image on `share.ankra.cloud`. | Ankra-maintained in [`ankraio/ankra-cloud-csi`](https://github.com/ankraio/ankra-cloud-csi) (`charts/ankra-cloud-cosi`); copied here for each release. |
 | [`gateway-api-crds`](gateway-api-crds/README.md) | Kubernetes Gateway API CRDs, standard channel, plus upstream's safe-upgrades admission policy. Kept on uninstall. The chart version is the Gateway API release. | Vendored from upstream [`kubernetes-sigs/gateway-api`](https://github.com/kubernetes-sigs/gateway-api) by `scripts/sync-gateway-api-crds.sh` |
 
 ## Install via `helm repo add` (recommended)
@@ -66,6 +67,10 @@ helm install hermes ankra/hermes-agent --version 0.1.1 -n hermes --create-namesp
 kubectl -n kube-system create secret generic ankra-cloud-csi-api --from-literal=token="$ANKRA_CLOUD_TOKEN"
 helm install ankra-cloud-csi ankra/ankra-cloud-csi --version 0.3.0 -n kube-system \
   --set api.existingSecret=ankra-cloud-csi-api
+
+# Ankra Cloud COSI (object storage buckets) - needs the COSI CRDs and controller first, see its README.
+helm install ankra-cloud-cosi ankra/ankra-cloud-cosi --version 0.1.0 -n kube-system \
+  --set api.existingSecret=ankra-cloud-csi-api --set bucketClass.zone=<zone>
 ```
 
 ## Install from GHCR (OCI)
