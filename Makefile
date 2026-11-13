@@ -70,7 +70,7 @@ template:
 		--set ccmConfig.clusterID=ci-test \
 		--set credentials.username=ci --set credentials.password=ci \
 		> /tmp/rendered/upcloud-ccm.yaml
-	@$(HELM) template csi upcloud-csi > /tmp/rendered/upcloud-csi.yaml
+	@$(HELM) template csi upcloud-csi --kube-version 1.34.0 > /tmp/rendered/upcloud-csi.yaml
 	@$(HELM) template gateway-api-crds gateway-api-crds --kube-version 1.31.0 > /tmp/rendered/gateway-api-crds.yaml
 	@$(HELM) template cf  cloudflare-operator \
 		--namespace cloudflare-operator-system \

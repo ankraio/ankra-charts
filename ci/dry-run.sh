@@ -4,7 +4,7 @@
 # Ready without its cloud or model provider, and a real install of
 # gateway-api-crds (CRDs only, so it needs no kubelet).
 #
-# Usage: ci/dry-run.sh <envtest version>   (1.27.1, 1.29.5 or 1.31.0)
+# Usage: ci/dry-run.sh <envtest version>   (one installed by ci/tools.sh)
 #
 # GitHub Actions ran this on kind. Kind needs Docker and a privileged runner,
 # which an Ankra Pipelines step is not, so this starts the envtest builds of
@@ -109,81 +109,87 @@ apply_crds() {
   kubectl wait --for=condition=Established --timeout=60s crd --all > /dev/null
 }
 
-section "upcloud-ccm and upcloud-csi"
-create_namespace ccm-ci
-helm install ccm upcloud-ccm --namespace ccm-ci --dry-run=server \
-  --set ccmConfig.clusterID=ci-test --set credentials.username=ci --set credentials.password=ci > /dev/null
-apply_crds upcloud-csi/crds/
-create_namespace csi-ci
-helm install csi upcloud-csi --namespace csi-ci --dry-run=server \
-  --set credentials.create=true --set credentials.existingSecret= \
-  --set credentials.username=ci --set credentials.password=ci \
-  --set storageClasses.defaultClass=maxiops > /dev/null
+kubernetes_minor="$(cut -d. -f2 <<< "${kubernetes_version}")"
+# upcloud-csi 0.5.0 requires Kubernetes 1.34+ (external-provisioner v6), so the
+# upcloud charts run on the 1.34-1.36 legs and every other chart on 1.27-1.31,
+# the minors each chart was gated on under GitHub Actions.
+if (( kubernetes_minor >= 34 )); then
+  section "upcloud-ccm and upcloud-csi"
+  create_namespace ccm-ci
+  helm install ccm upcloud-ccm --namespace ccm-ci --dry-run=server \
+    --set ccmConfig.clusterID=ci-test --set credentials.username=ci --set credentials.password=ci > /dev/null
+  apply_crds upcloud-csi/crds/
+  create_namespace csi-ci
+  helm install csi upcloud-csi --namespace csi-ci --dry-run=server \
+    --set credentials.create=true --set credentials.existingSecret= \
+    --set credentials.username=ci --set credentials.password=ci \
+    --set storageClasses.defaultClass=maxiops > /dev/null
+else
+  section "digitalocean-ccm and digitalocean-csi"
+  create_namespace do-ccm-ci
+  helm install ccm digitalocean-ccm --namespace do-ccm-ci --dry-run=server --set credentials.token=ci > /dev/null
+  apply_crds digitalocean-csi/crds/
+  create_namespace do-csi-ci
+  helm install csi digitalocean-csi --namespace do-csi-ci --dry-run=server --set credentials.token=ci > /dev/null
 
-section "digitalocean-ccm and digitalocean-csi"
-create_namespace do-ccm-ci
-helm install ccm digitalocean-ccm --namespace do-ccm-ci --dry-run=server --set credentials.token=ci > /dev/null
-apply_crds digitalocean-csi/crds/
-create_namespace do-csi-ci
-helm install csi digitalocean-csi --namespace do-csi-ci --dry-run=server --set credentials.token=ci > /dev/null
+  section "hermes-agent"
+  create_namespace hermes-ci
+  kubectl -n hermes-ci create secret generic hermes-credentials \
+    --from-literal=OPENROUTER_API_KEY=ci --from-literal=API_SERVER_KEY=ci > /dev/null
+  helm install hermes hermes-agent --namespace hermes-ci --dry-run=server \
+    --set secrets.existingSecret=hermes-credentials > /dev/null
+  helm install hermes-api hermes-agent --namespace hermes-ci --dry-run=server \
+    --set secrets.existingSecret=hermes-credentials \
+    --set apiServer.enabled=true --set service.enabled=true \
+    --set ingress.enabled=true --set ingress.className=nginx > /dev/null
+  apply_crds hermes-agent/crds/
+  helm install hermes-operator hermes-agent --namespace hermes-ci --dry-run=server \
+    --values hermes-agent/values-examples/operator.yaml \
+    --set 'operator.tenants[0].namespace=hermes-ci' \
+    --set 'operator.tenants[1].namespace=hermes-ci' > /dev/null
 
-section "hermes-agent"
-create_namespace hermes-ci
-kubectl -n hermes-ci create secret generic hermes-credentials \
-  --from-literal=OPENROUTER_API_KEY=ci --from-literal=API_SERVER_KEY=ci > /dev/null
-helm install hermes hermes-agent --namespace hermes-ci --dry-run=server \
-  --set secrets.existingSecret=hermes-credentials > /dev/null
-helm install hermes-api hermes-agent --namespace hermes-ci --dry-run=server \
-  --set secrets.existingSecret=hermes-credentials \
-  --set apiServer.enabled=true --set service.enabled=true \
-  --set ingress.enabled=true --set ingress.className=nginx > /dev/null
-apply_crds hermes-agent/crds/
-helm install hermes-operator hermes-agent --namespace hermes-ci --dry-run=server \
-  --values hermes-agent/values-examples/operator.yaml \
-  --set 'operator.tenants[0].namespace=hermes-ci' \
-  --set 'operator.tenants[1].namespace=hermes-ci' > /dev/null
+  section "isms-builder"
+  create_namespace isms-ci
+  kubectl -n isms-ci create secret generic isms-credentials --from-literal=JWT_SECRET=ci-placeholder > /dev/null
+  helm install isms isms-builder --namespace isms-ci --dry-run=server \
+    --set secrets.existingSecret=isms-credentials > /dev/null
+  helm install isms-ingress isms-builder --namespace isms-ci --dry-run=server \
+    --set secrets.existingSecret=isms-credentials \
+    --set ingress.enabled=true --set ingress.className=traefik > /dev/null
+  helm install isms-postgres isms-builder --namespace isms-ci --dry-run=server \
+    --values isms-builder/values-examples/postgres.yaml > /dev/null
 
-section "isms-builder"
-create_namespace isms-ci
-kubectl -n isms-ci create secret generic isms-credentials --from-literal=JWT_SECRET=ci-placeholder > /dev/null
-helm install isms isms-builder --namespace isms-ci --dry-run=server \
-  --set secrets.existingSecret=isms-credentials > /dev/null
-helm install isms-ingress isms-builder --namespace isms-ci --dry-run=server \
-  --set secrets.existingSecret=isms-credentials \
-  --set ingress.enabled=true --set ingress.className=traefik > /dev/null
-helm install isms-postgres isms-builder --namespace isms-ci --dry-run=server \
-  --values isms-builder/values-examples/postgres.yaml > /dev/null
+  section "claude-code-openai-wrapper"
+  create_namespace claude-ci
+  kubectl -n claude-ci create secret generic claude-credentials \
+    --from-literal=ANTHROPIC_API_KEY=ci-placeholder --from-literal=API_KEY=ci-token > /dev/null
+  helm install claude-wrapper claude-code-openai-wrapper --namespace claude-ci --dry-run=server \
+    --set secrets.existingSecret=claude-credentials > /dev/null
+  helm install claude-wrapper-ingress claude-code-openai-wrapper --namespace claude-ci --dry-run=server \
+    --set secrets.existingSecret=claude-credentials \
+    --set ingress.enabled=true --set ingress.className=nginx > /dev/null
+  helm install claude-wrapper-bedrock claude-code-openai-wrapper --namespace claude-ci --dry-run=server \
+    --values claude-code-openai-wrapper/values-examples/bedrock.yaml > /dev/null
 
-section "claude-code-openai-wrapper"
-create_namespace claude-ci
-kubectl -n claude-ci create secret generic claude-credentials \
-  --from-literal=ANTHROPIC_API_KEY=ci-placeholder --from-literal=API_KEY=ci-token > /dev/null
-helm install claude-wrapper claude-code-openai-wrapper --namespace claude-ci --dry-run=server \
-  --set secrets.existingSecret=claude-credentials > /dev/null
-helm install claude-wrapper-ingress claude-code-openai-wrapper --namespace claude-ci --dry-run=server \
-  --set secrets.existingSecret=claude-credentials \
-  --set ingress.enabled=true --set ingress.className=nginx > /dev/null
-helm install claude-wrapper-bedrock claude-code-openai-wrapper --namespace claude-ci --dry-run=server \
-  --values claude-code-openai-wrapper/values-examples/bedrock.yaml > /dev/null
-
-if [[ "${kubernetes_version}" == 1.31.* ]]; then
-  # The check that matters for this chart: Helm stores the whole chart in its
-  # release Secret and the apiserver refuses one over 1 MiB, which neither
-  # helm lint nor helm template can see. CRDs need no kubelet, so this is a
-  # real install, not a dry-run.
-  section "gateway-api-crds (real install, release Secret size, uninstall keeps the CRDs)"
-  helm install gateway-api-crds gateway-api-crds -n gateway-system --create-namespace --wait --timeout 3m > /dev/null
-  kubectl get crd httproutes.gateway.networking.k8s.io gateways.gateway.networking.k8s.io gatewayclasses.gateway.networking.k8s.io
-  size="$(kubectl get secret -n gateway-system sh.helm.release.v1.gateway-api-crds.v1 -o json \
-    | python3 -c 'import base64,json,sys; print(len(base64.b64decode(json.load(sys.stdin)["data"]["release"])))')"
-  echo "release Secret data: ${size} bytes (the apiserver refuses over 1048576)"
-  if [[ "${size}" -gt 900000 ]]; then
-    echo "the release Secret is ${size} bytes, too close to the 1 MiB limit" >&2
-    exit 1
+  if [[ "${kubernetes_minor}" == 31 ]]; then
+    # The check that matters for this chart: Helm stores the whole chart in its
+    # release Secret and the apiserver refuses one over 1 MiB, which neither
+    # helm lint nor helm template can see. CRDs need no kubelet, so this is a
+    # real install, not a dry-run.
+    section "gateway-api-crds (real install, release Secret size, uninstall keeps the CRDs)"
+    helm install gateway-api-crds gateway-api-crds -n gateway-system --create-namespace --wait --timeout 3m > /dev/null
+    kubectl get crd httproutes.gateway.networking.k8s.io gateways.gateway.networking.k8s.io gatewayclasses.gateway.networking.k8s.io
+    size="$(kubectl get secret -n gateway-system sh.helm.release.v1.gateway-api-crds.v1 -o json \
+      | python3 -c 'import base64,json,sys; print(len(base64.b64decode(json.load(sys.stdin)["data"]["release"])))')"
+    echo "release Secret data: ${size} bytes (the apiserver refuses over 1048576)"
+    if [[ "${size}" -gt 900000 ]]; then
+      echo "the release Secret is ${size} bytes, too close to the 1 MiB limit" >&2
+      exit 1
+    fi
+    helm uninstall gateway-api-crds -n gateway-system --wait --timeout 2m > /dev/null
+    kubectl get crd httproutes.gateway.networking.k8s.io > /dev/null
+    echo "uninstall kept the CRDs"
   fi
-  helm uninstall gateway-api-crds -n gateway-system --wait --timeout 2m > /dev/null
-  kubectl get crd httproutes.gateway.networking.k8s.io > /dev/null
-  echo "uninstall kept the CRDs"
 fi
 
 section "every server-side check passed on kube-apiserver ${kubernetes_version}"

@@ -4,8 +4,8 @@
 # scan, the generic `make test` over every chart, the per-chart gates
 # (ci/chart-gate.sh: helm lint, helm template of every overlay, kubeconform,
 # helm-unittest, hardening guardrails, Trivy misconfiguration scan, pinned
-# image digest) and the server-side install matrix on kube-apiserver 1.27, 1.29
-# and 1.31 (ci/dry-run.sh). A chart's gate runs only when the chart, the shared
+# image digest) and the server-side install matrix on kube-apiserver 1.27 to 1.36
+# (ci/dry-run.sh). A chart's gate runs only when the chart, the shared
 # scripts or this pipeline changed.
 #
 # Scheduled runs (rows created with `ankra pipeline schedules create`, each
@@ -280,8 +280,9 @@ stages:
     run: |-
       bash ci/chart-gate.sh claude-code-openai-wrapper
 
-  # helm install --dry-run=server on a real kube-apiserver per supported minor,
-  # plus a real install of gateway-api-crds on 1.31 (see ci/dry-run.sh).
+  # helm install --dry-run=server on a real kube-apiserver per supported minor:
+  # the upcloud charts on 1.34-1.36 (upcloud-csi requires 1.34+), the others on
+  # 1.27-1.31, plus a real install of gateway-api-crds on 1.31 (ci/dry-run.sh).
   - name: "dry-run"
     kind: "run"
     needs:
@@ -298,6 +299,9 @@ stages:
         - "1.27.1"
         - "1.29.5"
         - "1.31.0"
+        - "1.34.1"
+        - "1.35.0"
+        - "1.36.2"
     run: |-
       bash ci/dry-run.sh "${{ matrix.kubernetes }}"
 

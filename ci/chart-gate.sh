@@ -23,10 +23,14 @@ section() {
   printf '\n==> %s\n' "$*"
 }
 
+# The Kubernetes version kubeconform validates against; the upcloud charts
+# require 1.34+, the rest are checked at 1.31.
+kubeconform_kubernetes_version=1.31.0
+
 kubeconform_strict() {
   kubeconform \
     -strict -summary -verbose \
-    -kubernetes-version 1.31.0 \
+    -kubernetes-version "${kubeconform_kubernetes_version}" \
     -schema-location default \
     -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{ .Group }}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \
     -ignore-missing-schemas \
@@ -204,7 +208,8 @@ cloud_driver_gate() {
   helm lint "${chart}" "${values[@]}"
 
   section "helm template ${chart}"
-  helm template ci "${chart}" --namespace kube-system "${values[@]}" > "${rendered}/${chart}.yaml"
+  helm template ci "${chart}" --namespace kube-system --kube-version "${kubeconform_kubernetes_version}" \
+    "${values[@]}" > "${rendered}/${chart}.yaml"
   wc -l "${rendered}/${chart}.yaml"
 
   section "kubeconform ${chart}"
@@ -215,6 +220,9 @@ cloud_driver_gate() {
 
 case "${group}" in
   upcloud)
+    # Helm 3.14 renders for Kubernetes 1.29 by default, below upcloud-csi's
+    # kubeVersion (>=1.34, external-provisioner v6).
+    kubeconform_kubernetes_version=1.34.0
     cloud_driver_gate upcloud-ccm \
       --set ccmConfig.clusterID=ci-test --set credentials.username=ci --set credentials.password=ci
     cloud_driver_gate upcloud-csi \
