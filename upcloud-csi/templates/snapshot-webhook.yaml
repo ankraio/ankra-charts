@@ -1,7 +1,11 @@
 {{- if .Values.snapshotWebhook.enabled -}}
 {{/*
-Snapshot validation webhook - vendored from UpCloud CSI v1.4.0
-snapshot-webhook-upcloud-csi.yaml. Enable only after you have a TLS cert
+Snapshot validation webhook - vendored from UpCloud CSI v1.5.1
+snapshot-webhook-upcloud-csi.yaml. Deprecated: since external-snapshotter
+v8.0 the snapshot CRDs validate VolumeSnapshots and VolumeSnapshotContents
+with CEL rules, and the webhook only checks that each driver has at most one
+default VolumeSnapshotClass. Upstream removed it in v8.2, so v8.1.1 is its
+last image. Enable only after you have a TLS cert
 populated in the Secret named by .Values.snapshotWebhook.tlsSecretName.
 
 cert-manager Certificate example:
@@ -24,16 +28,16 @@ webhooks:
   - name: validation-webhook.snapshot.storage.k8s.io
     rules:
       - apiGroups: ["snapshot.storage.k8s.io"]
-        apiVersions: ["v1", "v1beta1"]
+        apiVersions: ["v1"]
         operations: ["CREATE", "UPDATE"]
-        resources: ["volumesnapshots", "volumesnapshotcontents"]
+        resources: ["volumesnapshotclasses"]
         scope: "*"
     clientConfig:
       service:
         namespace: {{ include "upcloud-csi.namespace" . }}
         name: {{ include "upcloud-csi.fullname" . }}-snapshot-validation
         path: "/volumesnapshot"
-    admissionReviewVersions: ["v1", "v1beta1"]
+    admissionReviewVersions: ["v1"]
     sideEffects: None
     failurePolicy: {{ .Values.snapshotWebhook.failurePolicy }}
     timeoutSeconds: {{ .Values.snapshotWebhook.timeoutSeconds }}

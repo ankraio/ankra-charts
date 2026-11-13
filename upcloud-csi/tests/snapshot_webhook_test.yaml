@@ -41,3 +41,18 @@ tests:
       - equal:
           path: webhooks[0].failurePolicy
           value: Fail
+
+  - it: validates only VolumeSnapshotClasses over v1, as the v8 webhook does
+    set:
+      snapshotWebhook.enabled: true
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: webhooks[0].rules[0].resources
+          value: ["volumesnapshotclasses"]
+      - equal:
+          path: webhooks[0].rules[0].apiVersions
+          value: ["v1"]
+      - equal:
+          path: webhooks[0].admissionReviewVersions
+          value: ["v1"]

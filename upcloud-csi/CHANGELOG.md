@@ -12,6 +12,76 @@ auto-bumps these.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
+### Security
+
+- **Current kubernetes-csi sidecars.** The chart still defaulted to the 2022
+  sidecars UpCloud's own manifests ship, which scan with dozens of critical
+  and high CVEs, all fixed upstream:
+
+  | Image | 0.4.x | 0.5.0 |
+  | -- | -- | -- |
+  | `csi-provisioner` | v3.1.0 | v6.4.0 |
+  | `csi-attacher` | v3.4.0 | v4.13.0 |
+  | `csi-resizer` | v1.4.0 | v2.3.0 |
+  | `csi-snapshotter` | v4.2.1 | v8.7.0 |
+  | `snapshot-controller` | v4.2.1 | v8.7.0 |
+  | `csi-node-driver-registrar` | v2.5.0 | v2.18.0 |
+  | `snapshot-validation-webhook` (opt-in) | v4.2.1 | v8.1.1 |
+  | `upcloud-csi` driver | v1.4.0 | v1.5.1 (by digest) |
+  | `alpine/k8s` (hook Job, snapshot CronJob) | 1.31.13 | 1.35.10 |
+
+### Changed
+
+- **Kubernetes 1.34 or newer** (`kubeVersion: ">=1.34.0-0"`), the minimum
+  external-provisioner v6 supports.
+- **Topology is on.** csi-provisioner v3 ran with its `Topology` feature gate
+  off; from v5 it follows the driver, and the UpCloud driver advertises
+  `VOLUME_ACCESSIBILITY_CONSTRAINTS` with the key `region` (set to the zone).
+  New PersistentVolumes get a `region In [<zone>]` node affinity, so a pod is
+  never scheduled where its volume cannot attach. Existing PersistentVolumes
+  are untouched. Two consequences:
+  - A StorageClass `allowedTopologies` must use the `region` key. A class
+    keyed on `topology.kubernetes.io/zone` with `WaitForFirstConsumer` fails
+    every new claim with `topology ... from selected node ... is not in
+    requisite`. `values-examples/multi-zone.yaml` now uses `region`.
+  - The driver creates volumes only in its controller's zone and rejects any
+    other zone it is asked for, so a cluster whose CSI nodes span zones gets
+    `ResourceExhausted` on new claims. Single-zone clusters are unaffected.
+  `controller.sidecarExtraArgs.provisioner: ["--feature-gates=Topology=false"]`
+  restores the old behaviour.
+- **Snapshot CRDs from external-snapshotter v8.7.0**, which validate with CEL
+  rules instead of the webhook and add `sourceVolumeMode`. Helm installs
+  `crds/` only on a first install, so an upgrade keeps the CRDs a cluster
+  already has. snapshot-controller v8 runs on the v4.2-era CRDs (production
+  UpCloud clusters have run v8.6 on them since chart 0.4.1), so applying the
+  new ones from `crds/` is optional. VolumeGroupSnapshot CRDs are not shipped (the UpCloud driver
+  does not support group snapshots); snapshot-controller logs one warning
+  about them at startup.
+- **RBAC.** The provisioner role gains `volumeattachments` and
+  `volumeattributesclasses` read access, matching external-provisioner v6.4.
+  Every other rule the new sidecars need was added in 0.4.1.
+- **Snapshot validation webhook (deprecated).** Upstream removed it in
+  external-snapshotter v8.2; the chart runs its last image, v8.1.1, which
+  validates only VolumeSnapshotClasses, and its ValidatingWebhookConfiguration
+  now matches only `volumesnapshotclasses` over `v1`. Still off by default.
+- `scripts/sync-upstream.sh csi` no longer copies the sidecar tags from
+  UpCloud's `setup-upcloud-csi.yaml` when they are older than the chart's,
+  which would have rolled them back to the 2022 releases on the next sync.
+
+### Added
+
+- `controller.sidecarExtraArgs.{provisioner,attacher,resizer,snapshotter}`
+  appends arguments to each kubernetes-csi sidecar.
+
+### Upgrading
+
+- Leader election is unchanged: the same `--leader-election` flags and
+  Lease names, so old and new controller pods hand over during the rollout.
+- Stacks that override `images.<sidecar>.tag` keep those tags. Remove the
+  overrides, or set them to the tags above, to get the new sidecars.
+
 ## [0.4.1] - 2026-09-29
 
 ### Fixed

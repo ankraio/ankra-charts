@@ -20,55 +20,56 @@ imagePullSecrets: []
 
 # -- Image references. Each entry follows the Bitnami pattern:
 # `registry/repository[:tag|@digest]`. Setting `digest` takes precedence
-# over `tag`. Tags are pinned to the versions shipped by UpCloud CSI
-# v1.4.0's setup-upcloud-csi.yaml and are auto-bumped by the sync workflow.
+# over `tag`. The kubernetes-csi sidecar tags are the current upstream
+# releases for Kubernetes 1.34+, not the 2022-era tags UpCloud's own
+# setup-upcloud-csi.yaml still ships; the sync workflow only ever raises them.
 images:
   csiDriver:
     registry: ghcr.io
     repository: upcloudltd/upcloud-csi
-    tag: ""   # falls back to .Chart.AppVersion (v1.4.0)
-    digest: "sha256:5af91c663788edcf5333ed1c5cf80d73cdb827b6aa9f42f2bebef98c06cfddb5"
+    tag: ""   # falls back to .Chart.AppVersion (v1.5.1)
+    digest: "sha256:6a47b1b3bc5eb90c91d5de9b1eac2eb221f71a8a0a26250fbdb7ad77e1a4aa6d"
     pullPolicy: IfNotPresent
   provisioner:
     registry: registry.k8s.io
     repository: sig-storage/csi-provisioner
-    tag: "v3.1.0"
+    tag: "v6.4.0"
     digest: ""
     pullPolicy: IfNotPresent
   attacher:
     registry: registry.k8s.io
     repository: sig-storage/csi-attacher
-    tag: "v3.4.0"
+    tag: "v4.13.0"
     digest: ""
     pullPolicy: IfNotPresent
   resizer:
     registry: registry.k8s.io
     repository: sig-storage/csi-resizer
-    tag: "v1.4.0"
+    tag: "v2.3.0"
     digest: ""
     pullPolicy: IfNotPresent
   snapshotter:
     registry: registry.k8s.io
     repository: sig-storage/csi-snapshotter
-    tag: "v4.2.1"
+    tag: "v8.7.0"
     digest: ""
     pullPolicy: IfNotPresent
   snapshotController:
     registry: registry.k8s.io
     repository: sig-storage/snapshot-controller
-    tag: "v4.2.1"
+    tag: "v8.7.0"
     digest: ""
     pullPolicy: IfNotPresent
   nodeDriverRegistrar:
     registry: registry.k8s.io
     repository: sig-storage/csi-node-driver-registrar
-    tag: "v2.5.0"
+    tag: "v2.18.0"
     digest: ""
     pullPolicy: IfNotPresent
   snapshotValidationWebhook:
     registry: registry.k8s.io
     repository: sig-storage/snapshot-validation-webhook
-    tag: "v4.2.1"
+    tag: "v8.1.1"
     digest: ""
     pullPolicy: IfNotPresent
   kubectl:
@@ -77,7 +78,7 @@ images:
     # is distroless (no shell), which made the Job fail on every install.
     registry: docker.io
     repository: alpine/k8s
-    tag: "1.31.13"
+    tag: "1.35.10"
     digest: ""
     pullPolicy: IfNotPresent
 
@@ -292,6 +293,17 @@ controller:
   extraArgs: []
   # -- Extra environment variables for the csi-upcloud-plugin container.
   extraEnv: []
+  # -- Extra args appended to each kubernetes-csi sidecar. The driver
+  # advertises VOLUME_ACCESSIBILITY_CONSTRAINTS with the topology key
+  # `region`, and csi-provisioner v5+ acts on it: every new PV gets a
+  # `region In [<zone>]` node affinity and CreateVolume receives the zones of
+  # the cluster's nodes. `provisioner: ["--feature-gates=Topology=false"]`
+  # restores the v3 behaviour (no topology) if a cluster depends on it.
+  sidecarExtraArgs:
+    provisioner: []
+    attacher: []
+    resizer: []
+    snapshotter: []
 
 # -- Snapshot Controller Deployment (provides VolumeSnapshot controller loop).
 snapshotController:
@@ -507,7 +519,7 @@ snapshotCronJob:
     # Must contain both a shell and kubectl (see images.kubectl).
     registry: docker.io
     repository: alpine/k8s
-    tag: 1.31.13
+    tag: "1.35.10"
     pullPolicy: IfNotPresent
   resources:
     requests:

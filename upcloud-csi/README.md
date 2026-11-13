@@ -3,10 +3,14 @@
 [![Helm chart](https://img.shields.io/badge/helm-chart-blue)](../README.md) ![Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 UpCloud CSI block-storage driver packaged as a Helm chart. Vendors the
-upstream [UpCloud CSI](https://github.com/UpCloudLtd/upcloud-csi) v1.4.0
+upstream [UpCloud CSI](https://github.com/UpCloudLtd/upcloud-csi) v1.5.1
 manifests (CRDs, RBAC, controller, node DaemonSet, snapshot controller,
 StorageClasses, and the optional snapshot validation webhook) and exposes
-them via a single `helm install`.
+them via a single `helm install`. The kubernetes-csi sidecars are the current
+upstream releases (csi-provisioner v6.4.0, csi-attacher v4.13.0, csi-resizer
+v2.3.0, csi-snapshotter and snapshot-controller v8.7.0,
+csi-node-driver-registrar v2.18.0), not the 2022 tags UpCloud's manifests
+still ship.
 
 ## TL;DR
 
@@ -55,7 +59,7 @@ helm install upcloud-csi ./charts/upcloud-csi -n kube-system \
 
 | Requirement | Notes |
 |---|---|
-| Kubernetes | `>= 1.27` (enforced by `Chart.yaml`'s `kubeVersion`). |
+| Kubernetes | `>= 1.34` (enforced by `Chart.yaml`'s `kubeVersion`; external-provisioner v6's minimum). Chart 0.4.x serves older clusters. |
 | UpCloud CCM | Recommended (provides node UUID annotations the CSI driver relies on). Install [`upcloud-ccm`](../upcloud-ccm/README.md) first. |
 | UpCloud API credentials | Reused from `upcloud-ccm`-created Secret by default; can be supplied directly. |
 | Snapshot Controller external CRDs | Bundled in `crds/`. No external `snapshot-controller` install needed - the chart ships one. |
@@ -119,9 +123,13 @@ imagePullSecrets:
 
 See [`values-examples/air-gapped.yaml`](values-examples/air-gapped.yaml).
 
-## Snapshot validation webhook (optional)
+## Snapshot validation webhook (optional, deprecated)
 
-Off by default because it requires a TLS cert. To enable:
+Since external-snapshotter v8.0 the snapshot CRDs validate VolumeSnapshots
+and VolumeSnapshotContents with CEL rules; the webhook only checks that each
+driver has at most one default VolumeSnapshotClass, and upstream removed it
+in v8.2. The chart runs its last image, v8.1.1. Off by default because it
+requires a TLS cert. To enable:
 
 1. Provision a TLS Secret named `snapshot-validation-secret` in the chart
    namespace (e.g. via cert-manager) with `cert.pem` / `key.pem` valid for
@@ -189,17 +197,28 @@ spec:
 ## Multi-zone clusters
 
 UpCloud block storage is **zone-bound** - a `fi-hel1` volume cannot be
-attached to a `fi-hel2` VM. For clusters that span multiple zones, switch
-to `WaitForFirstConsumer` + `allowedTopologies`:
+attached to a `fi-hel2` VM - and the driver creates volumes only in the zone
+its controller runs in, rejecting any other zone it is asked for.
+
+The driver reports its topology under the key `region` (the node's zone),
+and kubelet labels every node running the node plugin with it.
+csi-provisioner v5+ acts on that: each new PersistentVolume gets a
+`region In [<zone>]` node affinity, so pods follow their volumes. Any
+`allowedTopologies` must therefore use the `region` key; a class keyed on
+`topology.kubernetes.io/zone` fails every `WaitForFirstConsumer` claim with
+`topology ... from selected node ... is not in requisite`.
+
+For a cluster with nodes in several zones, pin the controller and every
+StorageClass to one zone with `WaitForFirstConsumer`:
 
 ```bash
 helm upgrade upcloud-csi ./charts/upcloud-csi -n kube-system \
   -f values-examples/multi-zone.yaml
 ```
 
-`values-examples/multi-zone.yaml` pins the `maxiops` SC to `fi-hel1` and the
-`standard` SC to `fi-hel2`. The scheduler then places pods next to a
-provisionable volume rather than failing the bind.
+`controller.sidecarExtraArgs.provisioner: ["--feature-gates=Topology=false"]`
+turns topology off again (the csi-provisioner v3 behaviour): PVs carry no
+node affinity and every volume lands in the controller's zone.
 
 ## Observability
 
@@ -255,7 +274,7 @@ The chart vendors a pinned upstream snapshot. To bump:
 
 ```bash
 # Local
-./charts/scripts/sync-upstream.sh csi v1.5.0
+./charts/scripts/sync-upstream.sh csi v1.5.1
 helm lint charts/upcloud-csi
 git diff charts/upcloud-csi/
 ```
@@ -264,6 +283,11 @@ The daily `.github/workflows/charts-upcloud-sync.yml` workflow does this
 automatically and opens a PR.
 
 ### Upgrading the chart
+
+Read [`CHANGELOG.md`](CHANGELOG.md) first: 0.5.0 crosses majors on every
+kubernetes-csi sidecar, requires Kubernetes 1.34, and turns on topology-aware
+provisioning. A stack that overrides `images.<sidecar>.tag` keeps those tags
+until the overrides are removed.
 
 ```bash
 helm upgrade upcloud-csi ./charts/upcloud-csi -n kube-system -f my-values.yaml
@@ -314,6 +338,7 @@ A full table of values lives in [`values.yaml`](values.yaml). Key knobs:
 | `snapshotCronJob.schedule` | `0 2 * * *` | Cron schedule. |
 | `snapshotCronJob.retentionCount` | `7` | Snapshots kept per PVC. |
 | `controller.replicaCount` | `1` | Bump to 2+ for HA (leader election preserved). |
+| `controller.sidecarExtraArgs.{provisioner,attacher,resizer,snapshotter}` | `[]` | Extra args per kubernetes-csi sidecar, e.g. `--feature-gates=Topology=false` on the provisioner. |
 | `node.kubeletDir` | `/var/lib/kubelet` | Override for non-default kubelet roots. |
 | `snapshotController.enabled` | `true` | Bundle the external snapshot-controller. |
 | `snapshotWebhook.enabled` | `false` | Opt-in validation webhook (requires TLS cert). |
