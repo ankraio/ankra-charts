@@ -1,16 +1,17 @@
 {{- include "upcloud-csi.validate" . -}}
 {{/*
-RBAC vendored from UpCloud CSI v1.4.0's rbac-upcloud-csi.yaml.
+RBAC vendored from UpCloud CSI v1.5.1's rbac-upcloud-csi.yaml.
 Namespace and ServiceAccount names are templated.
 
-The sidecar roles are widened to the union of the rules the pinned sidecars
-(values.yaml) and the current kubernetes-csi releases need (external-provisioner
-v6, external-attacher v4.13, external-resizer v2, external-snapshotter and
-snapshot-controller v8). Stacks override images.<sidecar>.tag, and newer
-sidecars write status through the patch verb: with only upstream's update,
-csi-snapshotter v8 creates the snapshot at UpCloud but can never mark its
-VolumeSnapshotContent ready, so every VolumeSnapshot, and every Velero CSI
-backup waiting on one, hangs until it times out.
+UpCloud's rules were written for the 2022 sidecars its manifests still ship.
+The sidecar roles are the union of those rules and the ones the sidecars this
+chart pins need (external-provisioner v6.4, external-attacher v4.13,
+external-resizer v2.3, external-snapshotter and snapshot-controller v8.7), so
+a stack that still overrides images.<sidecar>.tag to an older release keeps
+working. Newer sidecars write status through the patch verb: with only
+upstream's update, csi-snapshotter v8 creates the snapshot at UpCloud but can
+never mark its VolumeSnapshotContent ready, so every VolumeSnapshot, and every
+Velero CSI backup waiting on one, hangs until it times out.
 Regenerate via `charts/scripts/sync-upstream.sh csi <version>`, then re-apply
 the union.
 */}}
@@ -120,6 +121,12 @@ rules:
     verbs: ["get", "list", "watch", "update"]
   - apiGroups: [""]
     resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattributesclasses"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

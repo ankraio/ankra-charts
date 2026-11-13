@@ -764,10 +764,18 @@ extract_and_patch_do_csi_tags() {
     done <<<"$images"
 }
 
+# Succeeds when version $1 sorts strictly after version $2.
+version_is_newer() {
+    [[ "$1" != "$2" ]] && [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" == "$1" ]]
+}
+
 # Pull every `image: …` reference from the upstream setup-upcloud-csi.yaml
 # and map it to a values.yaml key. Patches the .tag of each. Skips upstream
 # `latest` tags for the csiDriver image - the chart resolves those from
 # `.Chart.AppVersion` instead, which keeps `helm install` deterministic.
+# The kubernetes-csi sidecar tags only ever move forward: UpCloud's manifests
+# still ship the 2022 sidecars, and copying them back would undo the chart's
+# own bumps on every sync.
 extract_and_patch_csi_tags() {
     local setup_yaml=$1
     require_tool yq
@@ -805,6 +813,14 @@ extract_and_patch_csi_tags() {
             log "leaving images.csiDriver.tag empty (upstream uses :latest; chart uses .Chart.AppVersion)"
             patch_csi_image_tag "csiDriver" ""
             continue
+        fi
+        if [[ "$key" != "csiDriver" ]]; then
+            local current_tag
+            current_tag=$(yq -r ".images.${key}.tag // \"\"" "${CSI_DIR}/values.yaml")
+            if [[ -n "$current_tag" ]] && ! version_is_newer "$tag" "$current_tag"; then
+                log "keeping images.${key}.tag = ${current_tag} (upstream ships ${tag})"
+                continue
+            fi
         fi
         log "patching images.${key}.tag = ${tag}"
         patch_csi_image_tag "${key}" "${tag}"

@@ -241,7 +241,7 @@ GitHub Actions workflows under `.github/workflows/`:
 | Workflow | Trigger | What it does |
 |---|---|---|
 | [`charts-upcloud-sync.yml`](.github/workflows/charts-upcloud-sync.yml) | Daily `17 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-upstream.sh` for both UpCloud charts and opens a rolling PR. |
-| [`charts-upcloud-lint.yml`](.github/workflows/charts-upcloud-lint.yml) | PR / push under `upcloud-{ccm,csi}/**` | `helm lint`, `helm template`, `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31. |
+| [`charts-upcloud-lint.yml`](.github/workflows/charts-upcloud-lint.yml) | PR / push under `upcloud-{ccm,csi}/**` | `helm lint`, `helm template`, `kubeconform`, `helm-unittest`, `helm install --dry-run=server` on Kind across K8s 1.34 / 1.35 / 1.36. |
 | [`charts-cloudflare-operator-sync.yml`](.github/workflows/charts-cloudflare-operator-sync.yml) | Daily `27 6 * * *` cron + `workflow_dispatch` | Re-vendors upstream `cloudflare-operator.{crds,}yaml`, re-splits CRDs, bumps `appVersion`, opens a rolling PR. |
 | [`charts-cloudflare-operator-lint.yml`](.github/workflows/charts-cloudflare-operator-lint.yml) | PR / push under `cloudflare-operator/**` | `shellcheck`, `helm lint`, `helm template` (4 overlays), `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31 (cert-manager pre-installed). |
 | [`charts-digitalocean-sync.yml`](.github/workflows/charts-digitalocean-sync.yml) | Daily `37 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-upstream.sh do-ccm` / `do-csi` against the upstream DigitalOcean release feeds and opens a rolling PR. |

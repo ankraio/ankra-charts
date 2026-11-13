@@ -1,7 +1,7 @@
 # Air-gapped overlay: every image mirrored to a private registry and pinned
 # by digest. Generate digests with:
-#   crane digest registry.k8s.io/sig-storage/csi-provisioner:v3.1.0
-#   crane digest ghcr.io/upcloudltd/upcloud-csi:v1.4.0
+#   crane digest registry.k8s.io/sig-storage/csi-provisioner:v6.4.0
+#   crane digest ghcr.io/upcloudltd/upcloud-csi:v1.5.1
 # (etc.) and mirror the images first.
 
 global:
