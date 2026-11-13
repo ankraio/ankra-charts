@@ -64,8 +64,8 @@ etcd \
   > "${state}/etcd.log" 2>&1 &
 processes+=("$!")
 
-ssh-keygen -q -t rsa -b 2048 -m PEM -N '' -f "${state}/service-account.key"
-ssh-keygen -e -m PKCS8 -f "${state}/service-account.key" > "${state}/service-account.pub"
+openssl genrsa -out "${state}/service-account.key" 2048 2> /dev/null
+openssl rsa -in "${state}/service-account.key" -pubout -out "${state}/service-account.pub" 2> /dev/null
 token="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 printf '%s,ci-admin,ci-admin,"system:masters"\n' "${token}" > "${state}/tokens.csv"
 
