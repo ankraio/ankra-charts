@@ -6,3 +6,7 @@
 # Stray atomic-symlink temp files from older sync-upstream.sh runs
 vendor/**/current.tmp.*
 **/vendor/**/current.tmp.*
+
+# Ankra Pipelines tool installs and per-step scratch space (ci/env.sh)
+.ci-tools/
+.ci-tmp/
