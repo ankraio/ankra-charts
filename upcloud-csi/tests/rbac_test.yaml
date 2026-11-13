@@ -75,6 +75,25 @@ tests:
             resources: ["persistentvolumes"]
             verbs: ["get", "list", "watch", "create", "patch", "delete"]
 
+  - it: lets external-provisioner v6.4 read VolumeAttachments and VolumeAttributesClasses
+    documentIndex: 4
+    asserts:
+      - equal:
+          path: metadata.name
+          value: ut-upcloud-csi-provisioner
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["storage.k8s.io"]
+            resources: ["volumeattachments"]
+            verbs: ["get", "list", "watch"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["storage.k8s.io"]
+            resources: ["volumeattributesclasses"]
+            verbs: ["get", "list", "watch"]
+
   - it: lets external-resizer v2 read VolumeAttributesClasses
     documentIndex: 12
     asserts:

@@ -1,28 +1,30 @@
-# values-examples/multi-zone.yaml - restrict each StorageClass to a single
-# UpCloud zone and have the scheduler co-locate pods with their PVs.
+# values-examples/multi-zone.yaml - a cluster whose nodes span UpCloud zones.
 #
 # UpCloud block storage volumes are zone-bound: a `fi-hel1` volume cannot be
-# attached to a `fi-hel2` VM. When a single cluster spans multiple zones,
-# WaitForFirstConsumer + allowedTopologies ensures the scheduler picks a
-# node in a zone where the volume can actually be created.
+# attached to a `fi-hel2` VM. The driver creates every volume in the zone its
+# controller runs in and rejects requests for any other zone, so a cluster
+# with nodes in several zones keeps its storage in one of them.
 #
-# This overlay assumes nodes are labelled with
-# `topology.kubernetes.io/zone=<fi-hel1|fi-hel2|...>` - set this via the CCM
-# (when running) or kubectl label.
+# The driver reports topology under the key `region` (set to the node's
+# zone), and kubelet labels each node running the node plugin with it.
+# csi-provisioner v5+ passes that topology to the driver and stamps
+# `region In [<zone>]` on every new PV, so allowedTopologies must use the
+# `region` key: a `topology.kubernetes.io/zone` term never matches what the
+# provisioner compares it with and fails every WaitForFirstConsumer claim.
 
 storageClasses:
   defaultClass: maxiops
-  # WFC is recommended whenever allowedTopologies is set.
+  # WaitForFirstConsumer lets the scheduler pick a node in the storage zone
+  # before the volume is created.
   volumeBindingMode: WaitForFirstConsumer
   reclaimPolicy: Retain
-  # Chart-wide allowedTopologies - applied to every tier unless that tier
-  # overrides it.
+  # Chart-wide allowedTopologies, applied to every tier. Must name the zone
+  # the controller is pinned to below.
   allowedTopologies:
     - matchLabelExpressions:
-        - key: topology.kubernetes.io/zone
+        - key: region
           values:
             - fi-hel1
-            - fi-hel2
 
   maxiops:
     enabled: true
@@ -33,21 +35,12 @@ storageClasses:
     mountOptions:
       - noatime
       - nodiratime
-    # Override the chart-wide allowedTopologies to pin to a single zone.
-    allowedTopologies:
-      - matchLabelExpressions:
-          - key: topology.kubernetes.io/zone
-            values: [fi-hel1]
 
   standard:
     enabled: true
     name: upcloud-block-storage-standard
     extraParameters:
       csi.storage.k8s.io/fstype: ext4
-    allowedTopologies:
-      - matchLabelExpressions:
-          - key: topology.kubernetes.io/zone
-            values: [fi-hel2]
 
   hdd:
     enabled: false
@@ -61,11 +54,11 @@ snapshotClasses:
     enabled: true
     name: upcloud-csi-snapshotclass-retain
 
-# Pin controllers to a single zone for snapshot/restore consistency.
+# Pin the controller to the storage zone: the driver creates volumes in the
+# zone it runs in.
 controller:
   replicaCount: 2
   nodeSelector:
-    node-role.kubernetes.io/control-plane: ""
     topology.kubernetes.io/zone: fi-hel1
   topologySpreadConstraints:
     - maxSkew: 1

@@ -1,9 +1,9 @@
 {{- include "upcloud-csi.validate" . -}}
 {{/*
-csi-upcloud-controller StatefulSet - vendored from UpCloud CSI v1.4.0
+csi-upcloud-controller StatefulSet - vendored from UpCloud CSI v1.5.1
 setup-upcloud-csi.yaml. Image references and pod-level defaults are
 exposed via values; sidecar args (csi-address, timeouts, leader-election)
-are preserved verbatim from upstream.
+follow upstream, and controller.sidecarExtraArgs appends to each sidecar.
 */}}
 apiVersion: apps/v1
 kind: StatefulSet
@@ -96,6 +96,9 @@ spec:
             - "--http-endpoint=:{{ .Values.metrics.port }}"
             - "--metrics-path=/metrics"
             {{- end }}
+            {{- with (.Values.controller.sidecarExtraArgs | default dict).provisioner }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
@@ -121,6 +124,9 @@ spec:
             - "--csi-address=$(ADDRESS)"
             - "--timeout=600s"
             - "--leader-election=true"
+            {{- with (.Values.controller.sidecarExtraArgs | default dict).attacher }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
@@ -141,6 +147,9 @@ spec:
             - "--csi-address=$(ADDRESS)"
             - "--handle-volume-inuse-error=true"
             - "--leader-election=true"
+            {{- with (.Values.controller.sidecarExtraArgs | default dict).resizer }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           env:
             - name: ADDRESS
               value: /var/lib/csi/sockets/pluginproxy/csi.sock
@@ -163,6 +172,9 @@ spec:
             - "--leader-election=true"
             {{- else }}
             - "--leader-election=false"
+            {{- end }}
+            {{- with (.Values.controller.sidecarExtraArgs | default dict).snapshotter }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           env:
             - name: ADDRESS
