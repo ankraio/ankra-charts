@@ -162,8 +162,8 @@ jobs:
           version: v3.14.0
 
       - name: Create kind cluster
-        # v1.12.0 fetches kubectl from dl.k8s.io; v1.10.0's GCS bucket has no
-        # kubectl newer than 1.33.
+        # v1.12.0 fetches kubectl from dl.k8s.io; v1.10.0 used the retired
+        # kubernetes-release GCS bucket, which has no kubectl 1.35 build.
         uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
         with:
           version: v0.33.0
