@@ -1,0 +1,15 @@
+# Fixed versions of the Python packages bridgecrew/checkov:3.4.5 ships with
+# HIGH CVEs (ankra-w263pr.1). Neither has dependencies of its own, so
+# --require-hashes --no-deps installs exactly these two wheels.
+#
+# urllib3 2.2.2: CVE-2025-66418, CVE-2025-66471, CVE-2026-21441,
+# CVE-2026-44431, CVE-2026-97687, CVE-2026-97689 (fixed in 2.8.0). checkov
+# requires urllib3>=1.26.20 and requests<3, which 2.8.0 satisfies.
+urllib3==2.8.0 \
+    --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
+# setuptools 78.1.1 vendors jaraco.context 5.3.0 (CVE-2026-23949) and wheel
+# 0.45.1 (CVE-2026-24049); 80.10.2 vendors jaraco.context 6.1.0 and wheel
+# 0.46.3, and it still ships pkg_resources, which semantic_version falls back
+# to when importlib.metadata is missing.
+setuptools==80.10.2 \
+    --hash=sha256:95b30ddfb717250edb492926c92b5221f7ef3fbcc2b07579bcd4a27da21d0173
