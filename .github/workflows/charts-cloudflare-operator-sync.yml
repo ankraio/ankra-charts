@@ -1,8 +1,9 @@
 name: charts-cloudflare-operator-sync
 
+# Manual fallback only: the daily sync runs on Ankra Pipelines (the sync-*
+# stages of .ankra/pipeline.yaml, ci/sync.sh). Delete this workflow once the
+# Ankra sync has opened its first pull request.
 on:
-  schedule:
-    - cron: "27 6 * * *"
   workflow_dispatch:
     inputs:
       version:

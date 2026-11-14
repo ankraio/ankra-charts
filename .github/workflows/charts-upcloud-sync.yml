@@ -3,9 +3,10 @@ name: charts-upcloud-sync
 # Daily sync of upcloud-{ccm,csi} against the upstream UpCloud release feeds.
 # Opens a single rolling PR whenever either chart is out of date with upstream.
 
+# Manual fallback only: the daily sync runs on Ankra Pipelines (the sync-*
+# stages of .ankra/pipeline.yaml, ci/sync.sh). Delete this workflow once the
+# Ankra sync has opened its first pull request.
 on:
-  schedule:
-    - cron: "17 6 * * *"
   workflow_dispatch:
     inputs:
       chart:

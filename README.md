@@ -236,26 +236,35 @@ helm install psono ./psono -n psono --create-namespace \
 
 ## Automation
 
-GitHub Actions workflows under `.github/workflows/`:
+### Ankra Pipelines
+
+CI runs on [Ankra Pipelines](https://docs.ankra.io) from [`.ankra/pipeline.yaml`](.ankra/pipeline.yaml); the stages call the scripts under [`ci/`](ci/). Results land on every pull request as one `Ankra pipeline` check.
+
+| Stage | Trigger | What it does |
+|---|---|---|
+| `tools` | every run | Installs the pinned toolchain (helm, helm-unittest, kubeconform, yq, jq, shellcheck, gitleaks, trivy, crane, and the envtest kube-apiserver/etcd builds) into the workspace, each checked against its sha256/sha512 ([`ci/tools.sh`](ci/tools.sh)). |
+| `shellcheck` | PR / push to `main` touching `scripts/`, `ci/`, `Makefile` | `shellcheck scripts/*.sh ci/*.sh`. |
+| `secret-scan` | every PR / push to `main` (weekly as `secret-scan-weekly`) | Full-history [`gitleaks`](https://github.com/gitleaks/gitleaks) scan. Config: [`.gitleaks.toml`](.gitleaks.toml); false positives: [`.gitleaksignore`](.gitleaksignore). |
+| `charts` | every PR / push to `main` | `make test` (lint, template, unittest) over every chart, including those with no gate of their own. |
+| `gate-<chart>` | PR / push touching that chart, `scripts/`, `ci/` or `Makefile` | [`ci/chart-gate.sh`](ci/chart-gate.sh): `helm lint`, `helm template` of every overlay, `kubeconform`, `helm-unittest`; for hermes-agent, isms-builder and claude-code-openai-wrapper also the guardrails that weak configurations are refused, `trivy config` (fails on HIGH/CRITICAL) and the check that the pinned image digest still resolves; for gateway-api-crds the upstream-match and CRD-annotation checks. |
+| `dry-run` × 1.27 / 1.29 / 1.31 / 1.34 / 1.35 / 1.36 | PR / push touching any chart it installs | [`ci/dry-run.sh`](ci/dry-run.sh): `helm install --dry-run=server` against a real kube-apiserver per minor, the upcloud charts on 1.34-1.36 and the others on 1.27-1.31 (envtest builds started as processes; a pipeline step cannot run kind), plus a real install of gateway-api-crds on 1.31 that checks the release Secret stays under the 1 MiB limit and that uninstall keeps the CRDs. |
+| `sync-upcloud`, `sync-digitalocean`, `sync-cloudflare-operator`, `sync-hermes-agent` | daily schedule (`task=sync`) | [`ci/sync.sh`](ci/sync.sh): runs `scripts/sync-upstream.sh` / `scripts/sync-image-digest.sh`, lints the result and opens or updates a rolling PR (`chore/charts-<family>-sync`), labelled `needs-review` on a structural change and `security` when a pinned tag moved. A manual run on any branch but `main` is a dry run. |
+| `artifacthub-verify` | hourly schedule (`task=artifacthub-verify`) | Checks that the Helm repo is registered on Artifact Hub and that every version in the published `index.yaml` is listed there. |
+
+Scheduled runs are rows created with `ankra pipeline schedules create --repository <id> --cron <cron> --input task=<task>`; `on.schedule` in the pipeline documents them. A manual run takes the same `task` input: `ankra pipeline run --repository <id> --input task=sync`.
+
+### GitHub Actions
+
+Publishing stays on GitHub Actions because it signs with keyless cosign tied to GitHub's OIDC identity, which is what [Verifying a published chart](#verifying-a-published-chart) tells you to check. The kind smoke tests that start containers stay there too.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| [`charts-upcloud-sync.yml`](.github/workflows/charts-upcloud-sync.yml) | Daily `17 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-upstream.sh` for both UpCloud charts and opens a rolling PR. |
-| [`charts-upcloud-lint.yml`](.github/workflows/charts-upcloud-lint.yml) | PR / push under `upcloud-{ccm,csi}/**` | `helm lint`, `helm template`, `kubeconform`, `helm-unittest`, `helm install --dry-run=server` on Kind across K8s 1.34 / 1.35 / 1.36. |
-| [`charts-cloudflare-operator-sync.yml`](.github/workflows/charts-cloudflare-operator-sync.yml) | Daily `27 6 * * *` cron + `workflow_dispatch` | Re-vendors upstream `cloudflare-operator.{crds,}yaml`, re-splits CRDs, bumps `appVersion`, opens a rolling PR. |
-| [`charts-cloudflare-operator-lint.yml`](.github/workflows/charts-cloudflare-operator-lint.yml) | PR / push under `cloudflare-operator/**` | `shellcheck`, `helm lint`, `helm template` (4 overlays), `kubeconform`, `helm-unittest`, `ct install` on Kind across K8s 1.27 / 1.29 / 1.31 (cert-manager pre-installed). |
-| [`charts-digitalocean-sync.yml`](.github/workflows/charts-digitalocean-sync.yml) | Daily `37 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-upstream.sh do-ccm` / `do-csi` against the upstream DigitalOcean release feeds and opens a rolling PR. |
-| [`charts-digitalocean-lint.yml`](.github/workflows/charts-digitalocean-lint.yml) | PR / push under `digitalocean-{ccm,csi}/**` | `shellcheck`, `helm lint`, `helm template`, `kubeconform`, `helm-unittest`, `helm install --dry-run=server` on Kind across K8s 1.27 / 1.29 / 1.31. |
-| [`charts-hermes-lint.yml`](.github/workflows/charts-hermes-lint.yml) | PR / push under `hermes-agent/**` | `shellcheck`, `helm lint --strict` (every overlay), `helm template`, `kubeconform`, `helm-unittest`, a guardrails job that asserts weak configurations are still refused, `trivy config` (fails on HIGH/CRITICAL), a check that the pinned image digest still resolves, and `helm install --dry-run=server` on Kind across K8s 1.27 / 1.29 / 1.31. |
-| [`charts-hermes-sync.yml`](.github/workflows/charts-hermes-sync.yml) | Daily `47 6 * * *` cron + `workflow_dispatch` | Runs `scripts/sync-image-digest.sh hermes-agent latest`, bumps the chart patch version and opens a rolling PR. Labels the PR `needs-review,security` when the pinned **tag moved** rather than a new release appearing. |
-| [`charts-claude-wrapper-lint.yml`](.github/workflows/charts-claude-wrapper-lint.yml) | PR / push under `claude-code-openai-wrapper/**` or `images/claude-code-openai-wrapper/**` | `helm lint --strict` (every overlay), `helm template`, `kubeconform`, `helm-unittest`, a guardrails job that asserts weak configurations are still refused, `trivy config` (fails on HIGH/CRITICAL), a check that the pinned image digest still resolves, a **real** `helm install --wait` smoke test on Kind under the PodSecurity `restricted` profile that probes `/health` and `/v1/models` through the Service, and `helm install --dry-run=server` across K8s 1.27 / 1.29 / 1.31. |
-| [`charts-isms-builder-lint.yml`](.github/workflows/charts-isms-builder-lint.yml) | PR / push under `isms-builder/**` | `helm lint --strict` (every overlay), `helm template`, `kubeconform`, `helm-unittest`, a guardrails job that asserts weak configurations are still refused, `trivy config` (fails on HIGH/CRITICAL), a check that the pinned image digest still resolves, a **real** `helm install --wait` smoke test on Kind under the PodSecurity `restricted` profile that probes `/api/version` through the Service and proves the data volume survives a pod restart, and `helm install --dry-run=server` across K8s 1.27 / 1.29 / 1.31. |
+| [`charts-smoke.yml`](.github/workflows/charts-smoke.yml) | PR / push to `main` under `hermes-agent/**`, `isms-builder/**`, `claude-code-openai-wrapper/**`, `cloudflare-operator/**` | A **real** `helm install --wait` on kind of each changed chart: hermes-agent (process must not run as root), isms-builder and claude-code-openai-wrapper under the PodSecurity `restricted` profile with their API probed through the Service, and `ct install` of cloudflare-operator with cert-manager across K8s 1.27 / 1.29 / 1.31. |
 | [`charts-claude-wrapper-image.yml`](.github/workflows/charts-claude-wrapper-image.yml) | Push to `main` under `images/claude-code-openai-wrapper/**` + `workflow_dispatch` | Builds `ghcr.io/ankraio/images/claude-code-openai-wrapper` (amd64 + arm64) from the upstream commit pinned in the Dockerfile and cosign-signs it. The chart keeps pulling its pinned digest until `sync-image-digest.sh` re-pins it in a reviewed chart release. |
 | [`charts-trivy-image.yml`](.github/workflows/charts-trivy-image.yml) | PR / push to `main` under `images/trivy/**` + `workflow_dispatch` | Builds `ghcr.io/ankraio/images/trivy:<upstream>-ankra.N` (amd64 + arm64): the digest-pinned upstream `aquasec/trivy` image with `brotli-libs` raised to the Alpine release that fixes the known-exploited CVE-2026-111497, until an upstream Trivy release carries it. A PR builds it and has it scan itself (fails on a fixable CRITICAL OS package); a push to `main` publishes and cosign-signs it, refusing to overwrite an existing tag. The Ankra security-baseline profile pins it by digest. |
 | [`charts-publish.yml`](.github/workflows/charts-publish.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` + `helm push` each chart to `oci://ghcr.io/ankraio/ankra-charts/<chart>:<version>`, then sign it with cosign (keyless) and attach an SPDX SBOM attestation. |
 | [`charts-pages.yml`](.github/workflows/charts-pages.yml) | Push to `main` (chart paths) + `workflow_dispatch` | `helm package` each chart and publish `index.yaml` + `.tgz` + a cosign bundle per package to the `gh-pages` branch (the `helm repo add` HTTP repo; auto-tracked by ArtifactHub). |
-| [`charts-artifacthub-verify.yml`](.github/workflows/charts-artifacthub-verify.yml) | Hourly cron + after each `charts-pages` run + `workflow_dispatch` | Checks that the Helm repo is registered on Artifact Hub and that every version in the published `index.yaml` is actually listed there. Needs no credentials. |
-| [`secret-scan.yml`](.github/workflows/secret-scan.yml) | Every PR / push to `main` + weekly cron + `workflow_dispatch` | Scans the full git history and working tree for committed secrets with the pinned [`gitleaks`](https://github.com/gitleaks/gitleaks) binary. Config: [`.gitleaks.toml`](.gitleaks.toml); false positives: [`.gitleaksignore`](.gitleaksignore). |
+| `charts-*-sync.yml` | `workflow_dispatch` only | Manual fallback for the sync stages above, until the Ankra sync has opened its first pull request. |
 
 ## Publishing to Artifact Hub
 
@@ -311,8 +320,8 @@ Artifact Hub drops a version it dislikes (a malformed annotation is enough)
 without failing anything on the publishing side, and then refuses to reprocess
 it until the `index.yaml` digest changes — so a chart can stay unlisted
 indefinitely while every workflow here is green.
-[`charts-artifacthub-verify.yml`](.github/workflows/charts-artifacthub-verify.yml)
-closes that loop: hourly, and after each `charts-pages` run, it checks that the
+The `artifacthub-verify` stage of [`.ankra/pipeline.yaml`](.ankra/pipeline.yaml)
+closes that loop: hourly, it checks that the
 repository is registered and that every version in the published `index.yaml` is
 actually live on Artifact Hub, failing loudly when one is missing. It needs no
 credentials and can be run locally:
