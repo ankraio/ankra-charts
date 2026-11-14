@@ -26,10 +26,18 @@
 # with. The kind smoke tests that start containers stay there too
 # (charts-smoke.yml): a pipeline step cannot run kind.
 #
+# The Ankra rebuild of the checkov step image (images/checkov, ankra-w263pr) is
+# built, scanned with Trivy and gated on every pull request that touches it,
+# and on main published to the organisation registry and copied by its gated
+# digest to the public share.ankra.cloud/library/checkov, which customer CI
+# clusters pull without credentials (ci/distribute-image.sh).
+#
 # charts_git is the organisation's GitHub App credential, used only by the sync
 # stages to push their branch and open the pull request. It is a protected
-# section: the sync stages fail until an administrator approves this
-# definition (ankra pipeline definitions approve <definition-id>).
+# section, as are the two registry logins the checkov copy reads and writes
+# with: the sync stages and distribute-checkov-image fail until an
+# administrator approves this definition
+# (ankra pipeline definitions approve <definition-id>).
 apiVersion: ankra.io/v1
 kind: Pipeline
 metadata:
@@ -104,6 +112,17 @@ path_sets:
     - "claude-code-openai-wrapper/**"
     - "gateway-api-crds/**"
     - { set: "shared" }
+secrets:
+  # Reads the published checkov image from the organisation registry.
+  - name: "organisation_registry_login"
+    from: "registry"
+    key: "ankra-harbor"
+  # Writes the copy to share.ankra.cloud, the public registry ankra-cloud-ccm,
+  # -csi and -cosi publish to (the organisation's connected registry
+  # share-ankra-cloud).
+  - name: "share_login"
+    from: "registry"
+    key: "share-ankra-cloud"
 credentials:
   - name: "github-app-ankraio"
     from: "git"
@@ -304,6 +323,73 @@ stages:
         - "1.36.2"
     run: |-
       bash ci/dry-run.sh "${{ matrix.kubernetes }}"
+
+  # The checkov step image without openssh-client (images/checkov/Dockerfile).
+  # A pull request builds, scans and gates it and pushes nothing public; a
+  # merge to main publishes it and copies it to share.ankra.cloud. The chain
+  # runs only when images/checkov changes (or this pipeline does).
+  - name: "build-checkov-image"
+    kind: "build"
+    needs:
+      - "checkout"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+      paths:
+        - "images/checkov/**"
+    build:
+      dockerfile: "images/checkov/Dockerfile"
+      context: "images/checkov"
+
+  - name: "scan-checkov-image"
+    kind: "scan"
+    needs:
+      - "build-checkov-image"
+    scan:
+      scanners:
+        - "trivy"
+      fail_on:
+        trivy: "critical"
+
+  - name: "gate-checkov-image"
+    kind: "gate"
+    needs:
+      - "scan-checkov-image"
+    gate:
+      require_stages:
+        - "scan-checkov-image"
+
+  - name: "publish-checkov-image"
+    kind: "publish"
+    needs:
+      - "gate-checkov-image"
+    when:
+      branches:
+        - "main"
+      events:
+        - "push"
+
+  - name: "distribute-checkov-image"
+    kind: "run"
+    needs:
+      - "tools"
+      - "publish-checkov-image"
+    when:
+      branches:
+        - "main"
+      events:
+        - "push"
+    secrets:
+      - "organisation_registry_login"
+      - "share_login"
+    env:
+      SOURCE_IMAGE_REFERENCE: "${{ needs['publish-checkov-image'].outputs.image_ref }}"
+      SOURCE_IMAGE_DIGEST: "${{ needs['publish-checkov-image'].outputs.image_digest }}"
+      PUBLIC_IMAGE: "share.ankra.cloud/library/checkov:3.4.5-ankra.1"
+    run: |-
+      bash ci/distribute-image.sh
 
   - name: "artifacthub-verify"
     kind: "run"
