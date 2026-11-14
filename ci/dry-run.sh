@@ -39,6 +39,20 @@ stop_cluster() {
   for process in "${processes[@]}"; do
     kill "${process}" 2> /dev/null || true
   done
+  # kube-apiserver 1.36 can outlive SIGTERM for a long while (graceful
+  # termination with no load balancer to drain), which held the step until its
+  # timeout; give both processes 15 seconds, then kill them.
+  for _ in $(seq 1 15); do
+    alive=false
+    for process in "${processes[@]}"; do
+      kill -0 "${process}" 2> /dev/null && alive=true
+    done
+    [[ "${alive}" == false ]] && break
+    sleep 1
+  done
+  for process in "${processes[@]}"; do
+    kill -9 "${process}" 2> /dev/null || true
+  done
   wait 2> /dev/null || true
   if [[ "${status}" != 0 ]]; then
     echo "--- etcd log (tail)"
