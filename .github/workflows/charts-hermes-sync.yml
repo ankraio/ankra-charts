@@ -10,9 +10,10 @@ name: charts-hermes-sync
 # something new to push, and the change lands as a rolling PR rather than a
 # direct commit to main.
 
+# Manual fallback only: the daily sync runs on Ankra Pipelines (the sync-*
+# stages of .ankra/pipeline.yaml, ci/sync.sh). Delete this workflow once the
+# Ankra sync has opened its first pull request.
 on:
-  schedule:
-    - cron: "47 6 * * *"
   workflow_dispatch:
     inputs:
       tag:

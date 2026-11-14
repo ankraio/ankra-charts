@@ -1,0 +1,366 @@
+# ankra-charts on Ankra Pipelines.
+#
+# Every pull request and every push to main: shellcheck, the gitleaks history
+# scan, the generic `make test` over every chart, the per-chart gates
+# (ci/chart-gate.sh: helm lint, helm template of every overlay, kubeconform,
+# helm-unittest, hardening guardrails, Trivy misconfiguration scan, pinned
+# image digest) and the server-side install matrix on kube-apiserver 1.27 to 1.36
+# (ci/dry-run.sh). A chart's gate runs only when the chart, the shared
+# scripts or this pipeline changed.
+#
+# Scheduled runs (rows created with `ankra pipeline schedules create`, each
+# passing task=<name>; the on.schedule block below documents them):
+#   task=sync                daily: the upstream sync stages propose rolling
+#                            pull requests for upcloud, digitalocean,
+#                            cloudflare-operator and hermes-agent (ci/sync.sh)
+#   task=secret-scan         weekly: the full-history gitleaks sweep
+#   task=artifacthub-verify  hourly: every version in the Pages Helm repo is
+#                            live on Artifact Hub
+# A manual run takes the same input; on any branch but main the sync stages are
+# a dry run that pushes nothing.
+#
+# Publishing stays on GitHub Actions for now: charts-publish.yml and
+# charts-pages.yml sign every chart with keyless cosign tied to GitHub's OIDC
+# identity, which README.md and the Artifact Hub signKey annotation tell
+# consumers to verify, and an Ankra pipeline run has no OIDC identity to sign
+# with. The kind smoke tests that start containers stay there too
+# (charts-smoke.yml): a pipeline step cannot run kind.
+#
+# charts_git is the organisation's GitHub App credential, used only by the sync
+# stages to push their branch and open the pull request. It is a protected
+# section: the sync stages fail until an administrator approves this
+# definition (ankra pipeline definitions approve <definition-id>).
+apiVersion: ankra.io/v1
+kind: Pipeline
+metadata:
+  name: "ankra-charts"
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+  schedule:
+    - cron: "17 6 * * *"
+      branch: "main"
+      stages:
+        - "checkout"
+        - "tools"
+        - "sync-upcloud"
+        - "sync-digitalocean"
+        - "sync-cloudflare-operator"
+        - "sync-hermes-agent"
+    - cron: "13 6 * * 1"
+      branch: "main"
+      stages:
+        - "checkout"
+        - "tools"
+        - "secret-scan-weekly"
+    - cron: "40 * * * *"
+      branch: "main"
+      stages:
+        - "checkout"
+        - "tools"
+        - "artifacthub-verify"
+  manual:
+    inputs:
+      - name: "task"
+        type: "choice"
+        enum:
+          - "lint"
+          - "sync"
+          - "secret-scan"
+          - "artifacthub-verify"
+        default: "lint"
+        description: "What a manual or scheduled run does beyond the lint gates"
+concurrency:
+  # A pull request's newer push cancels its older run; every other run (main,
+  # schedules, manual dispatches) gets a group of its own and is never cancelled.
+  group: "${{ event.kind == 'pull_request' ? format('ankra-charts-pr-{0}', ankra.ref) : format('ankra-charts-{0}-{1}', event.kind, ankra.run.number) }}"
+  cancel_in_progress: true
+workspace:
+  size: "10Gi"
+  access: "rwo"
+defaults:
+  image: "python:3.12-bookworm@sha256:4209fae09a3e20afd863e528bfddc235da5fd5977983e1996cd54cc9a72e6267"
+  timeout: "30m"
+  network: "egress-https"
+path_sets:
+  pipeline:
+    - ".ankra/**"
+    - "ci/**"
+  shared:
+    - "scripts/**"
+    - "Makefile"
+    - { set: "pipeline" }
+  dry_run:
+    - "upcloud-ccm/**"
+    - "upcloud-csi/**"
+    - "digitalocean-ccm/**"
+    - "digitalocean-csi/**"
+    - "hermes-agent/**"
+    - "isms-builder/**"
+    - "claude-code-openai-wrapper/**"
+    - "gateway-api-crds/**"
+    - { set: "shared" }
+credentials:
+  - name: "github-app-ankraio"
+    from: "git"
+    as: "charts_git"
+stages:
+  - name: "checkout"
+    kind: "checkout"
+
+  - name: "tools"
+    kind: "run"
+    needs:
+      - "checkout"
+    run: |-
+      bash ci/tools.sh
+
+  - name: "shellcheck"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - { set: "shared" }
+    run: |-
+      bash ci/run.sh shellcheck scripts/*.sh ci/*.sh
+
+  - name: "secret-scan"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    run: |-
+      bash ci/secret-scan.sh
+
+  - name: "secret-scan-weekly"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "schedule"
+    if: "${{ inputs.task == 'secret-scan' }}"
+    run: |-
+      bash ci/secret-scan.sh
+
+  # The generic gate over every chart in the repository, including the ones with
+  # no gate of their own below (psono, ankra-cloud-ccm/-csi/-cosi): the same
+  # `make test` a developer runs locally.
+  - name: "charts"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    run: |-
+      bash ci/run.sh make test
+
+  - name: "gate-upcloud"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - "upcloud-ccm/**"
+      - "upcloud-csi/**"
+      - { set: "shared" }
+    run: |-
+      bash ci/chart-gate.sh upcloud
+
+  - name: "gate-digitalocean"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - "digitalocean-ccm/**"
+      - "digitalocean-csi/**"
+      - { set: "shared" }
+    run: |-
+      bash ci/chart-gate.sh digitalocean
+
+  - name: "gate-cloudflare-operator"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - "cloudflare-operator/**"
+      - { set: "shared" }
+    run: |-
+      bash ci/chart-gate.sh cloudflare-operator
+
+  - name: "gate-gateway-api-crds"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - "gateway-api-crds/**"
+      - "scripts/sync-gateway-api-crds.sh"
+      - { set: "pipeline" }
+    run: |-
+      bash ci/chart-gate.sh gateway-api-crds
+
+  - name: "gate-hermes-agent"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - "hermes-agent/**"
+      - { set: "shared" }
+    run: |-
+      bash ci/chart-gate.sh hermes-agent
+
+  - name: "gate-isms-builder"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - "isms-builder/**"
+      - { set: "shared" }
+    run: |-
+      bash ci/chart-gate.sh isms-builder
+
+  - name: "gate-claude-code-openai-wrapper"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - "claude-code-openai-wrapper/**"
+      - "images/claude-code-openai-wrapper/**"
+      - { set: "shared" }
+    run: |-
+      bash ci/chart-gate.sh claude-code-openai-wrapper
+
+  # helm install --dry-run=server on a real kube-apiserver per supported minor:
+  # the upcloud charts on 1.34-1.36 (upcloud-csi requires 1.34+), the others on
+  # 1.27-1.31, plus a real install of gateway-api-crds on 1.31 (ci/dry-run.sh).
+  - name: "dry-run"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "push"
+        - "pull_request"
+        - "manual"
+    paths:
+      - { set: "dry_run" }
+    matrix:
+      kubernetes:
+        - "1.27.1"
+        - "1.29.5"
+        - "1.31.0"
+        - "1.34.1"
+        - "1.35.0"
+        - "1.36.2"
+    run: |-
+      bash ci/dry-run.sh "${{ matrix.kubernetes }}"
+
+  - name: "artifacthub-verify"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "schedule"
+        - "manual"
+    if: "${{ inputs.task == 'artifacthub-verify' }}"
+    run: |-
+      bash ci/run.sh bash scripts/artifacthub-verify.sh
+
+  - name: "sync-upcloud"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "schedule"
+        - "manual"
+    if: "${{ inputs.task == 'sync' }}"
+    run: |-
+      bash ci/sync.sh upcloud
+
+  - name: "sync-digitalocean"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "schedule"
+        - "manual"
+    if: "${{ inputs.task == 'sync' }}"
+    run: |-
+      bash ci/sync.sh digitalocean
+
+  - name: "sync-cloudflare-operator"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "schedule"
+        - "manual"
+    if: "${{ inputs.task == 'sync' }}"
+    run: |-
+      bash ci/sync.sh cloudflare-operator
+
+  - name: "sync-hermes-agent"
+    kind: "run"
+    needs:
+      - "tools"
+    when:
+      events:
+        - "schedule"
+        - "manual"
+    if: "${{ inputs.task == 'sync' }}"
+    run: |-
+      bash ci/sync.sh hermes-agent
