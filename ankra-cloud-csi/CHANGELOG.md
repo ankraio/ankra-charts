@@ -10,6 +10,21 @@ driver image tag it installs.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-15
+
+### Fixed
+
+- A `local-nvme` volume refused because the Ankra Local pool of its node is full
+  fails `CreateVolume` with `ResourceExhausted` again, so external-provisioner
+  hands the claim back to the scheduler and the pod is placed on a node with
+  room. The driver recognised that refusal by the wording of the API's `detail`.
+  The API has since reworded the text and names the refusal in a `reason` member
+  of its problem document, so the driver answered `FailedPrecondition` (for the
+  API's 409) or `Unavailable` (for its 503) and the pod waited on the full node.
+  The driver now reads `reason` (`not_available_in_zone` with 409,
+  `capacity_unavailable` with 503) and still recognises the wording of an API
+  that sends none. No template, value, storage class or credential changes.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added
