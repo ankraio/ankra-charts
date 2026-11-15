@@ -12,11 +12,23 @@
 #
 # patches/0001-loadbalancer-backend-address-source.patch adds
 # `loadBalancerBackendAddressSource` to the CCM config. It defaults to
-# node-internal-ip, so this image behaves exactly like upstream unless a
+# node-internal-ip, so that patch alone behaves exactly like upstream unless a
 # cluster opts in to `private-network`.
 #
-# Drop this image (and the patch) once the change is released upstream, and
-# point images.ccm back at ghcr.io/upcloudltd/cloud-controller-manager.
+# patches/0002-loadbalancer-converge-and-reapply-stalled.patch changes how
+# every load balancer is reconciled (PLA-945, 2026-11-15, a production load
+# balancer that forwarded nothing for 43 minutes):
+#   - annotation properties are merged over the defaults, so a Service whose
+#     annotation sets one backend property no longer compares unequal on every
+#     reconcile, and a leader change no longer replaces the whole load
+#     balancer configuration;
+#   - an update that would empty a backend that has members is refused;
+#   - the leader reads each load balancer's member status every two minutes
+#     and reapplies the configuration of one whose backend has members but
+#     none up, at most once per ten minutes, with a warning event.
+#
+# Drop this image (and the patches) once the changes are released upstream,
+# and point images.ccm back at ghcr.io/upcloudltd/cloud-controller-manager.
 #
 # Upstream is Apache-2.0 with a NOTICE file. Both are carried into the
 # runtime layer below, and MODIFICATIONS records that this build is not
@@ -40,7 +52,7 @@ ARG TARGETARCH
 ARG UPSTREAM_REPOSITORY=https://github.com/UpCloudLtd/upcloud-cloud-controller-manager
 # v1.2.3 - the commit is what gets fetched; keep it and the tag in step.
 ARG UPSTREAM_COMMIT=d04f4e864875bf649128f7113f6d075e3f79be81
-# image-revision: ankra.5
+# image-revision: ankra.6
 # Bump when the patch set, the dependency floor below or the toolchain
 # changes but the upstream commit does not; the published tag is
 # <upstream tag>-<image-revision>, so this image can never be confused with
@@ -104,9 +116,9 @@ RUN cd /upstream \
     && go mod verify \
     && go list -m google.golang.org/grpc golang.org/x/crypto golang.org/x/net
 
-# The tests ship with the patch and are cheap, so the build runs them: an
-# image that would silently mis-address every backend member is exactly the
-# failure this patch exists to prevent. They run once, on the builder's
+# The tests ship with the patches and are cheap, so the build runs them: an
+# image that would silently mis-address every backend member, or replace a
+# working load balancer on every reconcile, is exactly what they prevent. They run once, on the builder's
 # native architecture - this code has no architecture-specific behaviour,
 # so running them again under emulation would only cost time.
 RUN cd /upstream && CGO_ENABLED=0 go test ./internal/...
@@ -121,7 +133,7 @@ FROM alpine:3.24
 
 ARG UPSTREAM_COMMIT=d04f4e864875bf649128f7113f6d075e3f79be81
 LABEL org.opencontainers.image.title="upcloud-cloud-controller-manager" \
-      org.opencontainers.image.description="UpCloud cloud controller manager, built by Ankra from the pinned upstream release with the load balancer backend address source patch" \
+      org.opencontainers.image.description="UpCloud cloud controller manager, built by Ankra from the pinned upstream release with the load balancer backend address source and forwarding recovery patches" \
       org.opencontainers.image.source="https://github.com/ankraio/ankra-charts" \
       org.opencontainers.image.url="https://github.com/ankraio/ankra-charts/tree/main/images/upcloud-ccm" \
       org.opencontainers.image.licenses="Apache-2.0" \
@@ -142,8 +154,9 @@ RUN printf '%s\n' \
       "This image is a modified build of UpCloud's cloud-controller-manager." \
       "Upstream: https://github.com/UpCloudLtd/upcloud-cloud-controller-manager" \
       "Built from commit ${UPSTREAM_COMMIT} with the patches in ./patches applied." \
-      "The patches add ccmConfig.loadBalancerBackendAddressSource; they do not" \
-      "change behaviour unless that option is set." \
+      "The patches add ccmConfig.loadBalancerBackendAddressSource, merge" \
+      "annotation properties over the defaults, refuse updates that would empty" \
+      "a backend, and reapply load balancers whose members are all down." \
       "Some dependencies are raised above upstream's go.mod to versions with" \
       "security fixes; ./go.mod is the module set this binary was built from." \
       > /usr/share/licenses/upcloud-cloud-controller-manager/MODIFICATIONS
