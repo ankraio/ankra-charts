@@ -7,7 +7,7 @@ metadata:
     {{- if .Values.webhook.certManager.enabled }}
     cert-manager.io/inject-ca-from: {{ include "cloudflare-operator.namespace" . }}/{{ include "cloudflare-operator.fullname" . }}-serving-cert
 {{- end }}
-    controller-gen.kubebuilder.io/version: v0.16.1
+    controller-gen.kubebuilder.io/version: v0.22.0
   labels:
     {{- include "cloudflare-operator.labels" . | nindent 4 }}
   name: tunnels.networking.cfargotunnel.com
@@ -57,15 +57,15 @@ spec:
                 description: Cloudflare Credentials
                 properties:
                   CLOUDFLARE_API_KEY:
-                    default: CLOUDFLARE_API_KEY
                     description: |-
+                      Deprecated: use apiKeyKey instead.
                       Key in the secret to use for Cloudflare API Key, defaults to CLOUDFLARE_API_KEY. Needs Email also to be provided.
                       For Delete operations for new tunnels only, or as an alternate to API Token
                     type: string
                   CLOUDFLARE_API_TOKEN:
-                    default: CLOUDFLARE_API_TOKEN
-                    description: Key in the secret to use for Cloudflare API token,
-                      defaults to CLOUDFLARE_API_TOKEN
+                    description: |-
+                      Deprecated: use apiTokenKey instead.
+                      Key in the secret to use for Cloudflare API token, defaults to CLOUDFLARE_API_TOKEN
                     type: string
                   CLOUDFLARE_TUNNEL_CREDENTIAL_FILE:
                     default: CLOUDFLARE_TUNNEL_CREDENTIAL_FILE
@@ -87,12 +87,27 @@ spec:
                       cannot be both empty. If both are provided, Account ID is used
                       if valid, else falls back to Account Name.
                     type: string
+                  apiKeyKey:
+                    default: CLOUDFLARE_API_KEY
+                    description: Key in the secret to use for Cloudflare API Key,
+                      defaults to CLOUDFLARE_API_KEY. Needs Email also to be provided.
+                    type: string
+                  apiTokenKey:
+                    default: CLOUDFLARE_API_TOKEN
+                    description: Key in the secret to use for Cloudflare API token,
+                      defaults to CLOUDFLARE_API_TOKEN
+                    type: string
                   domain:
                     description: Cloudflare Domain to which this tunnel belongs to
                     type: string
                   email:
                     description: Email to use along with API Key for Delete operations
                       for new tunnels only, or as an alternate to API Token
+                    type: string
+                  emailKey:
+                    default: CLOUDFLARE_EMAIL
+                    description: Key in the secret to use for Cloudflare email when
+                      Email is not set explicitly, defaults to CLOUDFLARE_EMAIL.
                     type: string
                   secret:
                     description: Secret containing Cloudflare API key/token
@@ -268,15 +283,15 @@ spec:
                 description: Cloudflare Credentials
                 properties:
                   CLOUDFLARE_API_KEY:
-                    default: CLOUDFLARE_API_KEY
                     description: |-
+                      Deprecated: use apiKeyKey instead.
                       Key in the secret to use for Cloudflare API Key, defaults to CLOUDFLARE_API_KEY. Needs Email also to be provided.
                       For Delete operations for new tunnels only, or as an alternate to API Token
                     type: string
                   CLOUDFLARE_API_TOKEN:
-                    default: CLOUDFLARE_API_TOKEN
-                    description: Key in the secret to use for Cloudflare API token,
-                      defaults to CLOUDFLARE_API_TOKEN
+                    description: |-
+                      Deprecated: use apiTokenKey instead.
+                      Key in the secret to use for Cloudflare API token, defaults to CLOUDFLARE_API_TOKEN
                     type: string
                   CLOUDFLARE_TUNNEL_CREDENTIAL_FILE:
                     default: CLOUDFLARE_TUNNEL_CREDENTIAL_FILE
@@ -298,12 +313,27 @@ spec:
                       cannot be both empty. If both are provided, Account ID is used
                       if valid, else falls back to Account Name.
                     type: string
+                  apiKeyKey:
+                    default: CLOUDFLARE_API_KEY
+                    description: Key in the secret to use for Cloudflare API Key,
+                      defaults to CLOUDFLARE_API_KEY. Needs Email also to be provided.
+                    type: string
+                  apiTokenKey:
+                    default: CLOUDFLARE_API_TOKEN
+                    description: Key in the secret to use for Cloudflare API token,
+                      defaults to CLOUDFLARE_API_TOKEN
+                    type: string
                   domain:
                     description: Cloudflare Domain to which this tunnel belongs to
                     type: string
                   email:
                     description: Email to use along with API Key for Delete operations
                       for new tunnels only, or as an alternate to API Token
+                    type: string
+                  emailKey:
+                    default: CLOUDFLARE_EMAIL
+                    description: Key in the secret to use for Cloudflare email when
+                      Email is not set explicitly, defaults to CLOUDFLARE_EMAIL.
                     type: string
                   secret:
                     description: Secret containing Cloudflare API key/token

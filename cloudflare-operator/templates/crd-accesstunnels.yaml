@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     helm.sh/resource-policy: keep
-    controller-gen.kubebuilder.io/version: v0.16.1
+    controller-gen.kubebuilder.io/version: v0.22.0
   labels:
     {{- include "cloudflare-operator.labels" . | nindent 4 }}
   name: accesstunnels.networking.cfargotunnel.com
