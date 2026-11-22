@@ -11,7 +11,10 @@
 # Every file is copied verbatim, plus upstream's LICENSE and NOTICE, except:
 #   Chart.yaml   version is the tag without -edge (plain semver, never a
 #                prerelease), appVersion is the tag, the kamaji-etcd dependency
-#                is dropped (Ankra renders its own etcd)
+#                is dropped (Ankra renders its own etcd), and an
+#                artifacthub.io/images annotation names the controller image so
+#                Artifact Hub scans it instead of the untagged konnectivity
+#                defaults it otherwise picks out of the CRDs
 #   Chart.lock   removed with the dependency
 #   values.yaml  image.tag is the tag, so nothing floats to latest; the
 #                kamaji-etcd block is dropped; defaultDatastoreName is "";
@@ -123,6 +126,17 @@ chart_lines = drop_block(chart_lines, "dependencies", "Chart.yaml dependencies")
 chart = "".join(chart_lines)
 if "kamaji-etcd" in chart:
     raise SystemExit("Chart.yaml still names kamaji-etcd after the dependency was dropped")
+if "artifacthub.io/images" in chart:
+    raise SystemExit("Chart.yaml upstream now declares artifacthub.io/images; reconcile it with the one added here")
+images_annotation = (
+    "  artifacthub.io/images: |\n"
+    "    - name: kamaji\n"
+    f"      image: docker.io/clastix/kamaji:{tag}\n"
+    "      platforms:\n"
+    "        - linux/amd64\n"
+    "        - linux/arm64\n"
+)
+chart = replace_once(chart, r"^annotations:\n", "annotations:\n" + images_annotation, "Chart.yaml annotations")
 chart_path.write_text(chart, encoding="utf-8")
 (target / "Chart.lock").unlink(missing_ok=True)
 
@@ -143,7 +157,7 @@ header = (
     f"> **Vendored by Ankra** from [`{repository}`](https://github.com/{repository}) "
     f"`charts/kamaji` at tag `{tag}` (commit `{commit}`), Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).\n"
     f"> Chart version `{chart_version}`, image pinned to `{tag}`. The `kamaji-etcd` subchart is removed, "
-    "`defaultDatastoreName` defaults to `\"\"` and telemetry is off. "
+    "`defaultDatastoreName` defaults to `\"\"`, telemetry is off, and `artifacthub.io/images` names the controller image. "
     "Re-vendor with `scripts/sync-kamaji.sh <tag>`; the upstream text below is unchanged.\n\n"
 )
 readme_path.write_text(header + readme_path.read_text(encoding="utf-8"), encoding="utf-8")

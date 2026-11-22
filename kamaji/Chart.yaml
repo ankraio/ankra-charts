@@ -19,6 +19,12 @@ sources:
 type: application
 version: 26.11.4
 annotations:
+  artifacthub.io/images: |
+    - name: kamaji
+      image: docker.io/clastix/kamaji:26.11.4-edge
+      platforms:
+        - linux/amd64
+        - linux/arm64
   catalog.cattle.io/certified: partner
   catalog.cattle.io/release-name: kamaji
   catalog.cattle.io/display-name: Kamaji

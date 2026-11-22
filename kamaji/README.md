@@ -1,5 +1,5 @@
 > **Vendored by Ankra** from [`clastix/kamaji`](https://github.com/clastix/kamaji) `charts/kamaji` at tag `26.11.4-edge` (commit `60204b0`), Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).
-> Chart version `26.11.4`, image pinned to `26.11.4-edge`. The `kamaji-etcd` subchart is removed, `defaultDatastoreName` defaults to `""` and telemetry is off. Re-vendor with `scripts/sync-kamaji.sh <tag>`; the upstream text below is unchanged.
+> Chart version `26.11.4`, image pinned to `26.11.4-edge`. The `kamaji-etcd` subchart is removed, `defaultDatastoreName` defaults to `""`, telemetry is off, and `artifacthub.io/images` names the controller image. Re-vendor with `scripts/sync-kamaji.sh <tag>`; the upstream text below is unchanged.
 
 # kamaji
 
