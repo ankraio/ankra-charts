@@ -11,6 +11,7 @@ HELM     ?= helm
 KCONFORM ?= kubeconform
 CHARTS   += ankra-cloud-ccm
 CHARTS   += gateway-api-crds
+CHARTS   += kamaji
 
 .PHONY: help lint template unittest test secret-scan \
         sync sync-ccm sync-csi sync-cloudflare sync-do-ccm sync-do-csi check docs \
@@ -33,6 +34,8 @@ lint:
 	@$(HELM) lint upcloud-csi
 	@echo "==> helm lint gateway-api-crds"
 	@$(HELM) lint --strict gateway-api-crds
+	@echo "==> helm lint kamaji"
+	@$(HELM) lint --strict kamaji
 	@echo "==> helm lint cloudflare-operator"
 	@$(HELM) lint cloudflare-operator
 	@echo "==> helm lint digitalocean-ccm"
@@ -72,6 +75,7 @@ template:
 		> /tmp/rendered/upcloud-ccm.yaml
 	@$(HELM) template csi upcloud-csi --kube-version 1.34.0 > /tmp/rendered/upcloud-csi.yaml
 	@$(HELM) template gateway-api-crds gateway-api-crds --kube-version 1.31.0 > /tmp/rendered/gateway-api-crds.yaml
+	@$(HELM) template kamaji kamaji --namespace kamaji-system > /tmp/rendered/kamaji.yaml
 	@$(HELM) template cf  cloudflare-operator \
 		--namespace cloudflare-operator-system \
 		> /tmp/rendered/cloudflare-operator.yaml

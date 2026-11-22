@@ -5,7 +5,7 @@
 # misconfiguration scan and the pinned-image-digest check.
 #
 # Usage: ci/chart-gate.sh <group>
-#   upcloud | digitalocean | cloudflare-operator | gateway-api-crds |
+#   upcloud | digitalocean | cloudflare-operator | gateway-api-crds | kamaji |
 #   hermes-agent | isms-builder | claude-code-openai-wrapper
 #
 # The server-side install checks live in ci/dry-run.sh; this script needs no
@@ -315,6 +315,66 @@ for item in crds:
         raise SystemExit(f"{item['metadata']['name']} is not the standard channel")
 print(f"{len(objects)} objects, {len(crds)} CRDs at {tag}, all kept on uninstall")
 CHECK
+    ;;
+
+  kamaji)
+    chart=kamaji
+    section "helm lint --strict ${chart}"
+    helm lint --strict "${chart}"
+
+    section "the vendored chart matches upstream clastix/kamaji at its appVersion tag"
+    tag="$(yq -r '.appVersion' "${chart}/Chart.yaml")"
+    version="$(yq -r '.version' "${chart}/Chart.yaml")"
+    if [[ "${tag}" != "${version}-edge" ]]; then
+      echo "Chart.yaml version ${version} does not match appVersion ${tag}" >&2
+      exit 1
+    fi
+    if [[ "$(yq -r '.image.tag' "${chart}/values.yaml")" != "${tag}" ]]; then
+      echo "values.yaml image.tag is not pinned to ${tag}" >&2
+      exit 1
+    fi
+    if [[ "$(yq -r '.dependencies // [] | length' "${chart}/Chart.yaml")" != 0 || -e "${chart}/Chart.lock" || -e "${chart}/charts" ]]; then
+      echo "${chart} declares or carries a subchart; kamaji-etcd must stay out" >&2
+      exit 1
+    fi
+    bash scripts/sync-kamaji.sh "${tag}"
+    if [[ -n "$(git status --porcelain -- "${chart}")" ]]; then
+      echo "${chart} differs from what scripts/sync-kamaji.sh ${tag} vendors" >&2
+      git status --porcelain -- "${chart}"
+      git --no-pager diff -- "${chart}"
+      exit 1
+    fi
+
+    section "helm template ${chart} (defaults and every toggle)"
+    helm template ci "${chart}" --namespace kamaji-system > "${rendered}/${chart}-defaults.yaml"
+    helm template ci "${chart}" --namespace kamaji-system \
+      --set kubeconfigGenerator.enabled=true \
+      --set gatewayAPI.enabled=true \
+      --set certManager.issuerRef.name=ci-issuer \
+      --set certManager.issuerRef.kind=ClusterIssuer \
+      > "${rendered}/${chart}-full.yaml"
+
+    section "kubeconform ${chart}"
+    kubeconform_strict "${rendered}/${chart}"-*.yaml
+
+    section "every container runs the pinned image, no default datastore, telemetry off"
+    for rendered_file in "${rendered}/${chart}"-*.yaml; do
+      images="$(yq -r 'select(.kind == "Deployment") | .spec.template.spec.containers[].image' "${rendered_file}" | { grep -vx -- '---' || true; } | sort -u)"
+      if [[ "${images}" != "clastix/kamaji:${tag}" ]]; then
+        echo "$(basename "${rendered_file}") runs ${images}, not clastix/kamaji:${tag}" >&2
+        exit 1
+      fi
+      arguments="$(yq -r 'select(.kind == "Deployment" and .metadata.name == "ci-kamaji") | .spec.template.spec.containers[].args[]' "${rendered_file}" | { grep -vx -- '---' || true; })"
+      if grep -q -- '^--datastore=' <<< "${arguments}"; then
+        echo "$(basename "${rendered_file}") passes a default --datastore" >&2
+        exit 1
+      fi
+      if ! grep -qx -- '--disable-telemetry' <<< "${arguments}"; then
+        echo "$(basename "${rendered_file}") leaves telemetry on" >&2
+        exit 1
+      fi
+      echo "$(basename "${rendered_file}"): ${images}"
+    done
     ;;
 
   hermes-agent)
