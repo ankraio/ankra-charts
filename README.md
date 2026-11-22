@@ -17,6 +17,7 @@ In-tree Helm charts maintained by the Ankra platform team.
 | [`ankra-cloud-csi`](ankra-cloud-csi/README.md) | Ankra Cloud CSI block-storage driver `csi.ankra.cloud` - controller Deployment, node DaemonSet, five StorageClasses (zone-aware `ankra-default` default), snapshots, online expansion, per-node storage capacity for the scheduler. Multi-arch image on `share.ankra.cloud`. | Ankra-maintained in [`ankraio/ankra-cloud-csi`](https://github.com/ankraio/ankra-cloud-csi) (`charts/ankra-cloud-csi`); copied here for each release. |
 | [`ankra-cloud-cosi`](ankra-cloud-cosi/README.md) | Ankra Cloud COSI driver `cosi.ankra.cloud` (preview) - S3 buckets on Ankra Cloud object storage from `BucketClaim`s, and a Secret with the endpoint and key from `BucketAccess`es. One Deployment with the upstream provisioner sidecar. Multi-arch image on `share.ankra.cloud`. | Ankra-maintained in [`ankraio/ankra-cloud-csi`](https://github.com/ankraio/ankra-cloud-csi) (`charts/ankra-cloud-cosi`); copied here for each release. |
 | [`gateway-api-crds`](gateway-api-crds/README.md) | Kubernetes Gateway API CRDs, standard channel, plus upstream's safe-upgrades admission policy. Kept on uninstall. The chart version is the Gateway API release. | Vendored from upstream [`kubernetes-sigs/gateway-api`](https://github.com/kubernetes-sigs/gateway-api) by `scripts/sync-gateway-api-crds.sh` |
+| [`kamaji`](kamaji/README.md) | [Kamaji](https://github.com/clastix/kamaji) hosted control plane manager - runs tenant Kubernetes control planes as pods (TenantControlPlane, DataStore and KubeconfigGenerator CRDs). Needs cert-manager. The `kamaji-etcd` subchart is removed, so it deploys no datastore and sets no default one; telemetry is off. | Vendored from upstream [`clastix/kamaji`](https://github.com/clastix/kamaji) (`charts/kamaji`, Apache-2.0) at an edge tag by `scripts/sync-kamaji.sh <tag>`; bumped by hand, image pinned to the tag. The chart version is the tag without `-edge`. |
 
 ## Install via `helm repo add` (recommended)
 
@@ -71,6 +72,11 @@ helm install ankra-cloud-csi ankra/ankra-cloud-csi --version 0.3.1 -n kube-syste
 # Ankra Cloud COSI (object storage buckets) - needs the COSI CRDs and controller first, see its README.
 helm install ankra-cloud-cosi ankra/ankra-cloud-cosi --version 0.1.0 -n kube-system \
   --set api.existingSecret=ankra-cloud-csi-api --set bucketClass.zone=<zone>
+
+# Kamaji (hosted control planes) - needs cert-manager. The CRDs' conversion
+# webhook names kamaji-webhook-service in kamaji-system, so keep that release
+# name and namespace.
+helm install kamaji ankra/kamaji --version 26.11.4 -n kamaji-system --create-namespace
 ```
 
 ## Install from GHCR (OCI)
@@ -246,8 +252,8 @@ CI runs on [Ankra Pipelines](https://docs.ankra.io) from [`.ankra/pipeline.yaml`
 | `shellcheck` | PR / push to `main` touching `scripts/`, `ci/`, `Makefile` | `shellcheck scripts/*.sh ci/*.sh`. |
 | `secret-scan` | every PR / push to `main` (weekly as `secret-scan-weekly`) | Full-history [`gitleaks`](https://github.com/gitleaks/gitleaks) scan. Config: [`.gitleaks.toml`](.gitleaks.toml); false positives: [`.gitleaksignore`](.gitleaksignore). |
 | `charts` | every PR / push to `main` | `make test` (lint, template, unittest) over every chart, including those with no gate of their own. |
-| `gate-<chart>` | PR / push touching that chart, `scripts/`, `ci/` or `Makefile` | [`ci/chart-gate.sh`](ci/chart-gate.sh): `helm lint`, `helm template` of every overlay, `kubeconform`, `helm-unittest`; for hermes-agent, isms-builder and claude-code-openai-wrapper also the guardrails that weak configurations are refused, `trivy config` (fails on HIGH/CRITICAL) and the check that the pinned image digest still resolves; for gateway-api-crds the upstream-match and CRD-annotation checks. |
-| `dry-run` × 1.27 / 1.29 / 1.31 / 1.34 / 1.35 / 1.36 | PR / push touching any chart it installs | [`ci/dry-run.sh`](ci/dry-run.sh): `helm install --dry-run=server` against a real kube-apiserver per minor, the upcloud charts on 1.34-1.36 and the others on 1.27-1.31 (envtest builds started as processes; a pipeline step cannot run kind), plus a real install of gateway-api-crds on 1.31 that checks the release Secret stays under the 1 MiB limit and that uninstall keeps the CRDs. |
+| `gate-<chart>` | PR / push touching that chart, `scripts/`, `ci/` or `Makefile` | [`ci/chart-gate.sh`](ci/chart-gate.sh): `helm lint`, `helm template` of every overlay, `kubeconform`, `helm-unittest`; for hermes-agent, isms-builder and claude-code-openai-wrapper also the guardrails that weak configurations are refused, `trivy config` (fails on HIGH/CRITICAL) and the check that the pinned image digest still resolves; for gateway-api-crds the upstream-match and CRD-annotation checks; for kamaji the upstream-match check (`scripts/sync-kamaji.sh` at the appVersion tag gives no diff), the pinned image on every Deployment, no `kamaji-etcd` dependency, no default datastore and telemetry off. |
+| `dry-run` × 1.27 / 1.29 / 1.31 / 1.34 / 1.35 / 1.36 | PR / push touching any chart it installs | [`ci/dry-run.sh`](ci/dry-run.sh): `helm install --dry-run=server` against a real kube-apiserver per minor, the upcloud charts and the kamaji CRDs (server-side apply, all Established) on 1.34-1.36 and the others on 1.27-1.31 (envtest builds started as processes; a pipeline step cannot run kind), plus a real install of gateway-api-crds on 1.31 that checks the release Secret stays under the 1 MiB limit and that uninstall keeps the CRDs. |
 | `sync-upcloud`, `sync-digitalocean`, `sync-cloudflare-operator`, `sync-hermes-agent` | daily schedule (`task=sync`) | [`ci/sync.sh`](ci/sync.sh): runs `scripts/sync-upstream.sh` / `scripts/sync-image-digest.sh`, lints the result and opens or updates a rolling PR (`chore/charts-<family>-sync`), labelled `needs-review` on a structural change and `security` when a pinned tag moved. A manual run on any branch but `main` is a dry run. |
 | `artifacthub-verify` | hourly schedule (`task=artifacthub-verify`) | Checks that the Helm repo is registered on Artifact Hub and that every version in the published `index.yaml` is listed there. |
 
@@ -371,6 +377,9 @@ helm unittest hermes-agent
 ./scripts/sync-upstream.sh do-ccm v0.1.67
 ./scripts/sync-upstream.sh do-csi v4.17.0
 
+# Re-vendor kamaji at another upstream edge tag (no scheduled sync; bumped by hand).
+./scripts/sync-kamaji.sh 26.11.4-edge
+
 # Re-pin the hermes-agent image digest (check | <tag> | latest).
 ./scripts/sync-image-digest.sh hermes-agent check
 ./scripts/sync-image-digest.sh hermes-agent latest
@@ -398,6 +407,7 @@ ankra-charts/                        (this repo root)
 ├── digitalocean-ccm/
 ├── digitalocean-csi/
 ├── gateway-api-crds/                (vendored by scripts/sync-gateway-api-crds.sh)
+├── kamaji/                          (vendored by scripts/sync-kamaji.sh, bumped by hand)
 └── psono/                           (hand-written, no upstream sync)
 ```
 

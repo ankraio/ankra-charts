@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Server-side install checks against a real kube-apiserver of one Kubernetes
 # minor: `helm install --dry-run=server` for every chart that cannot become
-# Ready without its cloud or model provider, and a real install of
-# gateway-api-crds (CRDs only, so it needs no kubelet).
+# Ready without its cloud or model provider, a real install of
+# gateway-api-crds (CRDs only, so it needs no kubelet), and the kamaji CRDs.
 #
 # Usage: ci/dry-run.sh <envtest version>   (one installed by ci/tools.sh)
 #
@@ -138,6 +138,14 @@ if (( kubernetes_minor >= 34 )); then
     --set credentials.create=true --set credentials.existingSecret= \
     --set credentials.username=ci --set credentials.password=ci \
     --set storageClasses.defaultClass=maxiops > /dev/null
+
+  # kamaji's controller needs cert-manager, which this apiserver does not have,
+  # so only its CRDs are checked here: the apiserver accepts every schema and
+  # validation rule and establishes all three (TenantControlPlane is ~750 KiB).
+  section "kamaji CRDs"
+  apply_crds kamaji/crds/
+  kubectl get crd tenantcontrolplanes.kamaji.clastix.io datastores.kamaji.clastix.io \
+    kubeconfiggenerators.kamaji.clastix.io
 else
   section "digitalocean-ccm and digitalocean-csi"
   create_namespace do-ccm-ci
