@@ -2,8 +2,8 @@ apiVersion: v2
 name: ankra-cloud-csi
 description: CSI driver csi.ankra.cloud for Ankra Cloud block storage (dynamic volumes per tier, snapshots, clones, online expansion).
 type: application
-version: 0.3.1
-appVersion: "v0.3.1"
+version: 0.3.2
+appVersion: "v0.3.2"
 kubeVersion: ">=1.27.0-0"
 icon: https://ankra.io/images/apple-touch-icon.png
 home: https://github.com/ankraio/ankra-cloud-csi
@@ -43,7 +43,7 @@ annotations:
     - url: https://artifacthub.io/packages/helm/ankra-charts/ankra-cloud-ccm
   artifacthub.io/images: |
     - name: ankra-cloud-csi
-      image: share.ankra.cloud/library/ankra-cloud-csi:v0.3.1
+      image: share.ankra.cloud/library/ankra-cloud-csi:v0.3.2
       platforms:
         - linux/amd64
         - linux/arm64
@@ -61,4 +61,10 @@ annotations:
       image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
   artifacthub.io/changes: |
     - kind: fixed
-      description: "A local-nvme volume refused because the Ankra Local pool of its node is full fails CreateVolume with ResourceExhausted again, so external-provisioner hands the claim back to the scheduler and the pod is placed on a node with room. The driver recognised the refusal by the wording of the API's detail, which the API has since reworded; it now reads the reason member of the problem document (not_available_in_zone with 409, capacity_unavailable with 503)."
+      description: "CreateVolume leaves no storage behind when provisioning fails: a storage that failed to provision is deleted, and the call answers Internal only once it is gone. Until then, and whenever the API could not be asked, it answers DeadlineExceeded, Aborted or Unavailable, so external-provisioner keeps calling, also for a claim that was deleted meanwhile."
+    - kind: fixed
+      description: "A storage is created only by a CreateVolume call that finds none of the volume's name, so a retry no longer creates a second storage beside one that is still being deleted."
+    - kind: fixed
+      description: "DeleteVolume waits for a storage that is already being deleted instead of answering FailedPrecondition for the API's 409 on every retry."
+    - kind: fixed
+      description: "An API error without an HTTP status and a 500 are answered Unavailable, not Internal, by every controller call."
