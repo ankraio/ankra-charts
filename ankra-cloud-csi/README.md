@@ -29,7 +29,7 @@ helm install ankra-cloud-csi ankra/ankra-cloud-csi -n kube-system --set api.exis
 The chart is also published as an OCI artifact:
 
 ```bash
-helm install ankra-cloud-csi oci://share.ankra.cloud/charts/ankra-cloud-csi --version 0.3.1 -n kube-system \
+helm install ankra-cloud-csi oci://share.ankra.cloud/charts/ankra-cloud-csi --version 0.3.2 -n kube-system \
   --set api.existingSecret=ankra-cloud-csi-api
 ```
 

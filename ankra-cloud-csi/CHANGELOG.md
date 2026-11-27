@@ -10,6 +10,25 @@ driver image tag it installs.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-27
+
+### Fixed
+
+- `CreateVolume` leaves no storage behind when provisioning fails. A create that
+  failed or timed out could leave a storage that nothing deleted afterwards: it
+  kept its room in the pool, and new claims could wait for room that was not
+  really in use. The driver now deletes a storage that failed to provision and
+  answers `Internal` only once it is gone; until then, and whenever the API
+  could not be asked, it answers `DeadlineExceeded`, `Aborted` or `Unavailable`,
+  so external-provisioner keeps calling.
+- A storage is created only by a `CreateVolume` call that finds none of the
+  volume's name, so a retry no longer creates a second storage beside one that
+  is still being deleted.
+- `DeleteVolume` waits for a storage that is already being deleted instead of
+  answering `FailedPrecondition` on every retry.
+- An API error without an HTTP status and a 500 are answered `Unavailable`, not
+  `Internal`. No template, value, storage class or credential changes.
+
 ## [0.3.1] - 2026-11-15
 
 ### Fixed
